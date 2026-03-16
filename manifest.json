@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "SteamWatch",
+  "short_name": "SteamWatch",
+  "version": "0.11.0",
+  "description": "Track Steam games with live player counts, local trend history, Twitch viewers, and alerts.",
+  "author": "trevonerd / TREVISOFT",
+  "permissions": [
+    "storage",
+    "alarms",
+    "notifications",
+    "clipboardWrite"
+  ],
+  "host_permissions": [
+    "https://api.steampowered.com/*",
+    "https://store.steampowered.com/*",
+    "https://steamspy.com/*",
+    "https://steamcharts.com/*",
+    "https://cdn.akamai.steamstatic.com/*",
+    "https://gql.twitch.tv/*"
+  ],
+  "background": {
+    "service_worker": "src/background/index.ts",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "src/popup/index.html",
+    "default_title": "SteamWatch",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "options_ui": {
+    "page": "src/options/index.html",
+    "open_in_tab": true
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

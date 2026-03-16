@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SteamWatch</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+
+  <div class="header">
+    <div class="logo">
+      <svg class="logo-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M12 3C7 3 3.5 7.5 2 12c1.5 4.5 5 9 10 9s8.5-4.5 10-9C20.5 7.5 17 3 12 3Z"
+              stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+        <circle cx="12" cy="12" r="3" fill="currentColor"/>
+        <circle cx="12" cy="12" r="1.2" fill="var(--bg)"/>
+      </svg>
+      <span class="logo-text">Steam<span>Watch</span></span>
+    </div>
+
+    <div class="header-right">
+      <div class="live-dot" id="liveDot" aria-label="Live" title="Live data"></div>
+      <span class="last-updated" id="lastUpdated" aria-live="polite">—</span>
+      <button class="btn-icon" id="refreshBtn" aria-label="Refresh" title="Refresh now">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+          <path d="M3 3v5h5"/>
+        </svg>
+      </button>
+      <button class="btn-icon" id="settingsBtn" aria-label="Options" title="Options">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Loading state -->
+  <div class="loading" id="loading" aria-label="Loading" hidden>
+    <div class="spinner" role="status"></div>
+  </div>
+
+  <!-- Error state -->
+  <div class="error-state" id="errorState" hidden>
+    <span class="error-icon">⚠</span>
+    <p id="errorMessage">Something went wrong.</p>
+    <button class="btn-primary small" id="retryBtn">Retry</button>
+  </div>
+
+  <!-- Last-fetch status bar — shown above games list when data is loaded -->
+  <div class="fetch-bar" id="fetchBar" hidden aria-live="polite" aria-atomic="true"></div>
+
+  <!-- Game cards — injected by popup.ts -->
+  <ul class="games-list" id="gamesList" hidden aria-label="Tracked games"></ul>
+
+  <!-- Empty state -->
+  <div class="empty-state" id="emptyState" hidden>
+    <div class="empty-icon" aria-hidden="true">👁</div>
+    <p>No games tracked yet.<br>Add up to 5 in Options.</p>
+    <button class="btn-primary" id="openOptionsBtn">Open Options →</button>
+  </div>
+
+  <footer class="footer">
+    <span class="disclaimer" title="SteamWatch is not affiliated with Valve Corporation or Steam.">
+      ⚠ Not affiliated with Valve or Steam
+    </span>
+    <div class="footer-links">
+      <a href="https://github.com/trevonerd" target="_blank" rel="noopener" class="footer-link">GitHub</a>
+      <span class="footer-sep" aria-hidden="true">·</span>
+      <span class="footer-copy">TREVISOFT © 2026</span>
+    </div>
+  </footer>
+
+  <script type="module" src="main.ts"></script>
+</body>
+</html>
