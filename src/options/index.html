@@ -46,6 +46,14 @@
         <span class="nav-label">Notifications</span>
       </button>
 
+      <button class="nav-item" data-section="history">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+          <circle cx="12" cy="12" r="10" stroke-width="1.4" opacity=".35"/>
+        </svg>
+        <span class="nav-label">History</span>
+      </button>
+
       <button class="nav-item" data-section="export">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -65,7 +73,7 @@
     </nav>
 
     <div class="sidebar-footer">
-      <span class="sidebar-version">v0.11.1</span>
+      <span class="sidebar-version">v0.12.0</span>
     </div>
   </aside>
 
@@ -255,6 +263,32 @@
       </div>
 
       <div class="card">
+        <div class="card-title">Price Drop Alerts</div>
+
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <div class="toggle-title">💸 Price drop alerts</div>
+            <div class="toggle-desc">Notify when a tracked game goes on sale on Steam, above the minimum discount threshold.</div>
+          </div>
+          <label class="toggle" aria-label="Enable price drop alerts">
+            <input type="checkbox" id="priceAlertsEnabled">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="slider-row" style="border:none;padding-bottom:0;">
+          <div class="slider-info">
+            <div class="slider-title">Minimum discount</div>
+            <div class="slider-desc">Only alert when the discount is at least this percentage.</div>
+          </div>
+          <div class="slider-control">
+            <span class="slider-val" id="priceDropMinPctVal" aria-live="polite">30%</span>
+            <input type="range" id="priceDropMinPct" min="5" max="95" step="5" value="30" aria-label="Minimum sale discount percentage">
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
         <div class="card-title">Default Thresholds</div>
 
         <div class="slider-row">
@@ -333,6 +367,49 @@
       <div class="form-actions">
         <button class="btn-save" id="saveNotifs">Save Changes</button>
         <span class="saved-toast" id="savedNotifs" aria-live="polite">✓ Saved</span>
+      </div>
+    </section>
+
+    <!-- ══ HISTORY ══ -->
+    <section class="section" id="sec-history" aria-labelledby="history-heading" hidden>
+      <h1 class="section-title" id="history-heading">Player History</h1>
+      <p class="section-sub">Visualize locally stored player-count snapshots for any tracked game.</p>
+
+      <div class="card">
+        <div class="history-controls">
+          <div class="history-select-wrap">
+            <label class="setting-label" for="historyGameSelect">Game</label>
+            <select class="input-sm history-select" id="historyGameSelect" aria-label="Select game to view history">
+              <option value="">— select a game —</option>
+            </select>
+          </div>
+          <div class="graph-tabs" id="historyWindowTabs" role="tablist" aria-label="Time window"></div>
+        </div>
+
+        <div class="history-chart-wrap">
+          <svg id="historyChart" class="history-chart-svg" viewBox="0 0 600 200" preserveAspectRatio="none" aria-hidden="true"></svg>
+          <p class="history-empty" id="historyEmpty" hidden>No snapshots recorded yet for this game. Data is collected at each fetch interval.</p>
+          <p class="history-no-game" id="historyNoGame">Select a game above to view its history.</p>
+        </div>
+
+        <div class="history-stats" id="historyStats" hidden>
+          <div class="history-stat">
+            <div class="history-stat-label">Current</div>
+            <div class="history-stat-value" id="hStatCurrent">—</div>
+          </div>
+          <div class="history-stat">
+            <div class="history-stat-label">24h Avg</div>
+            <div class="history-stat-value" id="hStat24hAvg">—</div>
+          </div>
+          <div class="history-stat">
+            <div class="history-stat-label">Period Avg</div>
+            <div class="history-stat-value" id="hStatPeriodAvg">—</div>
+          </div>
+          <div class="history-stat">
+            <div class="history-stat-label">Recorded Peak</div>
+            <div class="history-stat-value" id="hStatPeak">—</div>
+          </div>
+        </div>
       </div>
     </section>
 
