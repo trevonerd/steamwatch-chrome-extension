@@ -334,6 +334,8 @@ body {
 .btn-expand:hover,
 .btn-share:hover,
 .btn-share.active  { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+.btn-star:hover    { border-color: var(--warn); color: var(--warn); }
+.btn-star.active   { border-color: var(--warn); color: var(--warn); background: rgba(245 158 11 / .15); }
 
 .chevron { transition: transform var(--panel-speed) var(--panel-ease); }
 .game-item.expanded .chevron { transform: rotate(180deg); }
@@ -445,6 +447,22 @@ body {
   transition: border-color .15s, color .15s, background .15s;
 }
 .panel-link:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+
+/* ── Sale badge ──────────────────────────────────────────────── */
+.panel-sale-badge {
+  display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+  padding: 5px 12px 5px;
+  background: rgba(245 158 11 / .1);
+  border-top: 1px solid rgba(245 158 11 / .25);
+  border-bottom: 1px solid rgba(245 158 11 / .25);
+}
+.sale-pct {
+  font: 600 11px var(--ff-mono); color: var(--warn);
+  background: rgba(245 158 11 / .18); border-radius: var(--r-pill);
+  padding: 2px 7px; letter-spacing: .03em;
+}
+.sale-price { font: 600 12px var(--ff-mono); color: var(--warn); }
+.sale-orig  { font: 400 11px var(--ff-mono); color: var(--text-3); text-decoration: line-through; }
 
 /* ── Divider ─────────────────────────────────────────────────── */
 .game-divider { height: 1px; background: var(--border); margin: 0; }

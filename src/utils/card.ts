@@ -85,6 +85,9 @@ export function buildCardViewModel(
     svgStr,
     fetchedAt: data?.fetchedAt ?? 0,
     ...(data?.twitchViewers != null ? { twitchViewers: data.twitchViewers } : {}),
+    ...(data?.discountPct   != null ? { discountPct:   data.discountPct   } : {}),
+    ...(data?.priceFormatted         ? { priceFormatted:         data.priceFormatted         } : {}),
+    ...(data?.priceOriginalFormatted ? { priceOriginalFormatted: data.priceOriginalFormatted } : {}),
   };
 }
 
