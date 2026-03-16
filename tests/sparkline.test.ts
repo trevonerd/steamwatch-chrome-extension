@@ -1,6 +1,13 @@
 // tests/sparkline.test.ts
 import { describe, it, expect } from "vitest";
-import { buildSparklineSVG, sparklineColor } from "../src/utils/sparkline.js";
+import {
+  buildAvailableGraphWindows,
+  buildSparklineSVG,
+  downsampleSnapshotsForGraph,
+  filterSnapshotsByWindow,
+  hasEnoughGraphHistory,
+  sparklineColor,
+} from "../src/utils/sparkline.js";
 import type { Snapshot } from "../src/types/index.js";
 
 function snaps(values: number[]): Snapshot[] {
@@ -79,6 +86,72 @@ describe("buildSparklineSVG", () => {
     const svg = buildSparklineSVG(snaps([0, 1000, 500, 2000, 100]));
     expect(svg).not.toContain("NaN");
     expect(svg).not.toContain("Infinity");
+  });
+});
+
+describe("filterSnapshotsByWindow", () => {
+  it("keeps only snapshots inside the requested window", () => {
+    const now = Date.now();
+    const data: Snapshot[] = [
+      { ts: now - 2 * 86_400_000, current: 100 },
+      { ts: now - 12 * 3_600_000, current: 200 },
+      { ts: now - 60_000, current: 300 },
+    ];
+    expect(filterSnapshotsByWindow(data, 24 * 3_600_000)).toHaveLength(2);
+  });
+});
+
+describe("downsampleSnapshotsForGraph", () => {
+  it("keeps first and last snapshots while reducing point count", () => {
+    const data = snaps(Array.from({ length: 100 }, (_, i) => i));
+    const reduced = downsampleSnapshotsForGraph(data, 12);
+    expect(reduced).toHaveLength(12);
+    expect(reduced[0]?.current).toBe(0);
+    expect(reduced.at(-1)?.current).toBe(99);
+  });
+
+  it("returns the original series when already within the cap", () => {
+    const data = snaps([1, 2, 3, 4]);
+    expect(downsampleSnapshotsForGraph(data, 10)).toHaveLength(4);
+  });
+});
+
+describe("hasEnoughGraphHistory", () => {
+  it("returns false without enough coverage", () => {
+    const now = Date.now();
+    const data: Snapshot[] = [
+      { ts: now - 8 * 3_600_000, current: 1 },
+      { ts: now - 6 * 3_600_000, current: 2 },
+      { ts: now - 4 * 3_600_000, current: 3 },
+      { ts: now - 2 * 3_600_000, current: 4 },
+      { ts: now - 60 * 60_000, current: 5 },
+      { ts: now - 10 * 60_000, current: 6 },
+    ];
+    expect(hasEnoughGraphHistory(data, 24 * 3_600_000)).toBe(false);
+  });
+
+  it("returns true for a well-covered window", () => {
+    const now = Date.now();
+    const data: Snapshot[] = [
+      { ts: now - 23 * 3_600_000, current: 1 },
+      { ts: now - 20 * 3_600_000, current: 2 },
+      { ts: now - 16 * 3_600_000, current: 3 },
+      { ts: now - 12 * 3_600_000, current: 4 },
+      { ts: now - 8 * 3_600_000, current: 5 },
+      { ts: now - 2 * 3_600_000, current: 6 },
+      { ts: now - 10 * 60_000, current: 7 },
+    ];
+    expect(hasEnoughGraphHistory(data, 24 * 3_600_000)).toBe(true);
+  });
+});
+
+describe("buildAvailableGraphWindows", () => {
+  it("returns 24h, 3d and retention when retention exceeds 3 days", () => {
+    expect(buildAvailableGraphWindows(10).map((window) => window.label)).toEqual(["24h", "3d", "10d"]);
+  });
+
+  it("deduplicates the retention window when retention is 3 days", () => {
+    expect(buildAvailableGraphWindows(3).map((window) => window.label)).toEqual(["24h", "3d"]);
   });
 });
 

@@ -4,7 +4,7 @@
 // Pure function — no side effects, no DOM dependency, fully testable.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import type { Snapshot, SparklineOptions } from "../types/index.js";
+import type { GraphWindowOption, Snapshot, SparklineOptions } from "../types/index.js";
 
 // ── Coordinate mapper (shared by SVG and Canvas renderers) ───────────────────
 
@@ -44,6 +44,11 @@ export const DEFAULT_SPARKLINE_OPTIONS: SparklineOptions = {
   fillColor:   "rgba(0,200,255,0.08)",
   maxPoints:   48, // ~12h at 15min intervals
 };
+
+export const GRAPH_WINDOW_MS = {
+  "24h": 86_400_000,
+  "3d": 3 * 86_400_000,
+} as const;
 
 /**
  * Build an SVG sparkline string from an array of snapshots.
@@ -94,6 +99,63 @@ export function buildSparklineSVG(
     segments,
     `</svg>`,
   ].join("\n");
+}
+
+export function filterSnapshotsByWindow(
+  snapshots: readonly Snapshot[],
+  windowMs: number,
+): Snapshot[] {
+  const cutoff = Date.now() - windowMs;
+  return snapshots.filter((snapshot) => snapshot.ts >= cutoff);
+}
+
+export function downsampleSnapshotsForGraph(
+  snapshots: readonly Snapshot[],
+  maxPoints: number,
+): Snapshot[] {
+  if (snapshots.length <= maxPoints) return [...snapshots];
+  if (maxPoints < 2) return snapshots.length > 0 ? [snapshots[snapshots.length - 1]!] : [];
+
+  const lastIndex = snapshots.length - 1;
+  const step = lastIndex / (maxPoints - 1);
+  const indexes = new Set<number>([0, lastIndex]);
+
+  for (let i = 1; i < maxPoints - 1; i++) {
+    indexes.add(Math.round(i * step));
+  }
+
+  return [...indexes]
+    .sort((a, b) => a - b)
+    .map((index) => snapshots[index]!)
+    .filter(Boolean);
+}
+
+export function hasEnoughGraphHistory(
+  snapshots: readonly Snapshot[],
+  windowMs: number,
+): boolean {
+  const filtered = filterSnapshotsByWindow(snapshots, windowMs);
+  if (filtered.length < 6) return false;
+  const span = (filtered.at(-1)?.ts ?? 0) - (filtered[0]?.ts ?? 0);
+  return span >= windowMs * 0.75;
+}
+
+export function buildAvailableGraphWindows(retentionDays: number): GraphWindowOption[] {
+  const windows: GraphWindowOption[] = [
+    { key: "24h", label: "24h", windowMs: GRAPH_WINDOW_MS["24h"] },
+    { key: "3d", label: "3d", windowMs: GRAPH_WINDOW_MS["3d"] },
+  ];
+
+  const retentionMs = retentionDays * 86_400_000;
+  if (retentionMs !== GRAPH_WINDOW_MS["3d"]) {
+    windows.push({
+      key: "retention",
+      label: `${retentionDays}d`,
+      windowMs: retentionMs,
+    });
+  }
+
+  return windows;
 }
 
 /**

@@ -65,7 +65,7 @@
     </nav>
 
     <div class="sidebar-footer">
-      <span class="sidebar-version">v0.7.0 · TREVISOFT</span>
+      <span class="sidebar-version">v0.11.1</span>
     </div>
   </aside>
 
@@ -399,130 +399,72 @@
         </svg>
         <div>
           <div class="about-hero-title">Steam<span>Watch</span></div>
-          <div class="about-hero-sub">Real-time Steam player monitoring &amp; trend intelligence</div>
+          <div class="about-hero-sub">Track Steam games with live player data, local history, and alerts.</div>
           <div class="about-meta">
-            Version 0.1.0 &nbsp;·&nbsp;
-            <a href="https://github.com/trevonerd" target="_blank" rel="noopener">github.com/trevonerd</a>
+            Version 0.11.1 &nbsp;·&nbsp;
+            <a href="https://github.com/trevonerd/steamwatch-chrome-extension" target="_blank" rel="noopener">GitHub repository</a>
           </div>
         </div>
       </div>
 
       <div class="disclaimer-box" role="note">
-        <strong>⚠ Legal Disclaimer</strong>
-        SteamWatch is an <strong>independent, open-source project</strong> developed by trevonerd / TREVISOFT.
-        It is <strong>not affiliated with, endorsed by, sponsored by, or in any way officially
-        connected to Valve Corporation, Steam®, or any of their subsidiaries or affiliates</strong>.
-        The Steam name, logo, and all related marks are registered trademarks of Valve Corporation
-        in the U.S. and/or other countries.
-        Player data is retrieved from publicly available, unauthenticated APIs (Steam Web API and SteamSpy).
-        This extension does <strong>not</strong> collect, transmit, or share any personal user data.
-        All data is stored exclusively in your browser's local storage.
+        <strong>Independent project</strong>
+        SteamWatch is an independent open-source extension created by Marco Trevisani.
+        It is not affiliated with Valve or Steam. All tracked data is stored locally in your browser.
       </div>
 
       <div class="credits-grid">
         <div class="credit-card">
-          <div class="credit-label">Developer</div>
-          <div class="credit-value">
-            <a href="https://github.com/trevonerd" target="_blank" rel="noopener">trevonerd</a>
+          <div class="credit-label">Author</div>
+          <div class="credit-value">Marco Trevisani</div>
+          <div class="credit-sub">
+            GitHub:
+            <a href="https://github.com/trevonerd" target="_blank" rel="noopener">TREVONERD</a>
           </div>
-          <div class="credit-sub">Open source on GitHub</div>
         </div>
         <div class="credit-card">
           <div class="credit-label">Company</div>
           <div class="credit-value">TREVISOFT</div>
-          <div class="credit-sub">Founded by Trevo &amp; his father ♥</div>
-        </div>
-        <div class="credit-card">
-          <div class="credit-label">Copyright</div>
-          <div class="credit-value">© 2026 TREVISOFT</div>
-          <div class="credit-sub">All rights reserved</div>
+          <div class="credit-sub">Independent software studio</div>
         </div>
         <div class="credit-card">
           <div class="credit-label">License</div>
           <div class="credit-value">MIT</div>
-          <div class="credit-sub">Free to use and fork</div>
+          <div class="credit-sub">Open source</div>
+        </div>
+        <div class="credit-card">
+          <div class="credit-label">Privacy</div>
+          <div class="credit-value">Local only</div>
+          <div class="credit-sub">No account login, no remote user data storage</div>
         </div>
       </div>
 
       <div class="card">
         <div class="card-title">Data Sources</div>
         <p style="font-size:13px;color:var(--text-2);line-height:1.6;margin-bottom:12px;">
-          SteamWatch exclusively uses public, unauthenticated APIs. No Steam account access required.
+          SteamWatch uses public data sources for player counts, peaks, search, artwork, and Twitch viewer information.
         </p>
         <div class="data-sources">
           <span class="ds-badge">Steam Web API — current players</span>
+          <span class="ds-badge">SteamCharts — 24h peak</span>
           <span class="ds-badge">SteamSpy — all-time peak</span>
           <span class="ds-badge">Steam Store Search — autocomplete</span>
           <span class="ds-badge">Steam CDN — game artwork</span>
+          <span class="ds-badge">Twitch — live viewers</span>
         </div>
       </div>
 
       <div class="card">
-        <div class="card-title">🔭 Roadmap &amp; Ideas</div>
-        <p style="font-size:13px;color:var(--text-2);margin-bottom:16px;line-height:1.6;">
-          Features on our radar. Ideas or feedback?
-          <a href="https://github.com/trevonerd" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;">
-            Open an issue on GitHub →
+        <div class="card-title">Support &amp; Feedback</div>
+        <p style="font-size:13px;color:var(--text-2);line-height:1.7;">
+          If you find a bug, want to suggest an improvement, or want to follow updates,
+          the best place is the GitHub issues page.
+        </p>
+        <p style="margin-top:10px;">
+          <a href="https://github.com/trevonerd/steamwatch-chrome-extension/issues" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;font-family:var(--ff-mono);font-size:12px;">
+            github.com/trevonerd/steamwatch-chrome-extension/issues →
           </a>
         </p>
-        <div class="ideas-grid">
-          <div class="idea-item">
-            <div class="idea-icon">📊</div>
-            <div class="idea-text">
-              <div class="idea-title">Sparkline Charts</div>
-              <div class="idea-desc">Inline 7-day player count graph right in the popup card.</div>
-            </div>
-          </div>
-          <div class="idea-item">
-            <div class="idea-icon">🏷️</div>
-            <div class="idea-text">
-              <div class="idea-title">Sale Alerts</div>
-              <div class="idea-desc">Notify when a wishlist game goes on sale, with price history.</div>
-            </div>
-          </div>
-          <div class="idea-item">
-            <div class="idea-icon">📰</div>
-            <div class="idea-text">
-              <div class="idea-title">Patch Note Correlation</div>
-              <div class="idea-desc">Cross-reference Steam News RSS to link player spikes with updates.</div>
-            </div>
-          </div>
-          <div class="idea-item">
-            <div class="idea-icon">👥</div>
-            <div class="idea-text">
-              <div class="idea-title">Friend Activity</div>
-              <div class="idea-desc">See how many Steam friends are currently playing a tracked game.</div>
-            </div>
-          </div>
-          <div class="idea-item">
-            <div class="idea-icon">💬</div>
-            <div class="idea-text">
-              <div class="idea-title">Review Sentiment Trend</div>
-              <div class="idea-desc">Show recent review score momentum alongside player counts.</div>
-            </div>
-          </div>
-          <div class="idea-item">
-            <div class="idea-icon">📤</div>
-            <div class="idea-text">
-              <div class="idea-title">CSV Export</div>
-              <div class="idea-desc">Download your full snapshot history for external analysis.</div>
-            </div>
-          </div>
-          <div class="idea-item">
-            <div class="idea-icon">🔮</div>
-            <div class="idea-text">
-              <div class="idea-title">Trend Forecast</div>
-              <div class="idea-desc">Linear regression to project player count over the next 7 days.</div>
-            </div>
-          </div>
-          <div class="idea-item">
-            <div class="idea-icon">🌍</div>
-            <div class="idea-text">
-              <div class="idea-title">Regional Breakdown</div>
-              <div class="idea-desc">Compare player distribution by country where APIs allow.</div>
-            </div>
-          </div>
-        </div>
       </div>
     </section>
 

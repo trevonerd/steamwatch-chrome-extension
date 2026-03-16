@@ -387,19 +387,22 @@ input[type="range"]::-webkit-slider-thumb {
 .credit-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 16px 18px; }
 .credit-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-3); font-family: var(--ff-mono); margin-bottom: 6px; }
 .credit-value { font-family: var(--ff-head); font-size: 16px; font-weight: 600; color: var(--text); }
-.credit-value a { color: var(--accent); text-decoration: none; }
-.credit-value a:hover { text-decoration: underline; }
 .credit-sub   { font-size: 12px; color: var(--text-2); margin-top: 3px; }
+.credit-sub a {
+  color: var(--accent);
+  text-decoration: none;
+  font-family: var(--ff-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .06em;
+}
+.credit-sub a:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
 
 .data-sources { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 .ds-badge { font-family: var(--ff-mono); font-size: 11px; padding: 3px 10px; border-radius: var(--r-pill); background: var(--bg-card); border: 1px solid var(--border); color: var(--text-2); }
-
-.ideas-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-.idea-item { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--r-sm); transition: border-color .15s; }
-.idea-item:hover { border-color: var(--border-hover); }
-.idea-icon  { font-size: 18px; flex-shrink: 0; line-height: 1.2; }
-.idea-title { font-size: 13.5px; font-weight: 500; color: var(--text); margin-bottom: 2px; }
-.idea-desc  { font-size: 12px; color: var(--text-2); line-height: 1.5; }
 
 /* ── Scrollbar ───────────────────────────────────────────────── */
 ::-webkit-scrollbar       { width: 6px; }

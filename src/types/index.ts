@@ -168,6 +168,14 @@ export interface ForecastResult {
  */
 export type QuietDaysMask = number;
 
+export type GraphWindowKey = "24h" | "3d" | "retention";
+
+export interface GraphWindowOption {
+  readonly key: GraphWindowKey;
+  readonly label: string;
+  readonly windowMs: number;
+}
+
 // ── Card view model ───────────────────────────────────────────────────────────
 
 /**
@@ -187,6 +195,8 @@ export interface CardViewModel {
   readonly retentionAvg?: number;
   readonly retentionGain?: number;
   readonly retentionDays: number;
+  readonly availableGraphWindows: readonly GraphWindowOption[];
+  readonly defaultGraphWindow: GraphWindowKey | null;
   readonly trend: TrendResult | null;
   readonly trendCls: string;
   readonly latestChangePct: number | null;

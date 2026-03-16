@@ -168,6 +168,8 @@ describe("buildCardViewModel", () => {
     const vm = buildCardViewModel(game, cache, snaps12, 7);
     expect(vm.twitchViewers).toBe(12_345);
     expect(vm.retentionDays).toBe(7);
+    expect(vm.availableGraphWindows).toEqual([]);
+    expect(vm.defaultGraphWindow).toBeNull();
   });
 
   it("only exposes 24h local stats when there is reliable 24h coverage", () => {
@@ -182,6 +184,48 @@ describe("buildCardViewModel", () => {
     const vmRetention = buildCardViewModel(game, cache, retentionSnaps, 3);
     expect(vmRetention.retentionAvg).toBeDefined();
     expect(vmRetention.retentionGain).toBeDefined();
+  });
+
+  it("exposes available graph windows and picks 24h as default when possible", () => {
+    const graphSnaps: Snapshot[] = [
+      { ts: Date.now() - 2.95 * 86_400_000, current: 20_000 },
+      { ts: Date.now() - 2.4 * 86_400_000, current: 21_000 },
+      { ts: Date.now() - 1.9 * 86_400_000, current: 22_000 },
+      { ts: Date.now() - 23 * 3_600_000, current: 23_000 },
+      { ts: Date.now() - 18 * 3_600_000, current: 24_000 },
+      { ts: Date.now() - 12 * 3_600_000, current: 25_000 },
+      { ts: Date.now() - 6 * 3_600_000, current: 26_000 },
+      { ts: Date.now() - 2 * 3_600_000, current: 27_000 },
+      { ts: Date.now() - 10 * 60_000, current: 28_000 },
+    ];
+    const vm = buildCardViewModel(game, cache, graphSnaps, 7);
+    expect(vm.availableGraphWindows.map((window) => window.key)).toEqual(["24h", "3d"]);
+    expect(vm.defaultGraphWindow).toBe("24h");
+  });
+
+  it("includes the retention window when there is enough long-range coverage", () => {
+    const retentionGraphSnaps: Snapshot[] = [
+      { ts: Date.now() - 6.9 * 86_400_000, current: 19_000 },
+      { ts: Date.now() - 6.1 * 86_400_000, current: 20_000 },
+      { ts: Date.now() - 5.2 * 86_400_000, current: 21_000 },
+      { ts: Date.now() - 4.1 * 86_400_000, current: 22_000 },
+      { ts: Date.now() - 2.95 * 86_400_000, current: 23_000 },
+      { ts: Date.now() - 2.1 * 86_400_000, current: 24_000 },
+      { ts: Date.now() - 23 * 3_600_000, current: 24_200 },
+      { ts: Date.now() - 18 * 3_600_000, current: 24_300 },
+      { ts: Date.now() - 12 * 3_600_000, current: 24_400 },
+      { ts: Date.now() - 8 * 3_600_000, current: 24_450 },
+      { ts: Date.now() - 2.8 * 3_600_000, current: 24_500 },
+      { ts: Date.now() - 2.2 * 3_600_000, current: 24_700 },
+      { ts: Date.now() - 1.8 * 3_600_000, current: 24_900 },
+      { ts: Date.now() - 1.2 * 3_600_000, current: 25_100 },
+      { ts: Date.now() - 45 * 60_000, current: 25_300 },
+      { ts: Date.now() - 20 * 60_000, current: 25_600 },
+      { ts: Date.now() - 1.1 * 86_400_000, current: 25_000 },
+      { ts: Date.now() - 10 * 60_000, current: 26_000 },
+    ];
+    const vm = buildCardViewModel(game, cache, retentionGraphSnaps, 7);
+    expect(vm.availableGraphWindows.map((window) => window.key)).toEqual(["24h", "3d", "retention"]);
   });
 });
 

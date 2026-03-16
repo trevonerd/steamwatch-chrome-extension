@@ -20,7 +20,12 @@ import {
   computeLatestChangePct,
   computeLocalPeak,
 } from "./trend.js";
-import { buildSparklineSVG, sparklineColor } from "./sparkline.js";
+import {
+  buildAvailableGraphWindows,
+  buildSparklineSVG,
+  hasEnoughGraphHistory,
+  sparklineColor,
+} from "./sparkline.js";
 
 /**
  * Build the complete view model for a single game card.
@@ -50,6 +55,9 @@ export function buildCardViewModel(
   const gain24h    = compute24hGain(snaps);
   const retentionAvg = computeRetentionAvg(snaps, retentionDays);
   const retentionGain = computeRetentionGain(snaps, retentionDays);
+  const availableGraphWindows = buildAvailableGraphWindows(retentionDays)
+    .filter((window) => hasEnoughGraphHistory(snaps, window.windowMs));
+  const defaultGraphWindow = availableGraphWindows[0]?.key ?? null;
   const trend      = computeTrend(snaps);
   const trendCls   = trend?.level.cls ?? "stable";
   const latestChangePct = computeLatestChangePct(snaps);
@@ -67,6 +75,8 @@ export function buildCardViewModel(
     ...(retentionAvg != null ? { retentionAvg } : {}),
     ...(retentionGain != null ? { retentionGain } : {}),
     retentionDays,
+    availableGraphWindows,
+    defaultGraphWindow,
     trend,
     trendCls,
     latestChangePct,

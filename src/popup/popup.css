@@ -378,6 +378,36 @@ body {
   to   { opacity: 1; transform: translateY(0);    }
 }
 
+.panel-window-selector {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px 0;
+}
+
+.panel-window-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  padding: 4px 9px;
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: border-color .15s, color .15s, background .15s;
+}
+
+.panel-window-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.panel-window-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+
 .panel-sparkline { padding: 8px 12px 0; line-height: 0; }
 .panel-sparkline svg { display: block; width: 100%; border-radius: var(--r-sm); }
 

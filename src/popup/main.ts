@@ -11,7 +11,12 @@ import {
   removeGame,
 } from "../utils/storage.js";
 import { fmtNumber, fmtPct, fmtTimeAgo } from "../utils/trend.js";
-import { buildSparklineSVG, sparklineColor } from "../utils/sparkline.js";
+import {
+  buildSparklineSVG,
+  downsampleSnapshotsForGraph,
+  filterSnapshotsByWindow,
+  sparklineColor,
+} from "../utils/sparkline.js";
 import { buildAllViewModels }                from "../utils/card.js";
 import { buildShareText, renderShareCanvas } from "../utils/share.js";
 import { esc, mustGet, show, hide }          from "../utils/html.js";
@@ -268,18 +273,31 @@ function populatePanel(panel: HTMLDivElement, vm: CardViewModel): void {
   const {
     game, snaps, current, peak24h, allTimePeak,
     twitchViewers, avg24h, gain24h, retentionAvg, retentionGain, retentionDays,
+    availableGraphWindows, defaultGraphWindow,
   } = vm;
 
-  const bigColor = sparklineColor(snaps);
-  const bigSvg   = buildSparklineSVG(snaps, { strokeColor: bigColor, width: 372, height: 56, maxPoints: 96 });
   const twitchStr = twitchViewers != null ? fmtNumber(twitchViewers) : "—";
   const avg24hStr = avg24h != null ? fmtNumber(avg24h) : "—";
   const gain24hStr = gain24h != null ? fmtSignedPlayers(gain24h) : "—";
   const retentionAvgStr = retentionAvg != null ? fmtNumber(retentionAvg) : "—";
   const retentionGainStr = retentionGain != null ? fmtSignedPlayers(retentionGain) : "—";
+  const graphSelector = availableGraphWindows.length > 0
+    ? `<div class="panel-window-selector" role="tablist" aria-label="Graph window selector">
+        ${availableGraphWindows.map((window) => `
+          <button
+            type="button"
+            class="panel-window-btn${window.key === defaultGraphWindow ? " active" : ""}"
+            data-graph-window="${esc(window.key)}"
+            role="tab"
+            aria-selected="${String(window.key === defaultGraphWindow)}"
+          >${esc(window.label)}</button>
+        `).join("")}
+      </div>`
+    : "";
 
   panel.innerHTML = `
-    ${bigSvg ? `<div class="panel-sparkline" aria-hidden="true">${bigSvg}</div>` : ""}
+    ${graphSelector}
+    <div class="panel-sparkline" aria-hidden="true"></div>
     <dl class="panel-stats">
       <div class="panel-stat">
         <dt class="panel-stat-label">Current</dt>
@@ -321,6 +339,21 @@ function populatePanel(panel: HTMLDivElement, vm: CardViewModel): void {
          target="_blank" rel="noopener noreferrer">SteamDB ↗</a>
     </div>
   `;
+
+  renderPanelSparkline(panel, vm, defaultGraphWindow);
+
+  panel.querySelectorAll<HTMLButtonElement>("[data-graph-window]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const key = button.dataset["graphWindow"];
+      if (!isGraphWindowKey(key)) return;
+      panel.querySelectorAll<HTMLButtonElement>("[data-graph-window]").forEach((btn) => {
+        const active = btn === button;
+        btn.classList.toggle("active", active);
+        btn.setAttribute("aria-selected", String(active));
+      });
+      renderPanelSparkline(panel, vm, key);
+    });
+  });
 }
 
 function changeBadgeClass(pct: number): string {
@@ -336,9 +369,7 @@ function needsRichDataHydration(vm: CardViewModel): boolean {
   return (
     vm.peak24h == null ||
     vm.allTimePeak == null ||
-    vm.twitchViewers == null ||
-    vm.retentionAvg == null ||
-    vm.retentionGain == null
+    vm.twitchViewers == null
   );
 }
 
@@ -347,6 +378,35 @@ function fmtSignedPlayers(value: number): string {
   if (value > 0) return `+${abs}`;
   if (value < 0) return `-${abs}`;
   return "0";
+}
+
+function renderPanelSparkline(
+  panel: HTMLDivElement,
+  vm: CardViewModel,
+  selectedWindow: CardViewModel["defaultGraphWindow"],
+): void {
+  const sparklineEl = panel.querySelector<HTMLDivElement>(".panel-sparkline");
+  if (!sparklineEl) return;
+
+  const selected = selectedWindow == null
+    ? null
+    : vm.availableGraphWindows.find((window) => window.key === selectedWindow) ?? null;
+  const source = selected ? filterSnapshotsByWindow(vm.snaps, selected.windowMs) : vm.snaps;
+
+  const graphSnaps = downsampleSnapshotsForGraph(source, 96);
+  const svg = buildSparklineSVG(graphSnaps, {
+    strokeColor: sparklineColor(graphSnaps),
+    width: 372,
+    height: 56,
+    maxPoints: 96,
+  });
+
+  sparklineEl.innerHTML = svg ?? "";
+  sparklineEl.hidden = !svg;
+}
+
+function isGraphWindowKey(value: string | undefined): value is "24h" | "3d" | "retention" {
+  return value === "24h" || value === "3d" || value === "retention";
 }
 
 // ── Share handlers ────────────────────────────────────────────────────────────
