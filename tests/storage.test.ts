@@ -272,3 +272,35 @@ describe("getSnapshotCapacity", () => {
     expect(getSnapshotCapacity(1, 15)).toBe(getSnapshotCapacity(3, 15));
   });
 });
+
+// ── new Settings defaults ─────────────────────────────────────────────────────
+
+describe("DEFAULT_SETTINGS includes new v0.12 fields", () => {
+  it("priceAlertsEnabled defaults to true", async () => {
+    const s = await getSettings();
+    expect(s.priceAlertsEnabled).toBe(true);
+  });
+
+  it("priceDropMinPct defaults to 30", async () => {
+    const s = await getSettings();
+    expect(s.priceDropMinPct).toBe(30);
+  });
+
+  it("badgeFavoriteAppid defaults to undefined", async () => {
+    const s = await getSettings();
+    expect(s.badgeFavoriteAppid).toBeUndefined();
+  });
+
+  it("badgeFavoriteAppid can be saved and retrieved", async () => {
+    await saveSettings({ badgeFavoriteAppid: "570" });
+    const s = await getSettings();
+    expect(s.badgeFavoriteAppid).toBe("570");
+  });
+
+  it("badgeFavoriteAppid can be cleared", async () => {
+    await saveSettings({ badgeFavoriteAppid: "570" });
+    await saveSettings({ badgeFavoriteAppid: undefined });
+    const s = await getSettings();
+    expect(s.badgeFavoriteAppid).toBeUndefined();
+  });
+});
