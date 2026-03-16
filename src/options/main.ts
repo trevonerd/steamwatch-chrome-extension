@@ -7,6 +7,7 @@ import {
   saveSettings,
   getGameSettings,
   saveGameSettings,
+  getSnapshotsForGame,
   clearAllData,
   MAX_GAMES,
 } from "../utils/storage.js";
@@ -16,6 +17,14 @@ import type { Game, GameSettings, MessageRequest, MessageResponse } from "../typ
 import { buildExportRows, rowsToJSON, rowsToCSV, downloadFile, exportFilename } from "../utils/exporter.js";
 import { buildDayMask, maskToDays, DAY_LABELS } from "../utils/quietHours.js";
 import { wireThumbFallback } from "../popup/thumb.js";
+import {
+  filterSnapshotsByWindow,
+  downsampleSnapshotsForGraph,
+  mapToPoints,
+  buildAvailableGraphWindows,
+  sparklineColor,
+} from "../utils/sparkline.js";
+import { fmtNumber, compute24hAvg, computeRetentionAvg, computeLocalPeak } from "../utils/trend.js";
 
 
 // ── Navigation ────────────────────────────────────────────────────────────────
@@ -379,6 +388,14 @@ async function initNotifications(): Promise<void> {
   crashEl.value  = String(Math.abs(s.crashThreshold));
   crashVal.textContent = `-${Math.abs(s.crashThreshold)}%`;
   crashEl.addEventListener("input", () => { crashVal.textContent = `-${crashEl.value}%`; });
+
+  mustGet<HTMLInputElement>("priceAlertsEnabled").checked = s.priceAlertsEnabled;
+
+  const priceEl  = mustGet<HTMLInputElement>("priceDropMinPct");
+  const priceVal = mustGet<HTMLSpanElement>("priceDropMinPctVal");
+  priceEl.value  = String(s.priceDropMinPct);
+  priceVal.textContent = `${s.priceDropMinPct}%`;
+  priceEl.addEventListener("input", () => { priceVal.textContent = `${priceEl.value}%`; });
 }
 
 async function initQuietHours(): Promise<void> {
@@ -450,6 +467,8 @@ mustGet<HTMLButtonElement>("saveNotifs").addEventListener("click", async () => {
       quietStart:          mustGet<HTMLInputElement>("quietStart").value,
       quietEnd:            mustGet<HTMLInputElement>("quietEnd").value,
       quietDays:           buildDayMask(activeDays),
+      priceAlertsEnabled:  mustGet<HTMLInputElement>("priceAlertsEnabled").checked,
+      priceDropMinPct:     Number(mustGet<HTMLInputElement>("priceDropMinPct").value),
     });
     showToast("savedNotifs");
   } catch (err) {
@@ -485,8 +504,163 @@ async function init(): Promise<void> {
   void initExport();
   void initQuietHours();
   void initRanking();
+  void initHistory();
 }
 
+
+// ══════════════════════════════════════════════════════════════════════════════
+// HISTORY SECTION
+// ══════════════════════════════════════════════════════════════════════════════
+
+async function initHistory(): Promise<void> {
+  const selectEl  = document.getElementById("historyGameSelect")  as HTMLSelectElement | null;
+  const tabsEl    = document.getElementById("historyWindowTabs")  as HTMLDivElement    | null;
+  const chartEl   = document.getElementById("historyChart")       as SVGSVGElement     | null;
+  const emptyEl   = document.getElementById("historyEmpty")       as HTMLParagraphElement | null;
+  const noGameEl  = document.getElementById("historyNoGame")      as HTMLParagraphElement | null;
+  const statsEl   = document.getElementById("historyStats")       as HTMLDivElement    | null;
+  const hCurrent  = document.getElementById("hStatCurrent")  as HTMLDivElement | null;
+  const h24hAvg   = document.getElementById("hStat24hAvg")   as HTMLDivElement | null;
+  const hPeriodAvg= document.getElementById("hStatPeriodAvg")as HTMLDivElement | null;
+  const hPeak     = document.getElementById("hStatPeak")     as HTMLDivElement | null;
+  if (!selectEl || !tabsEl || !chartEl || !emptyEl || !noGameEl || !statsEl) return;
+
+  const settings = await getSettings();
+  const games    = await getGames();
+
+  // Populate game selector
+  games.forEach((game) => {
+    const opt = document.createElement("option");
+    opt.value = game.appid;
+    opt.textContent = game.name;
+    selectEl.appendChild(opt);
+  });
+
+  // Build window tabs
+  const windows = buildAvailableGraphWindows(settings.purgeAfterDays);
+  let activeWindow = windows[0]?.windowMs ?? 86_400_000;
+
+  function buildTabs(): void {
+    tabsEl!.innerHTML = "";
+    windows.forEach((w) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `panel-window-btn${w.windowMs === activeWindow ? " active" : ""}`;
+      btn.textContent = w.label;
+      btn.dataset["windowMs"] = String(w.windowMs);
+      btn.setAttribute("role", "tab");
+      btn.setAttribute("aria-selected", String(w.windowMs === activeWindow));
+      btn.addEventListener("click", () => {
+        activeWindow = w.windowMs;
+        tabsEl!.querySelectorAll<HTMLButtonElement>("[data-window-ms]").forEach((b) => {
+          const active = b === btn;
+          b.classList.toggle("active", active);
+          b.setAttribute("aria-selected", String(active));
+        });
+        void renderHistory(selectEl!.value);
+      });
+      tabsEl!.appendChild(btn);
+    });
+  }
+  buildTabs();
+
+  async function renderHistory(appid: string): Promise<void> {
+    if (!appid) {
+      if (noGameEl) noGameEl.hidden = false;
+      if (emptyEl)  emptyEl.hidden = true;
+      if (statsEl)  hide(statsEl);
+      chartEl!.innerHTML = "";
+      return;
+    }
+    if (noGameEl) noGameEl.hidden = true;
+
+    const allSnaps  = await getSnapshotsForGame(appid);
+    const filtered  = filterSnapshotsByWindow(allSnaps, activeWindow);
+    const downsampled = downsampleSnapshotsForGraph(filtered, 120);
+
+    if (downsampled.length < 2) {
+      if (emptyEl) emptyEl.hidden = false;
+      if (statsEl) hide(statsEl);
+      chartEl!.innerHTML = "";
+      return;
+    }
+    if (emptyEl) emptyEl.hidden = true;
+    if (statsEl) show(statsEl);
+
+    // ── Render SVG chart ──
+    const W = 600; const H = 160;
+    const padX = 52; const padY = 16;
+    const values = downsampled.map((s) => s.current);
+    const pts = mapToPoints(values, W - padX * 2, H - padY * 2, padX, padY);
+    const maxVal = Math.max(...values);
+    const minVal = Math.min(...values);
+    const midVal = Math.round((maxVal + minVal) / 2);
+    const color = sparklineColor(downsampled);
+
+    // Y-axis grid lines + labels
+    const gridLines = [
+      { y: padY,        label: fmtNumber(maxVal) },
+      { y: padY + (H - padY * 2) / 2, label: fmtNumber(midVal) },
+      { y: H - padY,    label: fmtNumber(minVal) },
+    ];
+
+    // X-axis labels
+    const firstTs = downsampled[0]!.ts;
+    const lastTs  = downsampled[downsampled.length - 1]!.ts;
+    const fmtTime = (ts: number): string => {
+      const d = new Date(ts);
+      return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
+    };
+
+    // Polyline points string
+    const polylinePoints = pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+    // Fill path: close bottom
+    const fillPath = `M${pts[0]!.x.toFixed(1)},${(H - padY).toFixed(1)} ` +
+      pts.map((p) => `L${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ") +
+      ` L${pts[pts.length - 1]!.x.toFixed(1)},${(H - padY).toFixed(1)} Z`;
+
+    const lastPt = pts[pts.length - 1]!;
+
+    chartEl!.innerHTML = `
+      <defs>
+        <linearGradient id="hGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${esc(color)}" stop-opacity="0.25"/>
+          <stop offset="100%" stop-color="${esc(color)}" stop-opacity="0.01"/>
+        </linearGradient>
+      </defs>
+      ${gridLines.map((g) => `
+        <line x1="${padX}" y1="${g.y.toFixed(1)}" x2="${W - padX / 2}" y2="${g.y.toFixed(1)}"
+              stroke="rgba(255,255,255,.06)" stroke-width="1"/>
+        <text x="${(padX - 4).toFixed(1)}" y="${(g.y + 4).toFixed(1)}"
+              fill="rgba(148,163,184,.7)" font-size="10" text-anchor="end"
+              font-family="JetBrains Mono,monospace">${esc(g.label)}</text>
+      `).join("")}
+      <text x="${padX}" y="${(H - 2).toFixed(1)}"
+            fill="rgba(84,106,128,.8)" font-size="9.5" text-anchor="start"
+            font-family="JetBrains Mono,monospace">${esc(fmtTime(firstTs))}</text>
+      <text x="${(W - padX / 2).toFixed(1)}" y="${(H - 2).toFixed(1)}"
+            fill="rgba(84,106,128,.8)" font-size="9.5" text-anchor="end"
+            font-family="JetBrains Mono,monospace">${esc(fmtTime(lastTs))}</text>
+      <path d="${esc(fillPath)}" fill="url(#hGrad)"/>
+      <polyline points="${esc(polylinePoints)}" fill="none" stroke="${esc(color)}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+      <circle cx="${lastPt.x.toFixed(1)}" cy="${lastPt.y.toFixed(1)}" r="3"
+              fill="${esc(color)}" stroke="var(--bg-surface)" stroke-width="1.5"/>
+    `;
+
+    // ── Stats row ──
+    const game = games.find((g) => g.appid === appid);
+    const current = game ? (await getSettings(), allSnaps[allSnaps.length - 1]?.current ?? null) : null;
+    const avg24h   = compute24hAvg(allSnaps);
+    const periodAvg = computeRetentionAvg(filtered.length > 0 ? filtered : allSnaps, settings.purgeAfterDays);
+    const peak     = computeLocalPeak(allSnaps);
+    if (hCurrent)   hCurrent.textContent   = fmtNumber(current);
+    if (h24hAvg)    h24hAvg.textContent    = fmtNumber(avg24h);
+    if (hPeriodAvg) hPeriodAvg.textContent = fmtNumber(periodAvg);
+    if (hPeak)      hPeak.textContent      = fmtNumber(peak);
+  }
+
+  selectEl.addEventListener("change", () => void renderHistory(selectEl.value));
+}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // EXPORT SECTION
