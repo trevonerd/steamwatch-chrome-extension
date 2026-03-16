@@ -26,6 +26,13 @@ export interface CachedData {
   readonly localAllTimePeak?: number;
   readonly fetchedAt: number;
   readonly twitchViewers?: number;
+  /** Price in cents, e.g. 2499 = $24.99. Present only for paid games. */
+  readonly priceOriginal?: number;
+  readonly priceCurrent?: number;
+  /** 0–100 sale discount percentage. Absent or 0 = not on sale. */
+  readonly discountPct?: number;
+  readonly priceFormatted?: string;
+  readonly priceOriginalFormatted?: string;
 }
 
 // ── Settings ─────────────────────────────────────────────────────────────────
@@ -46,6 +53,11 @@ export interface Settings {
   quietDays: QuietDaysMask;     // bitmask; 0b1111111 = every day
   // Dynamic ranking
   rankByPlayers: boolean;       // sort popup cards by current player count
+  // Price drop alerts
+  priceAlertsEnabled: boolean;  // notify on Steam sales
+  priceDropMinPct: number;      // minimum discount % to trigger alert, e.g. 30
+  // Badge favorite
+  badgeFavoriteAppid?: string;  // appid of the game whose count shows on the badge
 }
 
 /** Per-game overrides. Undefined fields fall back to global Settings. */
@@ -55,6 +67,7 @@ export interface GameSettings {
   crashThreshold?: number;
   notifyThresholdPlayers?: number;
   notificationsEnabled?: boolean;
+  priceAlertsEnabled?: boolean;  // per-game override for price drop alerts
 }
 
 // ── Trend ────────────────────────────────────────────────────────────────────
@@ -206,4 +219,8 @@ export interface CardViewModel {
   /** Timestamp of the last successful fetch (0 if never). */
   readonly fetchedAt: number;
   readonly twitchViewers?: number;
+  /** Price drop / sale fields. Present only for paid games currently on sale. */
+  readonly discountPct?: number;
+  readonly priceFormatted?: string;
+  readonly priceOriginalFormatted?: string;
 }

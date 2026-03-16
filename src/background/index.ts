@@ -6,7 +6,7 @@
 // Not affiliated with Valve Corporation or Steam®.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { fetchCurrentPlayers, fetchSteamChartsData, fetchSteamSpyData, fetchTwitchViewers } from "../utils/api.js";
+import { fetchCurrentPlayers, fetchSteamChartsData, fetchSteamSpyData, fetchTwitchViewers, fetchPriceData } from "../utils/api.js";
 import {
   getGames,
   getSettings,
@@ -17,7 +17,7 @@ import {
   getCache,
   setLastFetchTime,
 } from "../utils/storage.js";
-import { computeTrend, detectSpike, fmtNumber } from "../utils/trend.js";
+import { computeTrend, detectSpike, fmtNumber, fmtBadge } from "../utils/trend.js";
 import { isQuietNow } from "../utils/quietHours.js";
 import { buildCachedData, mergeCycleCache } from "./fetchCycle.js";
 import type {
@@ -38,6 +38,7 @@ const COOLDOWNS: Record<string, number> = {
   trend_down: 30 * 60_000,
   crash:      15 * 60_000,
   absolute:   60 * 60_000,
+  price_drop: 120 * 60_000,
 };
 
 const lastNotifiedAt = new Map<string, number>();
@@ -95,7 +96,7 @@ async function fetchAll(): Promise<void> {
     getCache(),
   ]);
   if (games.length === 0) {
-    updateBadge(0, 0);
+    updateBadge(0, 0, undefined, {}, new Map());
     return;
   }
 
@@ -107,10 +108,12 @@ async function fetchAll(): Promise<void> {
   let rising = 0;
   let alerting = 0;
   const cacheResults: Array<{ game: Game; cacheData?: CachedData }> = [];
+  const gameSignals = new Map<string, "rising" | "alerting" | "stable">();
   for (const r of results) {
     if (r.status === "fulfilled") {
       if (r.value.signal === "rising")   rising++;
       if (r.value.signal === "alerting") alerting++;
+      gameSignals.set(r.value.game.appid, r.value.signal);
       cacheResults.push({
         game: r.value.game,
         ...(r.value.cacheData ? { cacheData: r.value.cacheData } : {}),
@@ -125,7 +128,7 @@ async function fetchAll(): Promise<void> {
   // even when it reads from cache rather than triggering a live fetch.
   await setLastFetchTime(fetchedAt);
 
-  updateBadge(rising, alerting);
+  updateBadge(rising, alerting, settings.badgeFavoriteAppid, nextCache, gameSignals);
 }
 
 async function fetchGame(
@@ -142,9 +145,10 @@ async function fetchGame(
     fetchCurrentPlayers(game.appid),
     fetchSteamSpyData(game.appid),
   ]);
-  const [chartsData, twitchViewers] = await Promise.all([
+  const [chartsData, twitchViewers, priceData] = await Promise.all([
     fetchSteamChartsData(game.appid),
     fetchTwitchViewers(game.name).catch(() => null),
+    fetchPriceData(game.appid).catch(() => null),
   ]);
 
   const resolvedCurrent = currentPlayers ?? chartsData.current ?? null;
@@ -166,9 +170,23 @@ async function fetchGame(
     prevCache,
     fetchedAt,
     twitchViewers,
+    ...(priceData != null
+      ? {
+          priceOriginal:         priceData.priceOriginal,
+          priceCurrent:          priceData.priceCurrent,
+          discountPct:           priceData.discountPct,
+          priceFormatted:        priceData.currentFormatted,
+          priceOriginalFormatted: priceData.originalFormatted,
+        }
+      : { discountPct: 0 }), // signal "not on sale" so buildCachedData clears prev price
   });
 
   const perGame = await getGameSettings(game.appid);
+
+  if (settings.notificationsEnabled) {
+    await evaluatePriceNotification(game, cacheData, prevCache, settings, perGame);
+  }
+
   if (!settings.trendEnabled) {
     if (settings.notificationsEnabled) {
       await evaluateAbsoluteNotification(game, resolvedCurrent, perGame);
@@ -255,6 +273,30 @@ async function evaluateNotifications(
   return null;
 }
 
+async function evaluatePriceNotification(
+  game: Game,
+  cache: CachedData,
+  prevCache: CachedData | undefined,
+  global: Settings,
+  perGame: GameSettings,
+): Promise<void> {
+  if (!global.priceAlertsEnabled) return;
+  if (perGame.priceAlertsEnabled === false) return;
+  const disc = cache.discountPct;
+  if (!disc || disc < global.priceDropMinPct) return;
+  // Only fire when the sale is newly detected (wasn't on sale before, or discount increased)
+  const prevDisc = prevCache?.discountPct ?? 0;
+  if (disc <= prevDisc) return;
+  const price = cache.priceFormatted ?? "";
+  const orig  = cache.priceOriginalFormatted ?? "";
+  await notify(
+    game,
+    "price_drop",
+    `💸 ${game.name} — ${disc}% OFF`,
+    price && orig ? `${price} (was ${orig})` : `${disc}% discount!`,
+  );
+}
+
 async function evaluateAbsoluteNotification(
   game: Game,
   current: number,
@@ -296,9 +338,32 @@ async function notify(game: Game, type: string, title: string, message: string):
 
 /**
  * Update the extension icon badge.
- * Priority: alerting (red) > rising (green) > clear.
+ * If a favorite game is set, show its player count (short format) with trend color.
+ * Otherwise: alerting (red) > rising (green) > clear.
  */
-function updateBadge(rising: number, alerting: number): void {
+function updateBadge(
+  rising: number,
+  alerting: number,
+  favoriteAppid: string | undefined,
+  cache: Record<string, CachedData>,
+  gameSignals: Map<string, "rising" | "alerting" | "stable">,
+): void {
+  if (favoriteAppid) {
+    const cached = cache[favoriteAppid];
+    if (cached) {
+      const signal = gameSignals.get(favoriteAppid) ?? "stable";
+      const text = fmtBadge(cached.current);
+      const [bg, fg] =
+        signal === "alerting" ? ["#ff3366", "#ffffff"] :
+        signal === "rising"   ? ["#22c55e", "#000000"] :
+                                ["#334155", "#94a3b8"];
+      chrome.action.setBadgeText({ text });
+      chrome.action.setBadgeBackgroundColor({ color: bg });
+      chrome.action.setBadgeTextColor?.({ color: fg });
+      return;
+    }
+  }
+  // Default: count-based behavior
   if (alerting > 0) {
     chrome.action.setBadgeText({ text: String(alerting) });
     chrome.action.setBadgeBackgroundColor({ color: "#ff3366" });

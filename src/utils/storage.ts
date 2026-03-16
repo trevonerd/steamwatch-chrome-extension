@@ -34,6 +34,9 @@ export const DEFAULT_SETTINGS: Settings = {
   quietDays: 0b1111111, // all 7 days
   // Ranking
   rankByPlayers: true,
+  // Price drop alerts
+  priceAlertsEnabled: true,
+  priceDropMinPct: 30,
 };
 
 // ── Storage keys ──────────────────────────────────────────────────────────────
