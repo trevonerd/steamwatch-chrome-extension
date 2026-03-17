@@ -119,9 +119,9 @@ function renderGames(vms: CardViewModel[], rankByPlayers: boolean, favoriteAppid
 // ── Card builder ──────────────────────────────────────────────────────────────
 
 function buildGameItem(vm: CardViewModel, rankEmoji: string, isTop: boolean, favoriteAppid?: string): HTMLLIElement {
-  const { game, current, peak24h, allTimePeak, trend, trendCls, latestChangePct, svgStr } = vm;
-  const latestChangeHtml = latestChangePct != null
-    ? `<span class="trend-badge ${esc(changeBadgeClass(latestChangePct))}" aria-label="Latest change ${fmtPct(latestChangePct)}">${esc(fmtPct(latestChangePct))}</span>`
+  const { game, current, peak24h, allTimePeak, trendCls, displayTrendPct, displayTrendIcon, displayTrendCls, svgStr } = vm;
+  const trendBadgeHtml = displayTrendPct != null
+    ? `<span class="trend-badge ${esc(displayTrendCls)}" aria-label="Trend ${esc(fmtPct(displayTrendPct))}">${displayTrendIcon ? `${esc(displayTrendIcon)} ` : ""}${esc(fmtPct(displayTrendPct))}</span>`
     : "";
 
   const li = document.createElement("li");
@@ -166,7 +166,7 @@ function buildGameItem(vm: CardViewModel, rankEmoji: string, isTop: boolean, fav
             <span class="stat-value" aria-label="all-time peak">${fmtNumber(allTimePeak)}</span>
           </div>
         </div>
-        ${latestChangeHtml || (trend ? `<span class="trend-badge ${esc(trendCls)}" aria-label="Trend ${fmtPct(trend.pct)}">${trend.level.icon} ${esc(fmtPct(trend.pct))}</span>` : "")}
+        ${trendBadgeHtml}
       </div>
     </div>
 
@@ -279,7 +279,7 @@ function togglePanel(li: HTMLLIElement, panel: HTMLDivElement, btn: HTMLButtonEl
 
 function populatePanel(panel: HTMLDivElement, vm: CardViewModel): void {
   const {
-    game, snaps, current, peak24h, allTimePeak,
+    game, current, peak24h, allTimePeak,
     twitchViewers, avg24h, gain24h, retentionAvg, retentionGain, retentionDays,
     availableGraphWindows, defaultGraphWindow, discountPct, priceFormatted, priceOriginalFormatted,
   } = vm;
@@ -368,14 +368,6 @@ function populatePanel(panel: HTMLDivElement, vm: CardViewModel): void {
       renderPanelSparkline(panel, vm, key);
     });
   });
-}
-
-function changeBadgeClass(pct: number): string {
-  if (pct >= 8) return "strong-up";
-  if (pct >= 2) return "up";
-  if (pct <= -8) return "strong-down";
-  if (pct <= -2) return "down";
-  return "stable";
 }
 
 function needsRichDataHydration(vm: CardViewModel): boolean {
