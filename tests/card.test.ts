@@ -94,6 +94,31 @@ describe("buildCardViewModel", () => {
     expect(vm.peak24h).toBe(45_000);
   });
 
+  it("computes displayTrendPct from smoothed trend when available", () => {
+    const vm = buildCardViewModel(game, cache, snaps12, 7);
+    expect(vm.displayTrendPct).not.toBeNull();
+    expect(vm.displayTrendIcon).not.toBeNull();
+    expect(vm.displayTrendCls).toBe(vm.trend?.level.cls ?? "stable");
+  });
+
+  it("falls back to latest interval change when smoothed trend is unavailable", () => {
+    const vm = buildCardViewModel(game, cache, snaps5, 7);
+    expect(vm.trend).toBeNull();
+    expect(vm.latestChangePct).not.toBeNull();
+    expect(vm.displayTrendPct).toBe(vm.latestChangePct);
+    expect(vm.displayTrendIcon).toBe("↕");
+  });
+
+  it("displayTrendPct is null when there is not enough history", () => {
+    const vmNoCache = buildCardViewModel(game, {}, snaps12, 7);
+    void vmNoCache;
+
+    const vmEmpty = buildCardViewModel(game, cache, emptySnaps, 7);
+    expect(vmEmpty.displayTrendPct).toBeNull();
+    expect(vmEmpty.displayTrendIcon).toBeNull();
+    expect(vmEmpty.displayTrendCls).toBe("stable");
+  });
+
   it("returns null 24h peak when the cache does not include it", () => {
     const vm = buildCardViewModel(game, cache, emptySnaps, 7);
     expect(vm.peak24h).toBe(45_000);
