@@ -61,6 +61,7 @@ export function buildCardViewModel(
   const trend      = computeTrend(snaps);
   const trendCls   = trend?.level.cls ?? "stable";
   const latestChangePct = computeLatestChangePct(snaps);
+  const display = computeDisplayTrend(trend, latestChangePct);
   const stroke     = sparklineColor(snaps);
   const svgStr     = buildSparklineSVG(snaps);
 
@@ -70,6 +71,9 @@ export function buildCardViewModel(
     peak24h,
     allTimePeak,
     ...(data?.allTimePeakLabel ? { allTimePeakLabel: data.allTimePeakLabel } : {}),
+    displayTrendPct: display.pct,
+    displayTrendIcon: display.icon,
+    displayTrendCls: display.cls,
     ...(avg24h != null ? { avg24h } : {}),
     ...(gain24h != null ? { gain24h } : {}),
     ...(retentionAvg != null ? { retentionAvg } : {}),
@@ -89,6 +93,31 @@ export function buildCardViewModel(
     ...(data?.priceFormatted         ? { priceFormatted:         data.priceFormatted         } : {}),
     ...(data?.priceOriginalFormatted ? { priceOriginalFormatted: data.priceOriginalFormatted } : {}),
   };
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+function computeDisplayTrend(
+  trend: ReturnType<typeof computeTrend>,
+  latestChangePct: number | null,
+): { pct: number | null; icon: string | null; cls: string } {
+  if (trend) {
+    return { pct: trend.pct, icon: trend.level.icon, cls: trend.level.cls };
+  }
+  if (latestChangePct != null) {
+    // When we don't yet have enough history for a smoothed trend,
+    // fall back to the last-interval change (still useful early on).
+    return { pct: latestChangePct, icon: "↕", cls: pctToBadgeClass(latestChangePct) };
+  }
+  return { pct: null, icon: null, cls: "stable" };
+}
+
+function pctToBadgeClass(pct: number): string {
+  if (pct >= 8) return "strong-up";
+  if (pct >= 2) return "up";
+  if (pct <= -8) return "strong-down";
+  if (pct <= -2) return "down";
+  return "stable";
 }
 
 /**
