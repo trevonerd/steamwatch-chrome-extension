@@ -173,6 +173,58 @@ export async function searchGames(query: string): Promise<SearchResult[]> {
   }
 }
 
+// ── Price data ────────────────────────────────────────────────────────────────
+
+export interface PriceData {
+  readonly priceOriginal: number;    // cents
+  readonly priceCurrent: number;     // cents
+  readonly discountPct: number;      // 0–100
+  readonly currentFormatted: string;
+  readonly originalFormatted: string;
+}
+
+const PriceOverviewSchema = z.object({
+  initial:           z.number().int().nonnegative(),
+  final:             z.number().int().nonnegative(),
+  discount_percent:  z.number().int().min(0).max(100),
+  final_formatted:   z.string(),
+  initial_formatted: z.string(),
+});
+
+/**
+ * Fetch current price and sale discount from the Steam Store API.
+ * Returns null for free games, network failures, or when discount is 0.
+ */
+export async function fetchPriceData(appid: string): Promise<PriceData | null> {
+  try {
+    const res = await fetch(
+      `https://store.steampowered.com/api/appdetails?appids=${encodeURIComponent(appid)}&filters=price_overview&cc=US`
+    );
+    if (!res.ok) return null;
+    const json: unknown = await res.json();
+    if (typeof json !== "object" || json === null) return null;
+    const entry = (json as Record<string, unknown>)[appid];
+    if (typeof entry !== "object" || entry === null) return null;
+    const { success, data } = entry as Record<string, unknown>;
+    if (success !== true || typeof data !== "object" || data === null) return null;
+    const { price_overview } = data as Record<string, unknown>;
+    if (price_overview == null) return null; // free game
+    const parsed = PriceOverviewSchema.safeParse(price_overview);
+    if (!parsed.success) return null;
+    const { initial, final, discount_percent, final_formatted, initial_formatted } = parsed.data;
+    if (discount_percent === 0) return null; // not on sale
+    return {
+      priceOriginal:     initial,
+      priceCurrent:      final,
+      discountPct:       discount_percent,
+      currentFormatted:  final_formatted,
+      originalFormatted: initial_formatted,
+    };
+  } catch {
+    return null;
+  }
+}
+
 // ── Steam News ────────────────────────────────────────────────────────────────
 
 import type { SteamNewsItem } from "../types/index.js";

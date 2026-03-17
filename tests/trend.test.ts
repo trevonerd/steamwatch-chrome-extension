@@ -367,3 +367,32 @@ describe("fmtTimeAgo", () => {
     expect(fmtTimeAgo(Date.now() - 3600_000)).toBe("1h ago");
   });
 });
+
+// ── fmtBadge ─────────────────────────────────────────────────────────────────
+
+import { fmtBadge } from "../src/utils/trend.js";
+
+describe("fmtBadge", () => {
+  it("formats millions with 1 decimal", () => {
+    expect(fmtBadge(1_234_567)).toBe("1.2M");
+    expect(fmtBadge(1_000_000)).toBe("1.0M");
+  });
+
+  it("formats tens of thousands as integer k", () => {
+    expect(fmtBadge(42_000)).toBe("42k");
+    expect(fmtBadge(10_000)).toBe("10k");
+    expect(fmtBadge(99_500)).toBe("100k");
+  });
+
+  it("formats thousands with 1 decimal k", () => {
+    expect(fmtBadge(1_200)).toBe("1.2k");
+    expect(fmtBadge(1_000)).toBe("1.0k");
+    expect(fmtBadge(9_999)).toBe("10.0k");
+  });
+
+  it("formats sub-thousand as plain number", () => {
+    expect(fmtBadge(999)).toBe("999");
+    expect(fmtBadge(0)).toBe("0");
+    expect(fmtBadge(1)).toBe("1");
+  });
+});
