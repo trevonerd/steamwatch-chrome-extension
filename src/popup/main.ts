@@ -7,6 +7,7 @@ import {
   getCache,
   getSnapshotsForGame,
   getSettings,
+  saveSettings,
   getLastFetchTime,
   removeGame,
 } from "../utils/storage.js";
@@ -76,7 +77,7 @@ async function init(): Promise<void> {
       vms.sort((a, b) => (b.current ?? 0) - (a.current ?? 0));
     }
 
-    renderGames(vms, settings.rankByPlayers);
+    renderGames(vms, settings.rankByPlayers, settings.badgeFavoriteAppid);
     updateFetchBar(lastFetch);
     updateHeaderTimestamp(vms);
     showState("list");
@@ -88,14 +89,14 @@ async function init(): Promise<void> {
 
 // ── Render ────────────────────────────────────────────────────────────────────
 
-function renderGames(vms: CardViewModel[], rankByPlayers: boolean): void {
+function renderGames(vms: CardViewModel[], rankByPlayers: boolean, favoriteAppid?: string): void {
   gamesListEl.innerHTML = "";
 
   vms.forEach((vm, i) => {
     const rankEmoji = rankByPlayers && vms.length > 1
       ? (["🥇", "🥈", "🥉"][i] ?? "")
       : "";
-    const li = buildGameItem(vm, rankEmoji, i === 0 && rankByPlayers);
+    const li = buildGameItem(vm, rankEmoji, i === 0 && rankByPlayers, favoriteAppid);
     gamesListEl.appendChild(li);
 
     if (i < vms.length - 1) {
@@ -117,10 +118,10 @@ function renderGames(vms: CardViewModel[], rankByPlayers: boolean): void {
 
 // ── Card builder ──────────────────────────────────────────────────────────────
 
-function buildGameItem(vm: CardViewModel, rankEmoji: string, isTop: boolean): HTMLLIElement {
-  const { game, current, peak24h, allTimePeak, trend, trendCls, latestChangePct, svgStr } = vm;
-  const latestChangeHtml = latestChangePct != null
-    ? `<span class="trend-badge ${esc(changeBadgeClass(latestChangePct))}" aria-label="Latest change ${fmtPct(latestChangePct)}">${esc(fmtPct(latestChangePct))}</span>`
+function buildGameItem(vm: CardViewModel, rankEmoji: string, isTop: boolean, favoriteAppid?: string): HTMLLIElement {
+  const { game, current, peak24h, allTimePeak, trendCls, displayTrendPct, displayTrendIcon, displayTrendCls, svgStr } = vm;
+  const trendBadgeHtml = displayTrendPct != null
+    ? `<span class="trend-badge ${esc(displayTrendCls)}" aria-label="Trend ${esc(fmtPct(displayTrendPct))}">${displayTrendIcon ? `${esc(displayTrendIcon)} ` : ""}${esc(fmtPct(displayTrendPct))}</span>`
     : "";
 
   const li = document.createElement("li");
@@ -165,7 +166,7 @@ function buildGameItem(vm: CardViewModel, rankEmoji: string, isTop: boolean): HT
             <span class="stat-value" aria-label="all-time peak">${fmtNumber(allTimePeak)}</span>
           </div>
         </div>
-        ${latestChangeHtml || (trend ? `<span class="trend-badge ${esc(trendCls)}" aria-label="Trend ${fmtPct(trend.pct)}">${trend.level.icon} ${esc(fmtPct(trend.pct))}</span>` : "")}
+        ${trendBadgeHtml}
       </div>
     </div>
 
@@ -174,6 +175,11 @@ function buildGameItem(vm: CardViewModel, rankEmoji: string, isTop: boolean): HT
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
           <path d="M8.59 13.51L15.42 17.49"/><path d="M15.41 6.51L8.59 10.49"/>
+        </svg>
+      </button>
+      <button class="btn-ctrl btn-star${favoriteAppid === game.appid ? " active" : ""}" aria-label="${favoriteAppid === game.appid ? "Remove from badge" : "Show on badge"}" title="Show on badge" aria-pressed="${String(favoriteAppid === game.appid)}">
+        <svg viewBox="0 0 24 24" fill="${favoriteAppid === game.appid ? "currentColor" : "none"}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
         </svg>
       </button>
       <button class="btn-ctrl btn-expand" aria-expanded="false" aria-label="Expand details for ${esc(game.name)}" title="Details">
@@ -241,10 +247,12 @@ function buildGameItem(vm: CardViewModel, rankEmoji: string, isTop: boolean): HT
   const expandBtn = card.querySelector<HTMLButtonElement>(".btn-expand")!;
   const removeBtn = card.querySelector<HTMLButtonElement>(".btn-remove")!;
   const shareBtn  = card.querySelector<HTMLButtonElement>(".btn-share")!;
+  const starBtn   = card.querySelector<HTMLButtonElement>(".btn-star")!;
 
   expandBtn.addEventListener("click", (e) => { e.stopPropagation(); togglePanel(li, panel, expandBtn, vm); });
   removeBtn.addEventListener("click", (e) => { e.stopPropagation(); void handleRemove(game.appid); });
   shareBtn.addEventListener("click",  (e) => { e.stopPropagation(); toggleShareBar(shareBar, shareBtn); });
+  starBtn.addEventListener("click",   (e) => { e.stopPropagation(); void handleToggleFavorite(game.appid, starBtn); });
 
   shareBar.querySelector<HTMLButtonElement>("[data-share='text']")!
     .addEventListener("click", (e) => { e.stopPropagation(); void handleShareText(shareBar, vm); });
@@ -271,9 +279,9 @@ function togglePanel(li: HTMLLIElement, panel: HTMLDivElement, btn: HTMLButtonEl
 
 function populatePanel(panel: HTMLDivElement, vm: CardViewModel): void {
   const {
-    game, snaps, current, peak24h, allTimePeak,
+    game, current, peak24h, allTimePeak,
     twitchViewers, avg24h, gain24h, retentionAvg, retentionGain, retentionDays,
-    availableGraphWindows, defaultGraphWindow,
+    availableGraphWindows, defaultGraphWindow, discountPct, priceFormatted, priceOriginalFormatted,
   } = vm;
 
   const twitchStr = twitchViewers != null ? fmtNumber(twitchViewers) : "—";
@@ -332,6 +340,12 @@ function populatePanel(panel: HTMLDivElement, vm: CardViewModel): void {
         <dd class="panel-stat-value">${esc(retentionGainStr)}</dd>
       </div>
     </dl>
+    ${discountPct != null ? `
+    <div class="panel-sale-badge" aria-label="${esc(`On sale: ${discountPct}% off`)}">
+      <span class="sale-pct">ON SALE −${esc(String(discountPct))}%</span>
+      ${priceFormatted ? `<span class="sale-price">${esc(priceFormatted)}</span>` : ""}
+      ${priceOriginalFormatted ? `<s class="sale-orig">${esc(priceOriginalFormatted)}</s>` : ""}
+    </div>` : ""}
     <div class="panel-links">
       <a class="panel-link" href="https://store.steampowered.com/app/${esc(game.appid)}"
          target="_blank" rel="noopener noreferrer">Steam ↗</a>
@@ -354,14 +368,6 @@ function populatePanel(panel: HTMLDivElement, vm: CardViewModel): void {
       renderPanelSparkline(panel, vm, key);
     });
   });
-}
-
-function changeBadgeClass(pct: number): string {
-  if (pct >= 8) return "strong-up";
-  if (pct >= 2) return "up";
-  if (pct <= -8) return "strong-down";
-  if (pct <= -2) return "down";
-  return "stable";
 }
 
 function needsRichDataHydration(vm: CardViewModel): boolean {
@@ -455,6 +461,37 @@ function showShareFeedback(el: HTMLSpanElement, msg: string, kind: "success" | "
 async function handleRemove(appid: string): Promise<void> {
   try { await removeGame(appid); await init(); }
   catch (err) { console.error("[SteamWatch] Remove failed:", err); }
+}
+
+// ── Badge favorite ────────────────────────────────────────────────────────────
+
+async function handleToggleFavorite(appid: string, clickedBtn: HTMLButtonElement): Promise<void> {
+  try {
+    const settings = await getSettings();
+    const isCurrentFav = settings.badgeFavoriteAppid === appid;
+    const newFav = isCurrentFav ? undefined : appid;
+    await saveSettings({ badgeFavoriteAppid: newFav });
+
+    // Update all star buttons in the list to reflect the new state
+    document.querySelectorAll<HTMLButtonElement>(".btn-star").forEach((btn) => {
+      const card = btn.closest<HTMLDivElement>(".game-card");
+      const cardAppid = card?.dataset["appid"];
+      const active = cardAppid === newFav;
+      btn.classList.toggle("active", active);
+      btn.setAttribute("aria-pressed", String(active));
+      btn.setAttribute("aria-label", active ? "Remove from badge" : "Show on badge");
+      const polygon = btn.querySelector("polygon");
+      if (polygon) polygon.setAttribute("fill", active ? "currentColor" : "none");
+    });
+
+    // Ask background to refresh badge immediately
+    try {
+      await chrome.runtime.sendMessage<MessageRequest, MessageResponse>({ type: "FETCH_NOW" });
+    } catch { /* non-critical */ }
+  } catch (err) {
+    console.error("[SteamWatch] Toggle favorite failed:", err);
+  }
+  void clickedBtn;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

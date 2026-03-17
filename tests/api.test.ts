@@ -259,3 +259,68 @@ describe("fetchTwitchViewers", () => {
     expect(await fetchTwitchViewers("Marathon")).toBe(233893);
   });
 });
+
+// ── fetchPriceData ────────────────────────────────────────────────────────────
+
+import { fetchPriceData } from "../src/utils/api.js";
+
+describe("fetchPriceData", () => {
+  const saleResponse = (appid: string) => ({
+    [appid]: {
+      success: true,
+      data: {
+        price_overview: {
+          initial: 2499,
+          final: 1249,
+          discount_percent: 50,
+          initial_formatted: "$24.99",
+          final_formatted: "$12.49",
+        },
+      },
+    },
+  });
+
+  it("returns price data when game is on sale", async () => {
+    mockFetch(saleResponse("570"));
+    const result = await fetchPriceData("570");
+    expect(result).not.toBeNull();
+    expect(result!.discountPct).toBe(50);
+    expect(result!.priceOriginal).toBe(2499);
+    expect(result!.priceCurrent).toBe(1249);
+    expect(result!.originalFormatted).toBe("$24.99");
+    expect(result!.currentFormatted).toBe("$12.49");
+  });
+
+  it("returns null when discount is 0 (not on sale)", async () => {
+    mockFetch({ "570": {
+      success: true,
+      data: { price_overview: { initial: 2499, final: 2499, discount_percent: 0, initial_formatted: "$24.99", final_formatted: "$24.99" } },
+    }});
+    expect(await fetchPriceData("570")).toBeNull();
+  });
+
+  it("returns null for free game (no price_overview)", async () => {
+    mockFetch({ "570": { success: true, data: {} } });
+    expect(await fetchPriceData("570")).toBeNull();
+  });
+
+  it("returns null on non-ok HTTP response", async () => {
+    mockFetch({}, false, 500);
+    expect(await fetchPriceData("570")).toBeNull();
+  });
+
+  it("returns null when success is false", async () => {
+    mockFetch({ "570": { success: false } });
+    expect(await fetchPriceData("570")).toBeNull();
+  });
+
+  it("returns null on network error", async () => {
+    mockFetchError();
+    expect(await fetchPriceData("570")).toBeNull();
+  });
+
+  it("returns null when response body is not an object", async () => {
+    mockFetch(null);
+    expect(await fetchPriceData("570")).toBeNull();
+  });
+});

@@ -167,6 +167,14 @@ export function fmtNumber(n: number | null | undefined): string {
   return n.toLocaleString("en-US");
 }
 
+/** Short format for browser badge text (max ~4 chars). */
+export function fmtBadge(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`; // "1.2M"
+  if (n >= 10_000)    return `${Math.round(n / 1_000)}k`;       // "42k"
+  if (n >= 1_000)     return `${(n / 1_000).toFixed(1)}k`;      // "1.2k"
+  return String(n);                                               // "999"
+}
+
 export function fmtPct(pct: number): string {
   return pct >= 0 ? `+${pct}%` : `${pct}%`;
 }

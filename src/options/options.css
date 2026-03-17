@@ -548,3 +548,82 @@ code {
   color: var(--accent);
   background: var(--accent-dim);
 }
+
+/* ── History section ─────────────────────────────────────────── */
+.history-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.history-select-wrap { display: flex; flex-direction: column; gap: 5px; }
+.history-select {
+  min-width: 220px;
+  padding: 6px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font-family: var(--ff-body);
+  font-size: 13px;
+  cursor: pointer;
+}
+.history-select:focus { outline: none; border-color: var(--accent); }
+
+.graph-tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+.panel-window-btn {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background: none;
+  color: var(--text-3);
+  font: 500 11.5px var(--ff-mono);
+  cursor: pointer;
+  transition: border-color .15s, color .15s, background .15s;
+}
+.panel-window-btn:hover  { border-color: var(--border-hover); color: var(--text-2); }
+.panel-window-btn.active { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+
+.history-chart-wrap {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 12px 8px 6px;
+  min-height: 100px;
+  position: relative;
+}
+.history-chart-svg { display: block; width: 100%; overflow: visible; }
+.history-empty,
+.history-no-game {
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-3);
+  padding: 32px 0;
+}
+
+.history-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+}
+.history-stat {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 8px 10px;
+  text-align: center;
+}
+.history-stat-label {
+  font-size: 10px;
+  font-family: var(--ff-mono);
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  margin-bottom: 4px;
+}
+.history-stat-value {
+  font: 600 14px var(--ff-mono);
+  color: var(--accent);
+}
