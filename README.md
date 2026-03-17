@@ -1,5 +1,7 @@
 # SteamWatch Chrome Extension
 
+[![Version](https://img.shields.io/badge/version-0.12.0-blue)](CHANGELOG.md)
+
 Chrome extension for tracking Steam games with live player counts, local trend history, Twitch viewers, alerts, and quick popup insights.
 
 > **Not affiliated with Valve Corporation or Steam®.**
@@ -17,6 +19,10 @@ Chrome extension for tracking Steam games with live player counts, local trend h
 - **Dynamic Xd average / gain-loss** based on your retention setting
 - **Trend notifications** with per-game overrides and quiet hours
 - **Toolbar badge** for rising or alerting games
+- **Favorite game badge** — pin any game to show its live player count directly on the toolbar icon (⭐)
+- **Price drop alerts** — 💸 notification when a game goes on sale (configurable min % threshold)
+- **Historical player count graph** — annotated chart in Options with 24h / 3d / retention windows
+- **Smoothed trend %** in popup badge (3-vs-3 average, latest-change fallback)
 - **Share cards** as text or image
 - **CSV / JSON export**
 
@@ -27,8 +33,8 @@ Chrome extension for tracking Steam games with live player counts, local trend h
 ```bash
 git clone https://github.com/trevonerd/steamwatch-chrome-extension.git
 cd steamwatch-chrome-extension
-npm install
-npm run build       # outputs to dist/
+pnpm install
+pnpm run build       # outputs to dist/
 ```
 
 Then in Chrome:
@@ -43,9 +49,9 @@ Then in Chrome:
 ## Development
 
 ```bash
-npm run dev         # Vite watch mode
-npm test            # Vitest (261 tests)
-npm run test:coverage
+pnpm run dev         # Vite watch mode
+pnpm test            # Vitest (289 tests)
+pnpm run test:coverage
 ```
 
 ### Stack
@@ -62,18 +68,20 @@ npm run test:coverage
 
 ```
 src/
-├── background/index.ts   Service worker — alarms, fetch loop, notifications, badge
+├── background/
+│   ├── index.ts          Service worker — alarms, fetch loop, notifications, badge
+│   └── fetchCycle.ts     Price data fetch + alert logic
 ├── popup/                Toolbar popup UI
 │   ├── index.html
 │   ├── main.ts
 │   └── popup.css
-├── options/              Options page
+├── options/              Options page (including History graph)
 │   ├── index.html
 │   ├── main.ts
 │   └── options.css
 ├── types/index.ts        All shared TypeScript types
 └── utils/
-    ├── api.ts            Steam / SteamSpy HTTP fetchers (Zod-validated)
+    ├── api.ts            Steam / SteamSpy / price HTTP fetchers (Zod-validated)
     ├── card.ts           CardViewModel factory — single source of display data
     ├── exporter.ts       CSV / JSON export
     ├── html.ts           XSS-safe helpers, show/hide
@@ -81,9 +89,9 @@ src/
     ├── share.ts          Share text + canvas image builder
     ├── sparkline.ts      SVG sparkline generator
     ├── storage.ts        chrome.storage.local abstraction
-    └── trend.ts          Trend, spike, forecast computation
-tests/                    261 Vitest unit tests
-public/icons/             Extension icons (16/32/48/128px)
+    └── trend.ts          Trend, spike, forecast, badge formatting
+tests/                    289 Vitest unit tests
+public/icons/             Extension icons (16/32/34/48/128px)
 ```
 
 ---
@@ -99,6 +107,7 @@ public/icons/             Extension icons (16/32/48/128px)
 | Game search | `store.steampowered.com/api/storesearch` |
 | Game thumbnail | `cdn.akamai.steamstatic.com/steam/apps/{id}/capsule_sm_120.jpg` |
 | Steam news | `api.steampowered.com/ISteamNews/GetNewsForApp/v2` |
+| Price / discounts | `store.steampowered.com/api/appdetails` |
 
 ---
 
