@@ -327,7 +327,7 @@ async function notify(game: Game, type: string, title: string, message: string):
   lastNotifiedAt.set(key, now);
   chrome.notifications.create(`sw_${key}_${now}`, {
     type:     "basic",
-    iconUrl:  "icons/icon128.png",
+    iconUrl:  "/icons/logo-128.png",
     title,
     message,
     priority: type === "crash" ? 2 : 1,

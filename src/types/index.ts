@@ -203,6 +203,17 @@ export interface CardViewModel {
   /** Best available all-time peak from fetched stats and local fallback. */
   readonly allTimePeak: number | null;
   readonly allTimePeakLabel?: string;
+  /**
+   * Primary % shown in the popup list.
+   *
+   * This represents the *trend* signal (smoothed change), not a ratio vs peak.
+   * Null when there isn't enough local history.
+   */
+  readonly displayTrendPct: number | null;
+  /** Icon paired with `displayTrendPct` (e.g. 📈/📉/➡️). Null when pct is null. */
+  readonly displayTrendIcon: string | null;
+  /** CSS class for the badge colour (e.g. up/down/stable/strong-up/strong-down). */
+  readonly displayTrendCls: string;
   readonly avg24h?: number;
   readonly gain24h?: number;
   readonly retentionAvg?: number;
