@@ -604,7 +604,7 @@ code {
 
 .history-stats {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
   margin-top: 12px;
 }
@@ -627,6 +627,14 @@ code {
   font: 600 14px var(--ff-mono);
   color: var(--accent);
 }
+
+/* ── History price stats section ───────────────────────────────────────── */
+.history-price-stats { margin-top: 12px; }
+.history-price-title { font-size: 11px; font-family: var(--ff-mono); color: var(--text-3); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; }
+.history-price-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.itad-credit { font-size: 10px; text-transform: none; letter-spacing: normal; }
+.itad-credit a { color: var(--accent); text-decoration: none; }
+.itad-credit a:hover { text-decoration: underline; }
 
 /* ── Game row image placeholder ─────────────────────────────────────────── */
 .game-row-thumb-wrap {
