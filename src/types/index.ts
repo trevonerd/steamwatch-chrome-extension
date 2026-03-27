@@ -33,6 +33,8 @@ export interface CachedData {
   readonly discountPct?: number;
   readonly priceFormatted?: string;
   readonly priceOriginalFormatted?: string;
+  readonly itadUuid?: string;
+  readonly itadHistoricalLow?: { amountInt: number; cut: number; timestamp: string };
 }
 
 // ── Settings ─────────────────────────────────────────────────────────────────
@@ -150,6 +152,15 @@ export interface SparklineOptions {
   readonly maxPoints: number;
 }
 
+export interface PriceRecord {
+  readonly appId: string;
+  readonly timestamp: number;
+  readonly priceAmountInt: number;
+  readonly regularAmountInt: number;
+  readonly cut: number;
+  readonly shop: string;
+}
+
 // ── Export ────────────────────────────────────────────────────────────────────
 
 export type ExportFormat = "json" | "csv";
@@ -181,7 +192,7 @@ export interface ForecastResult {
  */
 export type QuietDaysMask = number;
 
-export type GraphWindowKey = "24h" | "3d" | "retention";
+export type GraphWindowKey = "24h" | "3d" | "7d" | "15d" | "1m" | "all";
 
 export interface GraphWindowOption {
   readonly key: GraphWindowKey;
@@ -234,4 +245,14 @@ export interface CardViewModel {
   readonly discountPct?: number;
   readonly priceFormatted?: string;
   readonly priceOriginalFormatted?: string;
+  /** Minimum within the active graph window: { value, timestamp } or null. */
+  readonly recordLow: { value: number; timestamp: number } | null;
+  /** Minimum across all snapshots: { value, timestamp } or null. */
+  readonly allTimeLow: { value: number; timestamp: number } | null;
+  /** ITAD historical low price record. */
+  readonly itadHistoricalLow?: { amountInt: number; cut: number; timestamp: string };
+  /** ITAD game identifier. */
+  readonly itadUuid?: string;
+  /** SVG sparkline for price history (placeholder — populated in Task 12). */
+  readonly priceSparklineSvg?: string;
 }

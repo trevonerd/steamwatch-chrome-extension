@@ -42,6 +42,48 @@ describe("buildCachedData", () => {
   });
 });
 
+describe("buildCachedData — ITAD fields", () => {
+  const baseInput = {
+    currentPlayers: 500,
+    fetchedAt: 100,
+    twitchViewers: null,
+  };
+
+  it("passes through itadUuid from input to output", () => {
+    const result = buildCachedData({ ...baseInput, itadUuid: "abc-123" });
+    expect(result.itadUuid).toBe("abc-123");
+  });
+
+  it("passes through itadHistoricalLow from input to output", () => {
+    const low = { amountInt: 499, cut: 75, timestamp: "2024-01-01T00:00:00Z" };
+    const result = buildCachedData({ ...baseInput, itadHistoricalLow: low });
+    expect(result.itadHistoricalLow).toEqual(low);
+  });
+
+  it("carries forward itadUuid from prevCache when not in input", () => {
+    const result = buildCachedData({
+      ...baseInput,
+      prevCache: { current: 400, fetchedAt: 50, itadUuid: "prev-uuid" },
+    });
+    expect(result.itadUuid).toBe("prev-uuid");
+  });
+
+  it("carries forward itadHistoricalLow from prevCache when not in input", () => {
+    const low = { amountInt: 299, cut: 80, timestamp: "2023-06-15T00:00:00Z" };
+    const result = buildCachedData({
+      ...baseInput,
+      prevCache: { current: 400, fetchedAt: 50, itadHistoricalLow: low },
+    });
+    expect(result.itadHistoricalLow).toEqual(low);
+  });
+
+  it("does not crash when neither input nor prevCache have ITAD data", () => {
+    const result = buildCachedData({ ...baseInput });
+    expect(result.itadUuid).toBeUndefined();
+    expect(result.itadHistoricalLow).toBeUndefined();
+  });
+});
+
 describe("mergeCycleCache", () => {
   const makeGame = (appid: string) => ({
     appid,

@@ -18,6 +18,8 @@ export interface BuildCachedDataInput {
   readonly discountPct?: number;
   readonly priceFormatted?: string;
   readonly priceOriginalFormatted?: string;
+  readonly itadUuid?: string;
+  readonly itadHistoricalLow?: { amountInt: number; cut: number; timestamp: string };
 }
 
 export function mergeCycleCache(
@@ -47,6 +49,8 @@ export function buildCachedData(input: BuildCachedDataInput): CachedData {
     discountPct,
     priceFormatted,
     priceOriginalFormatted,
+    itadUuid,
+    itadHistoricalLow,
   } = input;
 
   const prevLocalPeak = prevCache?.localAllTimePeak ?? prevCache?.current ?? 0;
@@ -99,5 +103,7 @@ export function buildCachedData(input: BuildCachedDataInput): CachedData {
         ? { twitchViewers: prevCache.twitchViewers }
         : {}),
     ...priceFields,
+    ...(itadUuid          ? { itadUuid }                       : prevCache?.itadUuid          ? { itadUuid: prevCache.itadUuid }                           : {}),
+    ...(itadHistoricalLow ? { itadHistoricalLow }              : prevCache?.itadHistoricalLow ? { itadHistoricalLow: prevCache.itadHistoricalLow }          : {}),
   };
 }

@@ -158,6 +158,17 @@ export function computeLocalPeak(snapshots: readonly Snapshot[]): number | null 
   return Math.max(...snapshots.map((s) => s.current));
 }
 
+export function computeWindowMin(
+  snapshots: readonly Snapshot[],
+): { value: number; timestamp: number } | null {
+  if (snapshots.length === 0) return null;
+  let min = snapshots[0]!;
+  for (const snap of snapshots) {
+    if (snap.current < min.current) min = snap;
+  }
+  return { value: min.current, timestamp: min.ts };
+}
+
 // ── Formatting ────────────────────────────────────────────────────────────────
 
 export function fmtNumber(n: number | null | undefined): string {

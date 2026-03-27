@@ -1,0 +1,27 @@
+Task 7: Storage Switchover — IndexedDB
+======================================
+Date: 2026-03-27
+
+Changes made:
+-------------
+1. src/background/index.ts
+   - Removed: addSnapshot, purgeSnapshotsForGame from storage.ts import
+   - Added: import { idbSaveSnapshot, idbGetSnapshots } from "../utils/idb-storage.js"
+   - Added: import { migrateToIndexedDB } from "../utils/migrate.js"
+   - bootstrap(): added `void migrateToIndexedDB()` fire-and-forget before resetAlarm()
+   - fetchGame(): replaced purgeSnapshotsForGame + addSnapshot with idbSaveSnapshot + idbGetSnapshots
+
+2. src/popup/main.ts
+   - Removed: getSnapshotsForGame from storage.ts import
+   - Added: import { idbGetSnapshots } from "../utils/idb-storage.js"
+   - line 64: replaced getSnapshotsForGame with idbGetSnapshots in buildAllViewModels call
+
+Grep verification (background/ and popup/ directories):
+  No remaining imports of addSnapshot, purgeSnapshotsForGame, or getSnapshotsForGame found.
+
+storage.ts intact: still exports getGames, getCache, setCache, getSettings, saveSettings,
+  getGameSettings, saveGameSettings, setLastFetchTime, getLastFetchTime, MAX_GAMES, DEFAULT_SETTINGS
+  (plus addSnapshot/purgeSnapshotsForGame/getSnapshotsForGame for storage.test.ts and options/main.ts)
+
+pnpm vitest run: 358 tests passed, 0 failures
+pnpm build: exit code 0

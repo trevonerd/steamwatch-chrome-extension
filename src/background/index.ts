@@ -7,19 +7,21 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { fetchCurrentPlayers, fetchSteamChartsData, fetchSteamSpyData, fetchTwitchViewers, fetchPriceData } from "../utils/api.js";
+import { compactSnapshots } from "../utils/compaction.js";
 import {
   getGames,
   getSettings,
   getGameSettings,
-  addSnapshot,
-  purgeSnapshotsForGame,
   setCache,
   getCache,
   setLastFetchTime,
 } from "../utils/storage.js";
+import { idbSaveSnapshot, idbGetSnapshots, idbSaveItadMapping, idbGetItadMapping } from "../utils/idb-storage.js";
+import { migrateToIndexedDB } from "../utils/migrate.js";
 import { computeTrend, detectSpike, fmtNumber, fmtBadge } from "../utils/trend.js";
 import { isQuietNow } from "../utils/quietHours.js";
 import { buildCachedData, mergeCycleCache } from "./fetchCycle.js";
+import { lookupItadGame, fetchHistoricalLow } from "../utils/itad-api.js";
 import type {
   CachedData,
   Game,
@@ -31,6 +33,7 @@ import type {
 } from "../types/index.js";
 
 const ALARM_NAME = "sw_fetch";
+const COMPACTION_ALARM_NAME = "steamwatch-compaction";
 
 const COOLDOWNS: Record<string, number> = {
   spike:      20 * 60_000,
@@ -49,7 +52,9 @@ chrome.runtime.onInstalled.addListener(() => void bootstrap());
 chrome.runtime.onStartup.addListener(() => void bootstrap());
 
 async function bootstrap(): Promise<void> {
+  void migrateToIndexedDB(); // fire-and-forget — don't block extension startup
   await resetAlarm();
+  await resetCompactionAlarm();
   await fetchAll();
 }
 
@@ -59,9 +64,22 @@ async function resetAlarm(): Promise<void> {
   chrome.alarms.create(ALARM_NAME, { periodInMinutes: fetchIntervalMinutes });
 }
 
+async function resetCompactionAlarm(): Promise<void> {
+  await chrome.alarms.clear(COMPACTION_ALARM_NAME);
+  chrome.alarms.create(COMPACTION_ALARM_NAME, { periodInMinutes: 24 * 60 });
+}
+
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM_NAME) void fetchAll();
+  if (alarm.name === COMPACTION_ALARM_NAME) void runCompaction();
 });
+
+async function runCompaction(): Promise<void> {
+  const games = await getGames();
+  const settings = await getSettings();
+  const fullResolutionDays = settings.purgeAfterDays ?? 7;
+  await Promise.allSettled(games.map((game) => compactSnapshots(game.appid, fullResolutionDays)));
+}
 
 // ── Message handling ──────────────────────────────────────────────────────────
 
@@ -121,11 +139,32 @@ async function fetchAll(): Promise<void> {
     }
   }
 
-  const nextCache = mergeCycleCache(prevCache, cacheResults);
+  const uuidLookupList: string[] = [];
+  const appIdToItadUuid = new Map<string, string>();
+  for (const game of games) {
+    const uuid = cacheResults.find(r => r.game.appid === game.appid)?.cacheData?.itadUuid
+      ?? prevCache[game.appid]?.itadUuid;
+    if (uuid) {
+      uuidLookupList.push(uuid);
+      appIdToItadUuid.set(game.appid, uuid);
+    }
+  }
+
+  const itadLowMap = uuidLookupList.length > 0
+    ? await fetchHistoricalLow(uuidLookupList).catch(() => new Map<string, { amountInt: number; cut: number; timestamp: string }>())
+    : new Map<string, { amountInt: number; cut: number; timestamp: string }>();
+
+  const enrichedResults = cacheResults.map(r => {
+    const uuid = appIdToItadUuid.get(r.game.appid);
+    if (!r.cacheData || !uuid) return r;
+    const low = itadLowMap.get(uuid);
+    if (!low) return r;
+    return { ...r, cacheData: { ...r.cacheData, itadHistoricalLow: low } };
+  });
+
+  const nextCache = mergeCycleCache(prevCache, enrichedResults);
   await setCache(nextCache);
 
-  // Persist a global timestamp so the popup can show "Updated X min ago"
-  // even when it reads from cache rather than triggering a live fetch.
   await setLastFetchTime(fetchedAt);
 
   updateBadge(rising, alerting, settings.badgeFavoriteAppid, nextCache, gameSignals);
@@ -181,40 +220,55 @@ async function fetchGame(
       : { discountPct: 0 }), // signal "not on sale" so buildCachedData clears prev price
   });
 
+  let itadUuid: string | undefined;
+  const existingUuid = await idbGetItadMapping(game.appid).catch(() => null);
+  if (existingUuid) {
+    itadUuid = existingUuid;
+  } else {
+    const lookedUp = await lookupItadGame(game.appid).catch(() => null);
+    if (lookedUp) {
+      itadUuid = lookedUp;
+      await idbSaveItadMapping(game.appid, lookedUp).catch(() => undefined);
+    }
+  }
+
+  const cacheDataWithItad = itadUuid
+    ? { ...cacheData, itadUuid }
+    : cacheData;
+
   const perGame = await getGameSettings(game.appid);
 
   if (settings.notificationsEnabled) {
-    await evaluatePriceNotification(game, cacheData, prevCache, settings, perGame);
+    await evaluatePriceNotification(game, cacheDataWithItad, prevCache, settings, perGame);
   }
 
   if (!settings.trendEnabled) {
     if (settings.notificationsEnabled) {
       await evaluateAbsoluteNotification(game, resolvedCurrent, perGame);
     }
-    return { game, signal: "stable", cacheData };
+    return { game, signal: "stable", cacheData: cacheDataWithItad };
   }
 
-  await purgeSnapshotsForGame(game.appid, settings.purgeAfterDays);
-
   const snap: Snapshot = { ts: Date.now(), current: resolvedCurrent };
-  const updatedSnaps = await addSnapshot(game.appid, snap);
+  await idbSaveSnapshot(game.appid, snap);
+  const updatedSnaps = await idbGetSnapshots(game.appid);
 
   if (!settings.notificationsEnabled) {
-    return { game, signal: deriveSignal(updatedSnaps), cacheData };
+    return { game, signal: deriveSignal(updatedSnaps), cacheData: cacheDataWithItad };
   }
 
   const alerted = await evaluateNotifications(game, resolvedCurrent, updatedSnaps, settings, perGame);
 
   if (alerted === "crash" || alerted === "trend_down") {
-    return { game, signal: "alerting", cacheData };
+    return { game, signal: "alerting", cacheData: cacheDataWithItad };
   }
   if (alerted === "spike_down") {
-    return { game, signal: "alerting", cacheData };
+    return { game, signal: "alerting", cacheData: cacheDataWithItad };
   }
   if (alerted === "trend_up" || alerted === "spike_up") {
-    return { game, signal: "rising", cacheData };
+    return { game, signal: "rising", cacheData: cacheDataWithItad };
   }
-  return { game, signal: deriveSignal(updatedSnaps), cacheData };
+  return { game, signal: deriveSignal(updatedSnaps), cacheData: cacheDataWithItad };
 }
 
 function deriveSignal(snaps: readonly Snapshot[]): "rising" | "alerting" | "stable" {

@@ -1,0 +1,31 @@
+T8: Batch fetchHistoricalLow in fetchAll()
+
+In src/background/index.ts, fetchAll() now:
+1. After collecting cacheResults from Promise.allSettled, collects all ITAD UUIDs
+   from cacheResults[*].cacheData.itadUuid and prevCache[*].itadUuid
+2. If any UUIDs exist, calls fetchHistoricalLow(uuidLookupList) — single POST batch
+3. Wrapped with .catch(() => new Map()) — ITAD failure yields empty map, cycle continues
+4. Builds enrichedResults: immutable spread of cacheData + itadHistoricalLow per game
+5. mergeCycleCache called with enrichedResults (not cacheResults)
+
+Code path:
+  const uuidLookupList: string[] = [];
+  const appIdToItadUuid = new Map<string, string>();
+  for (const game of games) { ... collect UUIDs ... }
+
+  const itadLowMap = uuidLookupList.length > 0
+    ? await fetchHistoricalLow(uuidLookupList).catch(() => new Map<...>())
+    : new Map<...>();
+
+  const enrichedResults = cacheResults.map(r => {
+    const uuid = appIdToItadUuid.get(r.game.appid);
+    if (!r.cacheData || !uuid) return r;
+    const low = itadLowMap.get(uuid);
+    if (!low) return r;
+    return { ...r, cacheData: { ...r.cacheData, itadHistoricalLow: low } };
+  });
+
+  const nextCache = mergeCycleCache(prevCache, enrichedResults);
+
+Test verification: pnpm vitest run → 363 passed (0 failures)
+Build verification: pnpm build → exit 0

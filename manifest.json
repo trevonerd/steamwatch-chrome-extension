@@ -9,7 +9,8 @@
     "storage",
     "alarms",
     "notifications",
-    "clipboardWrite"
+    "clipboardWrite",
+    "unlimitedStorage"
   ],
   "host_permissions": [
     "https://api.steampowered.com/*",
@@ -17,7 +18,8 @@
     "https://steamspy.com/*",
     "https://steamcharts.com/*",
     "https://cdn.akamai.steamstatic.com/*",
-    "https://gql.twitch.tv/*"
+    "https://gql.twitch.tv/*",
+    "https://api.isthereanydeal.com/*"
   ],
   "background": {
     "service_worker": "src/background/index.ts",

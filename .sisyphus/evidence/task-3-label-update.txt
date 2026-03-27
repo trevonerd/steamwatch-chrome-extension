@@ -1,0 +1,22 @@
+=== TASK 3: Data Retention Label Update ===
+Timestamp: Fri Mar 27 2026
+
+VERIFICATION 1: "purged" search result
+(no matches — 0 results expected)
+
+VERIFICATION 2: "daily and weekly" search result
+181:             <div class="slider-desc">Full-resolution data window. Snapshots within this period are kept at original detail; older data is preserved as daily and weekly summaries. The popup's long-range stats (e.g. 10d average, 10d gain/loss) use this window.</div>
+
+BUILD STATUS: SUCCESS (pnpm build completed)
+
+CHANGE SUMMARY:
+Old: "Snapshots older than this are automatically purged. The long-range popup stats use this full retention window, so 10 days means 10d average and 10d gain/loss."
+New: "Full-resolution data window. Snapshots within this period are kept at original detail; older data is preserved as daily and weekly summaries. The popup's long-range stats (e.g. 10d average, 10d gain/loss) use this window."
+
+ATTRIBUTES PRESERVED:
+✓ id="purgeAfterDays" (unchanged)
+✓ min="3" max="30" value="7" (unchanged)
+✓ span id="purgeVal" (unchanged)
+✓ title "Data retention" (unchanged)
+✓ No other files modified
+

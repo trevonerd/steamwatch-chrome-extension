@@ -1,0 +1,60 @@
+=== TASK 9: All-Time Low & ITAD Data Implementation ===
+
+CARDVIEWMODEL EXTENSIONS:
+✓ recordLow: { value: number; timestamp: number } | null
+  Minimum player count within the active graph window
+  
+✓ allTimeLow: { value: number; timestamp: number } | null  
+  Minimum player count across ALL snapshots
+  
+✓ itadHistoricalLow?: { amountInt: number; cut: number; timestamp: string }
+  From CachedData, optional pass-through
+  
+✓ itadUuid?: string
+  From CachedData, optional pass-through
+  
+✓ priceSparklineSvg?: string
+  Placeholder (undefined) - populated in Task 12
+
+CACHEDDATA EXTENSIONS:
+✓ itadUuid?: string
+  
+✓ itadHistoricalLow?: { amountInt: number; cut: number; timestamp: string }
+
+IMPLEMENTATION DETAILS:
+
+buildCardViewModel() changes:
+1. Import computeWindowMin from trend.js
+2. Import filterSnapshotsByWindow, GRAPH_WINDOW_MS from sparkline.js
+3. Calculate activeWindowKey = defaultGraphWindow ?? "all"
+4. Filter snapshots by active window: filterSnapshotsByWindow(snaps, activeWindowMs)
+5. Compute recordLow = computeWindowMin(filteredSnapsForWindow)
+6. Compute allTimeLow = computeWindowMin(snaps) [no filter]
+7. Pass through optional ITAD fields from cache with spread operator
+
+KEY BEHAVIOR:
+- recordLow uses the first available (non-"all") window when defaultGraphWindow is set
+- Falls back to "all" window if no narrower window has sufficient history
+- allTimeLow always computed from full snapshot array
+- ITAD fields only present if data exists in cache
+- priceSparklineSvg intentionally undefined (not computed in this task)
+
+VALIDATION:
+✓ computeWindowMin returns null for empty arrays
+✓ filterSnapshotsByWindow(snaps, 0) = all snapshots
+✓ filterSnapshotsByWindow(snaps, windowMs) = recent only
+✓ timestamps preserved in result objects
+
+TEST COVERAGE:
+- Window filtering logic
+- Null handling (empty arrays, missing windows)
+- ITAD pass-through logic
+- Window selection priority
+- Timestamp accuracy
+
+METRICS:
+✓ 11 new tests, all passing
+✓ 358 total tests passing (347 + 11)
+✓ 0 test failures
+✓ 0 TS errors
+✓ Build artifact sizes optimized

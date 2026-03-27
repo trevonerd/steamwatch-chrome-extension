@@ -1,0 +1,47 @@
+=== TASK 9: Record Low Implementation ===
+Test: tests/card.test.ts > buildCardViewModel — record lows and ITAD data
+
+NEW TESTS ADDED (11 total):
+✓ computes recordLow for active window from filtered snapshots
+✓ computes allTimeLow from all snapshots regardless of active window  
+✓ recordLow reflects the available window (all if that's the only option)
+✓ allTimeLow is null when no snapshots at all
+✓ recordLow and allTimeLow can differ when data spans multiple windows
+✓ passes through itadHistoricalLow from CachedData
+✓ passes through itadUuid from CachedData
+✓ itadHistoricalLow is undefined when not in CachedData
+✓ itadUuid is undefined when not in CachedData
+✓ priceSparklineSvg is undefined (placeholder)
+✓ recordLow includes correct timestamp
+✓ allTimeLow includes correct timestamp
+
+IMPLEMENTATION:
+- recordLow: minimum player count within the active graph window (defaults to available windows)
+  Returns: { value: number; timestamp: number } | null
+  
+- allTimeLow: minimum player count across ALL snapshots
+  Returns: { value: number; timestamp: number } | null
+  
+- computeWindowMin() from trend.ts returns min with timestamp
+- filterSnapshotsByWindow() from sparkline.ts filters by window (0 = all)
+- GRAPH_WINDOW_MS provides window millisecond mappings
+
+TEST RESULT: 
+✓ tests/card.test.ts (44 tests passed)
+
+FULL TEST SUITE:
+✓ Test Files: 16 passed (16)  
+✓ Tests: 358 passed (358)
+  - 347 existing tests still passing
+  - 11 new tests for record low + ITAD data
+
+BUILD RESULT:
+✓ pnpm build completed successfully
+  - dist/src/popup/index.js: 19.19 kB
+  - dist/src/options/index.js: 73.14 kB  
+  - dist/src/background/index.js: 66.97 kB
+  - manifest.json: 1.06 kB
+
+TYPESCRIPT:
+✓ No errors
+✓ No warnings
