@@ -23,6 +23,7 @@ import {
   mapToPoints,
   buildAvailableGraphWindows,
   sparklineColor,
+  findNearestPointIndex,
 } from "../utils/sparkline.js";
 import { fmtNumber, compute24hAvg, computeRetentionAvg, computeLocalPeak } from "../utils/trend.js";
 
@@ -517,12 +518,13 @@ async function init(): Promise<void> {
 // ══════════════════════════════════════════════════════════════════════════════
 
 async function initHistory(): Promise<void> {
-  const selectEl  = document.getElementById("historyGameSelect")  as HTMLSelectElement | null;
-  const tabsEl    = document.getElementById("historyWindowTabs")  as HTMLDivElement    | null;
-  const chartEl   = document.getElementById("historyChart")       as SVGSVGElement     | null;
-  const emptyEl   = document.getElementById("historyEmpty")       as HTMLParagraphElement | null;
-  const noGameEl  = document.getElementById("historyNoGame")      as HTMLParagraphElement | null;
-  const statsEl   = document.getElementById("historyStats")       as HTMLDivElement    | null;
+  const selectEl    = document.getElementById("historyGameSelect")  as HTMLSelectElement | null;
+  const tabsEl      = document.getElementById("historyWindowTabs")  as HTMLDivElement    | null;
+  const chartEl     = document.getElementById("historyChart")       as SVGSVGElement     | null;
+  const emptyEl     = document.getElementById("historyEmpty")       as HTMLParagraphElement | null;
+  const noGameEl    = document.getElementById("historyNoGame")      as HTMLParagraphElement | null;
+  const statsEl     = document.getElementById("historyStats")       as HTMLDivElement    | null;
+  const chartWrapEl = chartEl?.closest<HTMLDivElement>(".history-chart-wrap") ?? null;
   const hCurrent  = document.getElementById("hStatCurrent")  as HTMLDivElement | null;
   const h24hAvg   = document.getElementById("hStat24hAvg")   as HTMLDivElement | null;
   const hPeriodAvg= document.getElementById("hStatPeriodAvg")as HTMLDivElement | null;
@@ -650,6 +652,82 @@ async function initHistory(): Promise<void> {
       <circle cx="${lastPt.x.toFixed(1)}" cy="${lastPt.y.toFixed(1)}" r="3"
               fill="${esc(color)}" stroke="var(--bg-surface)" stroke-width="1.5"/>
     `;
+
+    // ── History chart hover tooltip ──
+    if (chartWrapEl) {
+      const VIEW_W = 600;
+      const VIEW_H = 160;
+
+      chartWrapEl
+        .querySelectorAll(".sparkline-tooltip, .sparkline-hover-line, .sparkline-hover-dot")
+        .forEach((el) => el.remove());
+
+      const tooltip = document.createElement("div");
+      tooltip.className = "sparkline-tooltip";
+      tooltip.hidden = true;
+
+      const hoverLine = document.createElement("div");
+      hoverLine.className = "sparkline-hover-line";
+      hoverLine.hidden = true;
+
+      const hoverDot = document.createElement("div");
+      hoverDot.className = "sparkline-hover-dot";
+      hoverDot.hidden = true;
+
+      chartWrapEl.appendChild(tooltip);
+      chartWrapEl.appendChild(hoverLine);
+      chartWrapEl.appendChild(hoverDot);
+
+      function onHistoryMouseMove(e: MouseEvent): void {
+        const rect = chartWrapEl!.getBoundingClientRect();
+        const domX = e.clientX - rect.left;
+        const domW = rect.width;
+        if (domW <= 0) return;
+
+        const svgX = (domX / domW) * VIEW_W;
+        const idx = findNearestPointIndex(svgX, pts);
+        const snap = downsampled[idx];
+        if (!snap) return;
+
+        const pt = pts[idx]!;
+        const pctX = (pt.x / VIEW_W) * 100;
+        const pctY = (pt.y / VIEW_H) * 100;
+
+        tooltip.textContent = `${fmtNumber(snap.current)} — ${fmtTime(snap.ts)}`;
+        tooltip.hidden = false;
+        hoverLine.hidden = false;
+        hoverDot.hidden = false;
+
+        hoverLine.style.left = `${pctX}%`;
+        hoverDot.style.left  = `${pctX}%`;
+        hoverDot.style.top   = `${pctY}%`;
+
+        const tooltipW = tooltip.offsetWidth;
+        const containerW = chartWrapEl!.offsetWidth;
+        if (containerW > 0 && tooltipW > 0) {
+          const halfTooltipPct = (tooltipW / 2 / containerW) * 100;
+          const clampedLeft = Math.max(halfTooltipPct, Math.min(pctX, 100 - halfTooltipPct));
+          tooltip.style.left = `${clampedLeft}%`;
+        } else {
+          tooltip.style.left = `${pctX}%`;
+        }
+      }
+
+      function onHistoryMouseLeave(): void {
+        tooltip.hidden = true;
+        hoverLine.hidden = true;
+        hoverDot.hidden = true;
+      }
+
+      const prevCleanup = (chartWrapEl as HTMLDivElement & { _hoverCleanup?: () => void })._hoverCleanup;
+      if (prevCleanup) prevCleanup();
+      chartWrapEl.addEventListener("mousemove", onHistoryMouseMove);
+      chartWrapEl.addEventListener("mouseleave", onHistoryMouseLeave);
+      (chartWrapEl as HTMLDivElement & { _hoverCleanup?: () => void })._hoverCleanup = () => {
+        chartWrapEl.removeEventListener("mousemove", onHistoryMouseMove);
+        chartWrapEl.removeEventListener("mouseleave", onHistoryMouseLeave);
+      };
+    }
 
     // ── Stats row ──
     const game = games.find((g) => g.appid === appid);
