@@ -380,38 +380,119 @@ body {
   to   { opacity: 1; transform: translateY(0);    }
 }
 
-.panel-window-selector {
+.graph-pill-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   padding: 8px 12px 0;
 }
 
-.panel-window-btn {
+.graph-pill {
   background: none;
   border: 1px solid var(--border);
   border-radius: var(--r-pill);
-  padding: 4px 9px;
+  padding: 3px 8px;
   font-family: var(--ff-mono);
   font-size: 11px;
   color: var(--text-3);
   cursor: pointer;
+  line-height: 1.4;
   transition: border-color .15s, color .15s, background .15s;
 }
 
-.panel-window-btn:hover {
+.graph-pill:hover:not(.graph-pill--disabled) {
   border-color: var(--accent);
   color: var(--accent);
 }
 
-.panel-window-btn.active {
+.graph-pill--active {
   border-color: var(--accent);
   color: var(--accent);
   background: var(--accent-dim);
 }
 
+.graph-pill--disabled {
+  opacity: .35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 .panel-sparkline { padding: 8px 12px 0; line-height: 0; }
 .panel-sparkline svg { display: block; width: 100%; border-radius: var(--r-sm); }
+
+.panel-sparkline {
+  position: relative;
+  overflow: hidden;
+}
+
+/* ── Price history sparkline ─────────────────────────────────── */
+.panel-price-section {
+  padding: 6px 12px 4px;
+  border-top: 1px solid var(--border);
+}
+
+.panel-price-label {
+  font-size: 10px;
+  font-family: var(--ff-mono);
+  font-weight: 500;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 4px;
+}
+
+.panel-price-loading {
+  font-size: 11px;
+  font-family: var(--ff-mono);
+  color: var(--text-3);
+  padding: 4px 0;
+}
+
+.panel-price-sparkline { line-height: 0; }
+.panel-price-sparkline svg { display: block; width: 100%; border-radius: var(--r-sm); }
+
+.sparkline-tooltip {
+  position:       absolute;
+  top:            4px;
+  transform:      translateX(-50%);
+  background:     var(--bg-card);
+  border:         1px solid var(--border-hover);
+  border-radius:  var(--r-sm);
+  color:          var(--accent);
+  font-family:    var(--ff-mono);
+  font-size:      10px;
+  font-weight:    600;
+  letter-spacing: .5px;
+  padding:        2px 6px;
+  pointer-events: none;
+  white-space:    nowrap;
+  z-index:        10;
+  box-shadow:     0 2px 8px rgba(0 0 0 / .45);
+}
+
+.sparkline-hover-line {
+  position:   absolute;
+  top:        8px;
+  bottom:     0;
+  width:      1px;
+  transform:  translateX(-50%);
+  background: rgba(255 255 255 / .18);
+  pointer-events: none;
+  z-index:    9;
+}
+
+.sparkline-hover-dot {
+  position:   absolute;
+  width:      8px;
+  height:     8px;
+  border-radius: 50%;
+  transform:  translate(-50%, -50%);
+  background: var(--accent);
+  box-shadow: 0 0 6px rgba(0 200 255 / .7);
+  pointer-events: none;
+  z-index:    10;
+}
 
 /* ── Panel stats grid: 4 cols for primary, wraps for extra ──── */
 .panel-stats {
@@ -447,6 +528,19 @@ body {
   transition: border-color .15s, color .15s, background .15s;
 }
 .panel-link:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+
+/* ── Record low row ─────────────────────────────────────────── */
+.panel-record-low {
+  padding: 4px 12px;
+  font-size: 11px;
+  font-family: var(--ff-mono);
+  color: var(--text-3);
+  border-top: 1px solid var(--border);
+}
+.panel-record-low-val {
+  color: var(--down);
+  font-weight: 600;
+}
 
 /* ── Sale badge ──────────────────────────────────────────────── */
 .panel-sale-badge {

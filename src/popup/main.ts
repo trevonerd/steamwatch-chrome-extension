@@ -5,17 +5,18 @@
 import {
   getGames,
   getCache,
-  getSnapshotsForGame,
   getSettings,
   saveSettings,
   getLastFetchTime,
   removeGame,
 } from "../utils/storage.js";
-import { fmtNumber, fmtPct, fmtTimeAgo } from "../utils/trend.js";
+import { idbGetSnapshots, idbGetSnapshotsInRange, idbGetPriceHistory, idbSavePriceHistory } from "../utils/idb-storage.js";
+import { fmtNumber, fmtPct, fmtTimeAgo, computeWindowMin } from "../utils/trend.js";
 import {
-  buildSparklineSVG,
+  buildSparklineSVGWithPoints,
+  buildPriceSparklineSVG,
   downsampleSnapshotsForGraph,
-  filterSnapshotsByWindow,
+  findNearestPointIndex,
   sparklineColor,
 } from "../utils/sparkline.js";
 import { buildAllViewModels }                from "../utils/card.js";
@@ -23,10 +24,13 @@ import { buildShareText, renderShareCanvas } from "../utils/share.js";
 import { esc, mustGet, show, hide }          from "../utils/html.js";
 import { bindGlobalShareBarClose }           from "./shareBar.js";
 import { thumbColor, wireThumbFallback }     from "./thumb.js";
+import { fetchPriceHistory }                 from "../utils/itad-api.js";
 import type {
   CardViewModel,
+  GraphWindowKey,
   MessageRequest,
   MessageResponse,
+  Snapshot,
 } from "../types/index.js";
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
@@ -61,7 +65,7 @@ async function init(): Promise<void> {
       return;
     }
 
-    const vms = await buildAllViewModels(games, cache, getSnapshotsForGame, settings.purgeAfterDays);
+    const vms = await buildAllViewModels(games, cache, idbGetSnapshots, settings.purgeAfterDays);
 
     if (!hasAttemptedRichDataHydration && vms.some(needsRichDataHydration)) {
       hasAttemptedRichDataHydration = true;
@@ -289,23 +293,31 @@ function populatePanel(panel: HTMLDivElement, vm: CardViewModel): void {
   const gain24hStr = gain24h != null ? fmtSignedPlayers(gain24h) : "—";
   const retentionAvgStr = retentionAvg != null ? fmtNumber(retentionAvg) : "—";
   const retentionGainStr = retentionGain != null ? fmtSignedPlayers(retentionGain) : "—";
-  const graphSelector = availableGraphWindows.length > 0
-    ? `<div class="panel-window-selector" role="tablist" aria-label="Graph window selector">
-        ${availableGraphWindows.map((window) => `
-          <button
-            type="button"
-            class="panel-window-btn${window.key === defaultGraphWindow ? " active" : ""}"
-            data-graph-window="${esc(window.key)}"
-            role="tab"
-            aria-selected="${String(window.key === defaultGraphWindow)}"
-          >${esc(window.label)}</button>
-        `).join("")}
+  const ALL_PILL_KEYS: GraphWindowKey[] = ["24h", "3d", "7d", "15d", "1m", "all"];
+  const availableKeys = new Set(availableGraphWindows.map((w) => w.key));
+  const hasAnyData = availableKeys.size > 0;
+  const graphSelector = hasAnyData
+    ? `<div class="graph-pill-bar" role="group" aria-label="Graph time range">
+        ${ALL_PILL_KEYS.map((key) => {
+          const isActive = key === defaultGraphWindow;
+          const isDisabled = key !== "all" && !availableKeys.has(key);
+          const label = key === "all" ? "All" : key;
+          let cls = "graph-pill";
+          if (isActive) cls += " graph-pill--active";
+          if (isDisabled) cls += " graph-pill--disabled";
+          return `<button type="button" class="${esc(cls)}" data-window="${esc(key)}"${isDisabled ? ' disabled aria-disabled="true"' : ""}>${esc(label)}</button>`;
+        }).join("")}
       </div>`
     : "";
 
   panel.innerHTML = `
     ${graphSelector}
     <div class="panel-sparkline" aria-hidden="true"></div>
+    <div class="panel-price-section"${vm.itadUuid ? "" : " hidden"}>
+      <p class="panel-price-label">Price History</p>
+      <div class="panel-price-loading">Loading price data...</div>
+      <div class="panel-price-sparkline" aria-hidden="true"></div>
+    </div>
     <dl class="panel-stats">
       <div class="panel-stat">
         <dt class="panel-stat-label">Current</dt>
@@ -340,6 +352,12 @@ function populatePanel(panel: HTMLDivElement, vm: CardViewModel): void {
         <dd class="panel-stat-value">${esc(retentionGainStr)}</dd>
       </div>
     </dl>
+    ${vm.allTimeLow != null ? (() => {
+      const windowLabel = defaultGraphWindow === "all" ? "All" : (defaultGraphWindow ?? "24h");
+      const windowLowStr = vm.recordLow != null ? fmtNumber(vm.recordLow.value) : "—";
+      const allTimeLowStr = fmtNumber(vm.allTimeLow.value);
+      return `<div class="panel-record-low">${esc(windowLabel)} Low: <span class="panel-record-low-val">${esc(windowLowStr)}</span> • All-time Low: <span class="panel-record-low-val">${esc(allTimeLowStr)}</span></div>`;
+    })() : `<div class="panel-record-low" hidden></div>`}
     ${discountPct != null ? `
     <div class="panel-sale-badge" aria-label="${esc(`On sale: ${discountPct}% off`)}">
       <span class="sale-pct">ON SALE −${esc(String(discountPct))}%</span>
@@ -354,18 +372,41 @@ function populatePanel(panel: HTMLDivElement, vm: CardViewModel): void {
     </div>
   `;
 
-  renderPanelSparkline(panel, vm, defaultGraphWindow);
+  void renderPanelSparklineFromIdb(panel, vm.game.appid, defaultGraphWindow);
+  void renderPanelPriceSparkline(panel, vm);
 
-  panel.querySelectorAll<HTMLButtonElement>("[data-graph-window]").forEach((button) => {
+  panel.querySelectorAll<HTMLButtonElement>(".graph-pill:not(.graph-pill--disabled)").forEach((button) => {
     button.addEventListener("click", () => {
-      const key = button.dataset["graphWindow"];
+      const key = button.dataset["window"];
       if (!isGraphWindowKey(key)) return;
-      panel.querySelectorAll<HTMLButtonElement>("[data-graph-window]").forEach((btn) => {
-        const active = btn === button;
-        btn.classList.toggle("active", active);
-        btn.setAttribute("aria-selected", String(active));
+      panel.querySelectorAll<HTMLButtonElement>(".graph-pill").forEach((btn) => {
+        btn.classList.toggle("graph-pill--active", btn === button);
       });
-      renderPanelSparkline(panel, vm, key);
+      void renderPanelSparklineFromIdb(panel, vm.game.appid, key);
+      const updateRecordLow = async (windowKey: GraphWindowKey): Promise<void> => {
+        const recordLowEl = panel.querySelector<HTMLElement>(".panel-record-low");
+        if (!recordLowEl || !vm.allTimeLow) return;
+        const WINDOW_MS: Record<string, number> = {
+          "24h": 86_400_000,
+          "3d": 3 * 86_400_000,
+          "7d": 7 * 86_400_000,
+          "15d": 15 * 86_400_000,
+          "1m": 30 * 86_400_000,
+        };
+        let snaps: readonly Snapshot[];
+        if (windowKey === "all") {
+          snaps = await idbGetSnapshots(vm.game.appid);
+        } else {
+          const ms = WINDOW_MS[windowKey] ?? 86_400_000;
+          snaps = await idbGetSnapshotsInRange(vm.game.appid, Date.now() - ms, Date.now());
+        }
+        const windowMin = computeWindowMin([...snaps]);
+        const windowLabel = windowKey === "all" ? "All" : windowKey;
+        const windowLowStr = windowMin ? fmtNumber(windowMin.value) : "—";
+        const allTimeLowStr = fmtNumber(vm.allTimeLow.value);
+        recordLowEl.innerHTML = `${esc(windowLabel)} Low: <span class="panel-record-low-val">${esc(windowLowStr)}</span> • All-time Low: <span class="panel-record-low-val">${esc(allTimeLowStr)}</span>`;
+      };
+      void updateRecordLow(key);
     });
   });
 }
@@ -386,33 +427,154 @@ function fmtSignedPlayers(value: number): string {
   return "0";
 }
 
-function renderPanelSparkline(
+async function renderPanelSparklineFromIdb(
   panel: HTMLDivElement,
-  vm: CardViewModel,
-  selectedWindow: CardViewModel["defaultGraphWindow"],
-): void {
+  appId: string,
+  selectedWindow: GraphWindowKey | null,
+): Promise<void> {
   const sparklineEl = panel.querySelector<HTMLDivElement>(".panel-sparkline");
   if (!sparklineEl) return;
 
-  const selected = selectedWindow == null
-    ? null
-    : vm.availableGraphWindows.find((window) => window.key === selectedWindow) ?? null;
-  const source = selected ? filterSnapshotsByWindow(vm.snaps, selected.windowMs) : vm.snaps;
+  let snaps: readonly Snapshot[];
+  if (selectedWindow === null || selectedWindow === "all") {
+    snaps = await idbGetSnapshots(appId);
+  } else {
+    const WINDOW_MS: Record<string, number> = {
+      "24h": 86_400_000,
+      "3d": 3 * 86_400_000,
+      "7d": 7 * 86_400_000,
+      "15d": 15 * 86_400_000,
+      "1m": 30 * 86_400_000,
+    };
+    const windowMs = WINDOW_MS[selectedWindow] ?? 86_400_000;
+    const endTs = Date.now();
+    const startTs = endTs - windowMs;
+    snaps = await idbGetSnapshotsInRange(appId, startTs, endTs);
+  }
 
-  const graphSnaps = downsampleSnapshotsForGraph(source, 96);
-  const svg = buildSparklineSVG(graphSnaps, {
+  const graphSnaps = downsampleSnapshotsForGraph([...snaps], 96);
+  const result = buildSparklineSVGWithPoints(graphSnaps, {
     strokeColor: sparklineColor(graphSnaps),
     width: 372,
     height: 56,
     maxPoints: 96,
   });
 
-  sparklineEl.innerHTML = svg ?? "";
-  sparklineEl.hidden = !svg;
+  sparklineEl.innerHTML = result?.svg ?? "";
+  sparklineEl.hidden = !result;
+
+  if (!result) return;
+
+  attachSparklineHover(sparklineEl, result.points, graphSnaps);
 }
 
-function isGraphWindowKey(value: string | undefined): value is "24h" | "3d" | "retention" {
-  return value === "24h" || value === "3d" || value === "retention";
+async function renderPanelPriceSparkline(panel: HTMLDivElement, vm: CardViewModel): Promise<void> {
+  if (!vm.itadUuid) return;
+
+  const loadingEl = panel.querySelector<HTMLDivElement>(".panel-price-loading");
+  const sparklineEl = panel.querySelector<HTMLDivElement>(".panel-price-sparkline");
+  if (!loadingEl || !sparklineEl) return;
+
+  loadingEl.hidden = false;
+  sparklineEl.innerHTML = "";
+
+  const cached = await idbGetPriceHistory(vm.game.appid);
+  const isFresh = cached.length > 0 && Date.now() - cached[0]!.timestamp < 86_400_000;
+
+  let records = isFresh ? cached : await fetchPriceHistory(vm.itadUuid);
+  if (!isFresh && records.length > 0) {
+    await idbSavePriceHistory(vm.game.appid, records);
+  }
+
+  if (records.length === 0) {
+    records = cached;
+  }
+
+  if (records.length === 0) {
+    loadingEl.textContent = "No price data available";
+    return;
+  }
+
+  const svg = buildPriceSparklineSVG(records);
+  if (svg) {
+    sparklineEl.innerHTML = svg;
+    loadingEl.hidden = true;
+  } else {
+    loadingEl.textContent = "No price data available";
+  }
+}
+
+function attachSparklineHover(
+  container: HTMLDivElement,
+  points: ReadonlyArray<{ x: number; y: number }>,
+  snaps: readonly Snapshot[],
+): void {
+  const VIEW_W = 372;
+  const VIEW_H = 56;
+
+  const tooltip = document.createElement("div");
+  tooltip.className = "sparkline-tooltip";
+  tooltip.hidden = true;
+
+  const hoverLine = document.createElement("div");
+  hoverLine.className = "sparkline-hover-line";
+  hoverLine.hidden = true;
+
+  const hoverDot = document.createElement("div");
+  hoverDot.className = "sparkline-hover-dot";
+  hoverDot.hidden = true;
+
+  container.appendChild(tooltip);
+  container.appendChild(hoverLine);
+  container.appendChild(hoverDot);
+
+  function onMouseMove(e: MouseEvent): void {
+    const rect = container.getBoundingClientRect();
+    const domX = e.clientX - rect.left;
+    const domW = rect.width;
+    if (domW <= 0) return;
+
+    const svgX = (domX / domW) * VIEW_W;
+    const idx = findNearestPointIndex(svgX, points);
+    const snap = snaps[idx];
+    if (!snap) return;
+
+    const pt = points[idx]!;
+    const pctX = (pt.x / VIEW_W) * 100;
+    const pctY = (pt.y / VIEW_H) * 100;
+
+    tooltip.textContent = fmtNumber(snap.current);
+    tooltip.hidden = false;
+    hoverLine.hidden = false;
+    hoverDot.hidden = false;
+
+    hoverLine.style.left = `${pctX}%`;
+    hoverDot.style.left  = `${pctX}%`;
+    hoverDot.style.top   = `${pctY}%`;
+
+    const tooltipW = tooltip.offsetWidth;
+    const containerW = container.offsetWidth;
+    if (containerW > 0 && tooltipW > 0) {
+      const halfTooltipPct = (tooltipW / 2 / containerW) * 100;
+      const clampedLeft = Math.max(halfTooltipPct, Math.min(pctX, 100 - halfTooltipPct));
+      tooltip.style.left = `${clampedLeft}%`;
+    } else {
+      tooltip.style.left = `${pctX}%`;
+    }
+  }
+
+  function onMouseLeave(): void {
+    tooltip.hidden = true;
+    hoverLine.hidden = true;
+    hoverDot.hidden = true;
+  }
+
+  container.addEventListener("mousemove", onMouseMove);
+  container.addEventListener("mouseleave", onMouseLeave);
+}
+
+function isGraphWindowKey(value: string | undefined): value is GraphWindowKey {
+  return value === "24h" || value === "3d" || value === "7d" || value === "15d" || value === "1m" || value === "all";
 }
 
 // ── Share handlers ────────────────────────────────────────────────────────────
@@ -487,7 +649,7 @@ async function handleToggleFavorite(appid: string, clickedBtn: HTMLButtonElement
     // Ask background to refresh badge immediately
     try {
       await chrome.runtime.sendMessage<MessageRequest, MessageResponse>({ type: "FETCH_NOW" });
-    } catch { /* non-critical */ }
+    } catch (_e) { /* badge refresh is fire-and-forget; swallowing connection errors intentionally */ }
   } catch (err) {
     console.error("[SteamWatch] Toggle favorite failed:", err);
   }
