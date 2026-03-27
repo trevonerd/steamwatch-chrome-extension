@@ -33,3 +33,27 @@
 - History chart dimensions: viewBox 600×160, padX=52, padY=16
 - Popup sparkline dimensions: viewBox 372×56, no explicit padding
 - `wireThumbFallback(imgEl, wrapEl, appid)` — already imported in options/main.ts from `../popup/thumb.js`
+
+## T5 — History chart hover tooltip (2026-03-27)
+
+### Pattern Used
+- Adapted `attachSparklineHover()` from `popup/main.ts:507-567` directly into `renderHistory()` in `options/main.ts`
+- Key differences from popup version:
+  - `VIEW_W=600`, `VIEW_H=160` (history chart viewBox)
+  - Tooltip text includes timestamp: `fmtNumber(snap.current) + " — " + fmtTime(snap.ts)`
+  - Container is `.history-chart-wrap` (queried via `chartEl.closest(".history-chart-wrap")`)
+  - `downsampled` array used (not `filtered`) — `pts` maps to `downsampled` 1:1 after `mapToPoints`
+
+### Listener Cleanup Pattern
+- Stored cleanup fn on element via typed property `_hoverCleanup?: () => void`
+- Called before re-attaching to avoid accumulating listeners on game/window changes
+- DOM elements (tooltip, line, dot) removed via `querySelectorAll(...).forEach(el => el.remove())` before re-creating
+
+### CSS
+- `.sparkline-tooltip`, `.sparkline-hover-line`, `.sparkline-hover-dot` appended to `options.css` (replicating popup.css pattern)
+- `.history-chart-wrap { position: relative }` was already set — no change needed
+- Section header comment matches existing file convention
+
+### Verification
+- 390/390 tests pass, 0 failures
+- `pnpm build` exit code 0

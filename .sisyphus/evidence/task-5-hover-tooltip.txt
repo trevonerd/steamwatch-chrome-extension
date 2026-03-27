@@ -1,0 +1,52 @@
+TASK 5 — Interactive Hover Tooltip for History Chart
+=====================================================
+Date: 2026-03-27
+
+## findNearestPointIndex import confirmation
+src/options/main.ts:26:  findNearestPointIndex,
+src/options/main.ts:688:        const idx = findNearestPointIndex(svgX, pts);
+
+## pnpm vitest run output
+ RUN  v1.6.1 /Users/m.trevisani/repos/trevonerd/steamwatch
+
+ ✓ tests/quietHours.test.ts  (24 tests) 3ms
+ ✓ tests/exporter.test.ts  (17 tests) 4ms
+ ✓ tests/storage.test.ts  (36 tests) 6ms
+ ✓ tests/migrate.test.ts  (9 tests) 12ms
+ ✓ tests/api.test.ts  (34 tests) 8ms
+ ✓ tests/forecast.test.ts  (22 tests) 3ms
+ ✓ tests/compaction.test.ts  (8 tests) 25ms
+ ✓ tests/trend.test.ts  (57 tests) 18ms
+ ✓ tests/sparkline.test.ts  (45 tests) 6ms
+ ✓ tests/graph-windows.test.ts  (27 tests) 4ms
+ ✓ tests/share.test.ts  (18 tests) 4ms
+ ✓ tests/mapToPoints.test.ts  (18 tests) 7ms
+ ✓ tests/card.test.ts  (44 tests) 11ms
+ ✓ tests/idb-storage.test.ts  (7 tests) 15ms
+ ✓ tests/fetchCycle.test.ts  (9 tests) 4ms
+ ✓ tests/itad-api.test.ts  (8 tests) 8ms
+ ✓ tests/popup-dom.test.ts  (7 tests) 6ms
+
+ Test Files  17 passed (17)
+      Tests  390 passed (390)
+   Duration  963ms
+
+## pnpm build output
+> steamwatch@0.11.1 build
+> vite build
+
+Building src/popup/index.html, src/options/index.html (1/2)
+dist/src/popup/index.html     3.81 kB │ gzip:  1.44 kB
+dist/src/options/index.html  26.63 kB │ gzip:  6.24 kB
+dist/index.css               13.87 kB │ gzip:  3.47 kB
+dist/index2.css              16.93 kB │ gzip:  3.85 kB
+dist/src/options/index.js    19.88 kB │ gzip:  6.58 kB
+dist/src/popup/index.js      22.75 kB │ gzip:  8.01 kB
+dist/types.js                69.35 kB │ gzip: 17.79 kB
+✓ built in 433ms
+
+Building src/background/index.ts (2/2)
+dist/src/background/index.js  75.86 kB │ gzip: 19.95 kB
+✓ built in 112ms
+
+✓ All steps completed. Exit code: 0
