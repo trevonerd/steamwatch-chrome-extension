@@ -737,7 +737,7 @@ async function initHistory(): Promise<void> {
 
     // ── Stats row ──
     const game = games.find((g) => g.appid === appid);
-    const current = game ? (await getSettings(), allSnaps[allSnaps.length - 1]?.current ?? null) : null;
+    const current = game ? (allSnaps[allSnaps.length - 1]?.current ?? null) : null;
     const avg24h   = compute24hAvg(allSnaps);
     const periodAvg = computeRetentionAvg(filtered.length > 0 ? filtered : allSnaps, settings.purgeAfterDays);
     const peak     = computeLocalPeak(allSnaps);
