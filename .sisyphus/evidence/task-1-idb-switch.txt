@@ -1,0 +1,20 @@
+TASK 1: Switch options/main.ts snapshot reads to IndexedDB
+========================================================
+
+VERIFICATION: grep for "getSnapshotsForGame" in src/options/main.ts
+Command: grep -n "getSnapshotsForGame" /Users/m.trevisani/repos/trevonerd/steamwatch/src/options/main.ts
+Result: NO MATCHES (exit code 1)
+
+CHANGES APPLIED:
+1. Line 10: Removed "getSnapshotsForGame" from storage.js import
+2. Line 13: Added import of "idbGetSnapshots" from "../utils/idb-storage.js"
+3. Line 577: Changed "await getSnapshotsForGame(appid)" → "await idbGetSnapshots(appid)"
+4. Lines 694-695: Replaced dynamic import + getSnapshotsForGame with top-level idbGetSnapshots call
+
+VERIFICATION SUMMARY:
+✓ getSnapshotsForGame: 0 matches in options/main.ts
+✓ idbGetSnapshots import present at line 13
+✓ idbGetSnapshots call at line 577
+✓ idbGetSnapshots call at line 694
+✓ All 390 tests passing
+✓ Build succeeds

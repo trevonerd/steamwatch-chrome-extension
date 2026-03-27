@@ -7,10 +7,10 @@ import {
   saveSettings,
   getGameSettings,
   saveGameSettings,
-  getSnapshotsForGame,
   clearAllData,
   MAX_GAMES,
 } from "../utils/storage.js";
+import { idbGetSnapshots } from "../utils/idb-storage.js";
 import { searchGames } from "../utils/api.js";
 import { esc, mustGet, show, hide } from "../utils/html.js";
 import type { Game, GameSettings, MessageRequest, MessageResponse } from "../types/index.js";
@@ -574,7 +574,7 @@ async function initHistory(): Promise<void> {
     }
     if (noGameEl) noGameEl.hidden = true;
 
-    const allSnaps  = await getSnapshotsForGame(appid);
+    const allSnaps  = await idbGetSnapshots(appid);
     const filtered  = filterSnapshotsByWindow(allSnaps, activeWindow);
     const downsampled = downsampleSnapshotsForGraph(filtered, 120);
 
@@ -691,8 +691,7 @@ async function initExport(): Promise<void> {
       const snapshotsByAppid: Record<string, import("../types/index.js").Snapshot[]> = {};
       await Promise.all(
         games.map(async (g) => {
-          const { getSnapshotsForGame } = await import("../utils/storage.js");
-          snapshotsByAppid[g.appid] = await getSnapshotsForGame(g.appid);
+          snapshotsByAppid[g.appid] = await idbGetSnapshots(g.appid);
         })
       );
 
