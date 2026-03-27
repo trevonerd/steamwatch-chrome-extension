@@ -178,7 +178,7 @@
         <div class="slider-row">
           <div class="slider-info">
             <div class="slider-title">Data retention</div>
-            <div class="slider-desc">Snapshots older than this are automatically purged. The long-range popup stats use this full retention window, so 10 days means 10d average and 10d gain/loss.</div>
+             <div class="slider-desc">Full-resolution data window. Snapshots within this period are kept at original detail; older data is preserved as daily and weekly summaries. The popup's long-range stats (e.g. 10d average, 10d gain/loss) use this window.</div>
           </div>
           <div class="slider-control">
             <span class="slider-val" id="purgeVal" aria-live="polite">7 days</span>
@@ -529,6 +529,16 @@
           <span class="ds-badge">Steam CDN — game artwork</span>
           <span class="ds-badge">Twitch — live viewers</span>
         </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">IsThereAnyDeal Attribution</div>
+        <p style="font-size:13px;color:var(--text-2);line-height:1.7;margin-bottom:12px;">
+          SteamWatch uses price data from <a href="https://isthereanydeal.com" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;">IsThereAnyDeal</a>.
+        </p>
+        <p style="font-size:12px;color:var(--text-2);line-height:1.7;margin-bottom:10px;">
+          <strong style="color:var(--warn);">Disclaimer:</strong> SteamWatch is not affiliated with IsThereAnyDeal. Price data is provided as-is. IsThereAnyDeal reserves the right to deny API access at any point.
+        </p>
       </div>
 
       <div class="card">
