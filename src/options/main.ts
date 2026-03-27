@@ -10,7 +10,7 @@ import {
   clearAllData,
   MAX_GAMES,
 } from "../utils/storage.js";
-import { idbGetSnapshots } from "../utils/idb-storage.js";
+import { idbGetSnapshots, idbGetItadMapping, idbGetPriceHistory } from "../utils/idb-storage.js";
 import { searchGames } from "../utils/api.js";
 import { esc, mustGet, show, hide } from "../utils/html.js";
 import type { Game, GameSettings, MessageRequest, MessageResponse } from "../types/index.js";
@@ -25,7 +25,7 @@ import {
   sparklineColor,
   findNearestPointIndex,
 } from "../utils/sparkline.js";
-import { fmtNumber, compute24hAvg, computeRetentionAvg, computeLocalPeak } from "../utils/trend.js";
+import { fmtNumber, compute24hAvg, computeRetentionAvg, computeLocalPeak, computeWindowMin } from "../utils/trend.js";
 
 
 // ── Navigation ────────────────────────────────────────────────────────────────
@@ -529,6 +529,12 @@ async function initHistory(): Promise<void> {
   const h24hAvg   = document.getElementById("hStat24hAvg")   as HTMLDivElement | null;
   const hPeriodAvg= document.getElementById("hStatPeriodAvg")as HTMLDivElement | null;
   const hPeak     = document.getElementById("hStatPeak")     as HTMLDivElement | null;
+  const hRecordLow  = document.getElementById("hStatRecordLow")  as HTMLDivElement | null;
+  const hAllTimeLow = document.getElementById("hStatAllTimeLow") as HTMLDivElement | null;
+  const priceStatsEl    = document.getElementById("historyPriceStats")  as HTMLDivElement | null;
+  const hStatHistLow    = document.getElementById("hStatHistLow")       as HTMLDivElement | null;
+  const hStatCurrentPrice = document.getElementById("hStatCurrentPrice") as HTMLDivElement | null;
+  const hStatDiscount   = document.getElementById("hStatDiscount")      as HTMLDivElement | null;
   if (!selectEl || !tabsEl || !chartEl || !emptyEl || !noGameEl || !statsEl) return;
 
   const settings = await getSettings();
@@ -739,6 +745,28 @@ async function initHistory(): Promise<void> {
     if (h24hAvg)    h24hAvg.textContent    = fmtNumber(avg24h);
     if (hPeriodAvg) hPeriodAvg.textContent = fmtNumber(periodAvg);
     if (hPeak)      hPeak.textContent      = fmtNumber(peak);
+
+    const recLow = computeWindowMin(filtered);
+    const allLow = computeWindowMin(allSnaps);
+    if (hRecordLow)  hRecordLow.textContent  = recLow != null ? fmtNumber(recLow.value)  : "—";
+    if (hAllTimeLow) hAllTimeLow.textContent = allLow != null ? fmtNumber(allLow.value) : "—";
+
+    const itadUuid = await idbGetItadMapping(appid);
+    if (itadUuid && priceStatsEl) {
+      const priceHistory = await idbGetPriceHistory(appid);
+      if (priceHistory.length > 0) {
+        show(priceStatsEl);
+        const histLow = priceHistory.reduce((min, r) => r.priceAmountInt < min.priceAmountInt ? r : min);
+        const latest = priceHistory[priceHistory.length - 1]!;
+        if (hStatHistLow)      hStatHistLow.textContent      = `$${(histLow.priceAmountInt / 100).toFixed(2)}`;
+        if (hStatCurrentPrice) hStatCurrentPrice.textContent = `$${(latest.priceAmountInt / 100).toFixed(2)}`;
+        if (hStatDiscount)     hStatDiscount.textContent     = latest.cut > 0 ? `-${latest.cut}%` : "—";
+      } else {
+        hide(priceStatsEl);
+      }
+    } else if (priceStatsEl) {
+      hide(priceStatsEl);
+    }
   }
 
   selectEl.addEventListener("change", () => void renderHistory(selectEl.value));
