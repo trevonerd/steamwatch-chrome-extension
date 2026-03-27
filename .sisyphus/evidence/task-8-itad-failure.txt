@@ -1,0 +1,24 @@
+T8: ITAD failure handling — Steam cycle is NOT blocked
+
+All ITAD calls are protected with .catch() returning safe fallbacks:
+
+1. idbGetItadMapping().catch(() => null)
+   — IDB read failure → null → skips to lookup
+
+2. lookupItadGame().catch(() => null)
+   — HTTP or parse failure → null → no UUID persisted, cycle continues normally
+
+3. idbSaveItadMapping().catch(() => undefined)
+   — IDB write failure → silently ignored (UUID already available this cycle)
+
+4. fetchHistoricalLow(uuidLookupList).catch(() => new Map<...>())
+   — HTTP or parse failure → empty map → no itadHistoricalLow enrichment, but
+     buildCachedData carry-forward will preserve previously cached itadHistoricalLow
+     from prevCache (via the spread logic added to fetchCycle.ts)
+
+In all failure cases:
+- Steam player counts, peaks, Twitch viewers, price data are all unaffected
+- The cache is still written and badge still updates
+- Existing itadHistoricalLow from prevCache is preserved via buildCachedData carry-forward
+
+No try/catch blocks with empty bodies, no @ts-ignore, no as any.

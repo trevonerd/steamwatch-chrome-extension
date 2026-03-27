@@ -16,7 +16,7 @@ import { esc, mustGet, show, hide } from "../utils/html.js";
 import type { Game, GameSettings, MessageRequest, MessageResponse } from "../types/index.js";
 import { buildExportRows, rowsToJSON, rowsToCSV, downloadFile, exportFilename } from "../utils/exporter.js";
 import { buildDayMask, maskToDays, DAY_LABELS } from "../utils/quietHours.js";
-import { wireThumbFallback } from "../popup/thumb.js";
+import { wireThumbFallback, thumbColor } from "../popup/thumb.js";
 import {
   filterSnapshotsByWindow,
   downsampleSnapshotsForGraph,
@@ -91,18 +91,21 @@ function buildGameRow(game: Game, gs: GameSettings): HTMLLIElement {
   li.className = "game-row";
   li.dataset["appid"] = game.appid;
 
-  li.innerHTML = `
-    <div class="game-row-header">
-      <img class="game-row-thumb" src="${esc(game.image)}" alt="${esc(game.name)}" loading="lazy">
-      <span class="game-row-name" title="${esc(game.name)}">${esc(game.name)}</span>
-      <span class="game-row-appid">appid: ${esc(game.appid)}</span>
-      <button class="btn-expand" aria-expanded="false" aria-label="Toggle settings for ${esc(game.name)}">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
-          <polyline points="6 9 12 15 18 9"/>
-        </svg>
-      </button>
-      <button class="btn-del" data-appid="${esc(game.appid)}" aria-label="Remove ${esc(game.name)}">Remove</button>
-    </div>
+   li.innerHTML = `
+     <div class="game-row-header">
+       <span class="game-row-thumb-wrap">
+         <img class="game-row-thumb" src="${esc(game.image)}" alt="${esc(game.name)}" loading="lazy">
+         <span class="game-row-placeholder" style="--thumb-color:${esc(thumbColor(game.appid))}">${esc(game.name.charAt(0).toUpperCase())}</span>
+       </span>
+       <span class="game-row-name" title="${esc(game.name)}">${esc(game.name)}</span>
+       <span class="game-row-appid">appid: ${esc(game.appid)}</span>
+       <button class="btn-expand" aria-expanded="false" aria-label="Toggle settings for ${esc(game.name)}">
+         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+           <polyline points="6 9 12 15 18 9"/>
+         </svg>
+       </button>
+       <button class="btn-del" data-appid="${esc(game.appid)}" aria-label="Remove ${esc(game.name)}">Remove</button>
+     </div>
 
     <div class="game-row-settings" aria-label="Per-game settings">
       <div class="settings-grid">
@@ -145,7 +148,8 @@ function buildGameRow(game: Game, gs: GameSettings): HTMLLIElement {
 
   // ── Image: CSP-safe error handler (inline onerror blocked by MV3)
   const rowImg = li.querySelector<HTMLImageElement>(".game-row-thumb")!;
-  wireThumbFallback(rowImg, rowImg, game.appid);
+  const wrapEl = li.querySelector<HTMLElement>(".game-row-thumb-wrap")!;
+  wireThumbFallback(rowImg, wrapEl, game.appid);
   rowImg.addEventListener("error", () => {
     if (rowImg.src.includes("header.jpg")) {
       rowImg.style.display = "none";

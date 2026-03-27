@@ -2,6 +2,8 @@
 // Global Chrome API mock for Vitest (Node environment).
 // Provides an in-memory implementation of chrome.storage.local.
 
+import "fake-indexeddb/auto";
+
 import { vi } from "vitest";
 
 // ── In-memory storage ─────────────────────────────────────────────────────────
@@ -30,7 +32,9 @@ const storageMock = {
     }),
 
     clear: vi.fn(async () => {
-      Object.keys(store).forEach((k) => delete store[k]);
+      Object.keys(store).forEach((k) => {
+        delete store[k];
+      });
     }),
   },
 };
@@ -59,6 +63,8 @@ Object.defineProperty(globalThis, "chrome", {
 // ── Reset storage between tests ───────────────────────────────────────────────
 
 beforeEach(() => {
-  Object.keys(store).forEach((k) => delete store[k]);
+  Object.keys(store).forEach((k) => {
+    delete store[k];
+  });
   vi.clearAllMocks();
 });

@@ -1,0 +1,30 @@
+storage.ts still intact — Task 7
+=================================
+Date: 2026-03-27
+
+storage.ts exports verified still present and used:
+  - getGames()
+  - addGame()
+  - removeGame()
+  - getSettings()
+  - saveSettings()
+  - getGameSettings()
+  - saveGameSettings()
+  - getCache()
+  - setCache()
+  - setLastFetchTime()
+  - getLastFetchTime()
+  - MAX_GAMES
+  - DEFAULT_SETTINGS
+
+These exports remain in storage.ts but are no longer used in background/ or popup/:
+  - addSnapshot()
+  - purgeSnapshotsForGame()
+  - getSnapshotsForGame()
+  (still used by: storage.test.ts and options/main.ts — out of scope for task 7)
+
+background/index.ts imports from storage.ts:
+  getGames, getSettings, getGameSettings, setCache, getCache, setLastFetchTime
+
+popup/main.ts imports from storage.ts:
+  getGames, getCache, getSettings, saveSettings, getLastFetchTime, removeGame

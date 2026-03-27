@@ -1,0 +1,16 @@
+T8: ITAD UUID lookup in fetchGame()
+
+In src/background/index.ts, fetchGame() now:
+1. Calls idbGetItadMapping(game.appid) to check for existing UUID
+2. If not found, calls lookupItadGame(game.appid) — returns ITAD UUID or null
+3. If found via lookup, persists via idbSaveItadMapping(game.appid, lookedUp)
+4. All calls are wrapped with .catch(() => null / () => undefined) — ITAD failure never crashes Steam cycle
+5. itadUuid is spread into cacheData via cacheDataWithItad
+
+Code path:
+  const existingUuid = await idbGetItadMapping(game.appid).catch(() => null);
+  if (existingUuid) { itadUuid = existingUuid; }
+  else { const lookedUp = await lookupItadGame(game.appid).catch(() => null); ... }
+  const cacheDataWithItad = itadUuid ? { ...cacheData, itadUuid } : cacheData;
+
+Test verification: pnpm vitest run → 363 passed (0 failures)

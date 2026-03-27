@@ -2,13 +2,15 @@
 import { describe, it, expect } from "vitest";
 import {
   buildAvailableGraphWindows,
+  buildPriceSparklineSVG,
   buildSparklineSVG,
   downsampleSnapshotsForGraph,
   filterSnapshotsByWindow,
+  findNearestPointIndex,
   hasEnoughGraphHistory,
   sparklineColor,
 } from "../src/utils/sparkline.js";
-import type { Snapshot } from "../src/types/index.js";
+import type { PriceRecord, Snapshot } from "../src/types/index.js";
 
 function snaps(values: number[]): Snapshot[] {
   return values.map((current, i) => ({ ts: Date.now() + i * 60_000, current }));
@@ -146,12 +148,145 @@ describe("hasEnoughGraphHistory", () => {
 });
 
 describe("buildAvailableGraphWindows", () => {
-  it("returns 24h, 3d and retention when retention exceeds 3 days", () => {
-    expect(buildAvailableGraphWindows(10).map((window) => window.label)).toEqual(["24h", "3d", "10d"]);
+  it("returns 24h, 3d, 7d, 15d, 1m, all when retention is 30+ days", () => {
+    expect(buildAvailableGraphWindows(30).map((window) => window.label)).toEqual([
+      "24h",
+      "3d",
+      "7d",
+      "15d",
+      "1m",
+      "all",
+    ]);
   });
 
-  it("deduplicates the retention window when retention is 3 days", () => {
-    expect(buildAvailableGraphWindows(3).map((window) => window.label)).toEqual(["24h", "3d"]);
+  it("always includes 'all' window even with limited retention", () => {
+    expect(buildAvailableGraphWindows(1).map((window) => window.label)).toContain("all");
+    expect(buildAvailableGraphWindows(3).map((window) => window.label)).toContain("all");
+  });
+});
+
+// ── findNearestPointIndex ─────────────────────────────────────────────────────
+
+describe("findNearestPointIndex", () => {
+  const pts = [
+    { x: 0,  y: 10 },
+    { x: 10, y: 8  },
+    { x: 20, y: 6  },
+    { x: 30, y: 4  },
+    { x: 40, y: 2  },
+  ];
+
+  it("returns 0 for empty array", () => {
+    expect(findNearestPointIndex(15, [])).toBe(0);
+  });
+
+  it("returns 0 for single-element array", () => {
+    expect(findNearestPointIndex(15, [{ x: 5, y: 5 }])).toBe(0);
+  });
+
+  it("returns index of nearest point (x=15 → index 1 or 2, whichever closer)", () => {
+    const idx = findNearestPointIndex(15, pts);
+    expect([1, 2]).toContain(idx);
+  });
+
+  it("returns 0 for x before first point", () => {
+    expect(findNearestPointIndex(-5, pts)).toBe(0);
+  });
+
+  it("returns last index for x after last point", () => {
+    expect(findNearestPointIndex(100, pts)).toBe(4);
+  });
+
+  it("returns 0 for exact match at x=0", () => {
+    expect(findNearestPointIndex(0, pts)).toBe(0);
+  });
+
+  it("returns last index for exact match at x=40", () => {
+    expect(findNearestPointIndex(40, pts)).toBe(4);
+  });
+
+  it("returns 2 for exact match at x=20", () => {
+    expect(findNearestPointIndex(20, pts)).toBe(2);
+  });
+
+  it("picks the closer of two adjacent points", () => {
+    expect(findNearestPointIndex(12, pts)).toBe(1);
+    expect(findNearestPointIndex(18, pts)).toBe(2);
+  });
+});
+
+function priceRecords(amounts: number[]): PriceRecord[] {
+  return amounts.map((priceAmountInt, i) => ({
+    appId: "123",
+    timestamp: 1_700_000_000_000 + i * 86_400_000,
+    priceAmountInt,
+    regularAmountInt: 2499,
+    cut: 0,
+    shop: "steam",
+  }));
+}
+
+// ── buildPriceSparklineSVG ────────────────────────────────────────────────────
+
+describe("buildPriceSparklineSVG", () => {
+  it("returns null for empty array", () => {
+    expect(buildPriceSparklineSVG([])).toBeNull();
+  });
+
+  it("returns valid SVG for single record", () => {
+    const svg = buildPriceSparklineSVG(priceRecords([1499]));
+    expect(svg).not.toBeNull();
+    expect(svg).toContain("<svg");
+    expect(svg).toContain("</svg>");
+    expect(svg).toContain('aria-hidden="true"');
+  });
+
+  it("returns SVG starting with <svg for multiple records", () => {
+    const svg = buildPriceSparklineSVG(priceRecords([2499, 1999, 999]));
+    expect(svg).not.toBeNull();
+    expect(svg!.trimStart()).toMatch(/^<svg/);
+  });
+
+  it("contains <line elements for multiple records", () => {
+    const svg = buildPriceSparklineSVG(priceRecords([2499, 1999, 999]));
+    expect(svg).toContain("<line");
+  });
+
+  it("uses correct viewBox dimensions (372×40)", () => {
+    const svg = buildPriceSparklineSVG(priceRecords([999, 1999]));
+    expect(svg).toContain('viewBox="0 0 372 40"');
+  });
+
+  it("produces no NaN or Infinity in coordinates", () => {
+    const svg = buildPriceSparklineSVG(priceRecords([500, 1000, 750, 2000, 100]));
+    expect(svg).not.toContain("NaN");
+    expect(svg).not.toContain("Infinity");
+  });
+
+  it("handles flat prices (all equal) without crashing", () => {
+    const svg = buildPriceSparklineSVG(priceRecords([999, 999, 999]));
+    expect(svg).not.toBeNull();
+    expect(svg).toContain("<line");
+  });
+
+  it("falling prices produce green segments", () => {
+    const svg = buildPriceSparklineSVG(priceRecords([2499, 999]));
+    expect(svg).toMatch(/stroke="#(?:22c55e|16a34a)"/);
+  });
+
+  it("rising prices produce red segments", () => {
+    const svg = buildPriceSparklineSVG(priceRecords([999, 2499]));
+    expect(svg).toMatch(/stroke="#(?:ef4444|dc2626)"/);
+  });
+
+  it("sorts records by timestamp regardless of input order", () => {
+    const shuffled: PriceRecord[] = [
+      { appId: "1", timestamp: 1_700_086_400_000, priceAmountInt: 999, regularAmountInt: 2499, cut: 60, shop: "steam" },
+      { appId: "1", timestamp: 1_700_000_000_000, priceAmountInt: 2499, regularAmountInt: 2499, cut: 0, shop: "steam" },
+    ];
+    const svg = buildPriceSparklineSVG(shuffled);
+    expect(svg).not.toBeNull();
+    expect(svg).toContain("<line");
   });
 });
 

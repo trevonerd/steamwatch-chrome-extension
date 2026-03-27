@@ -8,6 +8,7 @@ import {
   computeRetentionAvg,
   computeRetentionGain,
   computeLocalPeak,
+  computeWindowMin,
   fmtNumber,
   fmtPct,
   fmtTimeAgo,
@@ -365,6 +366,49 @@ describe("fmtTimeAgo", () => {
 
   it("returns singular hour", () => {
     expect(fmtTimeAgo(Date.now() - 3600_000)).toBe("1h ago");
+  });
+});
+
+// ── computeWindowMin ──────────────────────────────────────────────────────────
+
+describe("computeWindowMin", () => {
+  it("returns null for empty array", () => {
+    expect(computeWindowMin([])).toBeNull();
+  });
+
+  it("returns the single snapshot as minimum", () => {
+    expect(computeWindowMin([{ ts: 1000, current: 50 }])).toEqual({ value: 50, timestamp: 1000 });
+  });
+
+  it("returns the snapshot with minimum current value", () => {
+    const snaps = [
+      { ts: 1000, current: 100 },
+      { ts: 2000, current: 30 },
+      { ts: 3000, current: 80 },
+    ];
+    expect(computeWindowMin(snaps)).toEqual({ value: 30, timestamp: 2000 });
+  });
+
+  it("returns first occurrence when all values are equal", () => {
+    const snaps = [
+      { ts: 1000, current: 50 },
+      { ts: 2000, current: 50 },
+    ];
+    expect(computeWindowMin(snaps)).toEqual({ value: 50, timestamp: 1000 });
+  });
+
+  it("handles current=0 correctly (not treated as falsy)", () => {
+    const snaps = [
+      { ts: 1000, current: 100 },
+      { ts: 2000, current: 0 },
+      { ts: 3000, current: 25 },
+    ];
+    expect(computeWindowMin(snaps)).toEqual({ value: 0, timestamp: 2000 });
+  });
+
+  it("finds min across 10 snapshots", () => {
+    const snaps = Array.from({ length: 10 }, (_, i) => ({ ts: i * 1000, current: i === 5 ? 1 : 100 }));
+    expect(computeWindowMin(snaps)).toEqual({ value: 1, timestamp: 5000 });
   });
 });
 

@@ -19,12 +19,15 @@ import {
   computeTrend,
   computeLatestChangePct,
   computeLocalPeak,
+  computeWindowMin,
 } from "./trend.js";
 import {
   buildAvailableGraphWindows,
   buildSparklineSVG,
   hasEnoughGraphHistory,
   sparklineColor,
+  filterSnapshotsByWindow,
+  GRAPH_WINDOW_MS,
 } from "./sparkline.js";
 
 /**
@@ -57,13 +60,19 @@ export function buildCardViewModel(
   const retentionGain = computeRetentionGain(snaps, retentionDays);
   const availableGraphWindows = buildAvailableGraphWindows(retentionDays)
     .filter((window) => hasEnoughGraphHistory(snaps, window.windowMs));
-  const defaultGraphWindow = availableGraphWindows[0]?.key ?? null;
+  const defaultGraphWindow = availableGraphWindows.find((w) => w.key !== "all")?.key ?? null;
   const trend      = computeTrend(snaps);
   const trendCls   = trend?.level.cls ?? "stable";
   const latestChangePct = computeLatestChangePct(snaps);
   const display = computeDisplayTrend(trend, latestChangePct);
   const stroke     = sparklineColor(snaps);
   const svgStr     = buildSparklineSVG(snaps);
+  
+  const activeWindowKey = defaultGraphWindow ?? "all";
+  const activeWindowMs = GRAPH_WINDOW_MS[activeWindowKey];
+  const filteredSnapsForWindow = filterSnapshotsByWindow(snaps, activeWindowMs);
+  const recordLow = computeWindowMin(filteredSnapsForWindow);
+  const allTimeLow = computeWindowMin(snaps);
 
   return {
     game,
@@ -92,6 +101,10 @@ export function buildCardViewModel(
     ...(data?.discountPct   != null ? { discountPct:   data.discountPct   } : {}),
     ...(data?.priceFormatted         ? { priceFormatted:         data.priceFormatted         } : {}),
     ...(data?.priceOriginalFormatted ? { priceOriginalFormatted: data.priceOriginalFormatted } : {}),
+    recordLow,
+    allTimeLow,
+    ...(data?.itadHistoricalLow ? { itadHistoricalLow: data.itadHistoricalLow } : {}),
+    ...(data?.itadUuid ? { itadUuid: data.itadUuid } : {}),
   };
 }
 

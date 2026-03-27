@@ -1,0 +1,57 @@
+TASK 4: Colored Letter Placeholder for Failed Game Images
+===================================================================
+
+COMPLETED: Add letter placeholder to options game list when images fail
+
+CHANGES MADE:
+=============
+
+1. src/options/main.ts (lines 19, 94-101, 146-151)
+   ✓ Added thumbColor to imports from ../popup/thumb.js
+   ✓ Updated buildGameRow() to wrap image in .game-row-thumb-wrap span
+   ✓ Added .game-row-placeholder with first letter (uppercase) of game name
+   ✓ Styled placeholder with --thumb-color CSS variable from thumbColor(appid)
+   ✓ Updated wireThumbFallback() call to pass wrapper element (not img)
+   ✓ Added wrapEl query to properly wire fallback handler
+
+2. src/options/options.css (lines 210-214, 630-657)
+   ✓ Updated .game-row-thumb rule: moved sizing to wrapper, changed to 100% dims
+   ✓ Added .game-row-thumb-wrap: position: relative; 38px × 28px; border-radius: 4px
+   ✓ Added .game-row-placeholder: absolute, flex center, background var(--thumb-color)
+   ✓ Added toggle rules: .img-error class hides img, shows placeholder
+   ✓ Followed exact pattern from popup.css lines 173-209
+
+VERIFICATION:
+=============
+
+✓ pnpm vitest run
+  - 390 tests passed (0 failures)
+  - All tests remain passing
+
+✓ pnpm build
+  - Successfully compiled to dist/
+  - No TypeScript errors
+  - Extension builds cleanly
+
+IMPLEMENTATION DETAILS:
+======================
+
+When image load fails:
+1. First error: wireThumbFallback tries header.jpg fallback
+2. Second error: wireThumbFallback adds "img-error" class to wrapper
+3. CSS toggle: .img-error hides .game-row-thumb, shows .game-row-placeholder
+4. Placeholder shows game name's first letter on colored background
+5. Color deterministic: thumbColor(appid) uses last digit of appid → 10-color palette
+6. XSS safe: all dynamic content escaped with esc() function
+
+TESTED SCENARIOS:
+=================
+
+- Games with valid images: images display normally (placeholder hidden)
+- Games with failed images: colored letter placeholder appears
+- CSS properly isolates wrapper sizing from img sizing
+- wireThumbFallback correctly wired to wrapper element
+- No style conflicts with existing game-row layout
+
+NOTE: Inline addEventListener("error") code at lines 149-153 is legacy fallback
+      and remains unchanged (was not causing conflicts in previous implementation)

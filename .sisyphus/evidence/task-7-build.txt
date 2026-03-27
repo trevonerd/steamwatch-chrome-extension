@@ -1,0 +1,42 @@
+pnpm build output — Task 7
+==========================
+Date: 2026-03-27
+
+> steamwatch@0.11.1 build
+> vite build
+
+vite v5.4.21 building for production...
+
+Build Steps
+  1. Bundling 2 entrypoints together:
+     • src/popup/index.html
+     • src/options/index.html
+  2. Building src/background/index.ts individually
+
+Building src/popup/index.html, src/options/index.html (1/2)
+vite v5.4.21 building for production...
+transforming...
+✓ 31 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/src/popup/index.html     3.81 kB │ gzip:  1.44 kB
+dist/src/options/index.html  25.86 kB │ gzip:  6.07 kB
+dist/index.css               12.38 kB │ gzip:  3.20 kB
+dist/index2.css              15.78 kB │ gzip:  3.64 kB
+dist/thumb.js                 8.89 kB │ gzip:  3.79 kB
+dist/src/popup/index.js      23.47 kB │ gzip:  8.16 kB
+dist/src/options/index.js    73.14 kB │ gzip: 18.67 kB
+✓ built in 219ms
+
+Building src/background/index.ts (2/2)
+vite v5.4.21 building for production...
+transforming...
+✓ 19 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/src/background/index.js  72.18 kB │ gzip: 18.76 kB
+✓ built in 97ms
+
+✓ All steps completed.
+
+Exit code: 0
