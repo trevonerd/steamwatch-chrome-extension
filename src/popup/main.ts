@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// SteamWatch — src/popup/main.ts  (v0.5.0)
+// SteamWatch — src/popup/main.ts
 // ─────────────────────────────────────────────────────────────────────────────
 
 import {
@@ -47,6 +47,14 @@ const settingsBtn   = mustGet<HTMLButtonElement>("settingsBtn");
 const openOptionsBtn = document.getElementById("openOptionsBtn") as HTMLButtonElement | null;
 const retryBtn       = document.getElementById("retryBtn")      as HTMLButtonElement | null;
 let hasAttemptedRichDataHydration = false;
+
+const WINDOW_MS: Readonly<Record<string, number>> = {
+  "24h":  86_400_000,
+  "3d":  3 * 86_400_000,
+  "7d":  7 * 86_400_000,
+  "15d": 15 * 86_400_000,
+  "1m":  30 * 86_400_000,
+};
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
@@ -386,13 +394,6 @@ function populatePanel(panel: HTMLDivElement, vm: CardViewModel): void {
       const updateRecordLow = async (windowKey: GraphWindowKey): Promise<void> => {
         const recordLowEl = panel.querySelector<HTMLElement>(".panel-record-low");
         if (!recordLowEl || !vm.allTimeLow) return;
-        const WINDOW_MS: Record<string, number> = {
-          "24h": 86_400_000,
-          "3d": 3 * 86_400_000,
-          "7d": 7 * 86_400_000,
-          "15d": 15 * 86_400_000,
-          "1m": 30 * 86_400_000,
-        };
         let snaps: readonly Snapshot[];
         if (windowKey === "all") {
           snaps = await idbGetSnapshots(vm.game.appid);
@@ -439,13 +440,6 @@ async function renderPanelSparklineFromIdb(
   if (selectedWindow === null || selectedWindow === "all") {
     snaps = await idbGetSnapshots(appId);
   } else {
-    const WINDOW_MS: Record<string, number> = {
-      "24h": 86_400_000,
-      "3d": 3 * 86_400_000,
-      "7d": 7 * 86_400_000,
-      "15d": 15 * 86_400_000,
-      "1m": 30 * 86_400_000,
-    };
     const windowMs = WINDOW_MS[selectedWindow] ?? 86_400_000;
     const endTs = Date.now();
     const startTs = endTs - windowMs;
@@ -653,7 +647,6 @@ async function handleToggleFavorite(appid: string, clickedBtn: HTMLButtonElement
   } catch (err) {
     console.error("[SteamWatch] Toggle favorite failed:", err);
   }
-  void clickedBtn;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

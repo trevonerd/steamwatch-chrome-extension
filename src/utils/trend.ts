@@ -79,16 +79,10 @@ export function detectSpike(
 }
 
 /**
- * Average concurrent players over the last 24 hours.
- * Returns null if no snapshots exist within that window.
- */
-/**
  * Average concurrent players over the past 24 hours.
  *
- * Returns `null` when:
- * - Fewer than 3 snapshots exist (not enough data points), OR
- * - All snapshots span less than 30 minutes (brand-new install — showing the
- *   single value would be identical to "current" and mislead the user).
+ * Returns `null` when fewer than 6 snapshots exist, or when they span less
+ * than 95% of the 24-hour window (brand-new install guard).
  */
 export function compute24hAvg(snapshots: readonly Snapshot[]): number | null {
   const recent = getReliable24hSnapshots(snapshots);
@@ -128,31 +122,6 @@ export function computeRetentionGain(
   return last.current - first.current;
 }
 
-/**
- * Median concurrent players over the past 24 hours based on tracked snapshots.
- * Returns null when there is not enough local history to be representative.
- */
-export function compute24hMedian(snapshots: readonly Snapshot[]): number | null {
-  const cutoff = Date.now() - 86_400_000;
-  const recent = snapshots.filter((s) => s.ts > cutoff);
-  if (recent.length < 3) return null;
-
-  const span = (recent.at(-1)?.ts ?? 0) - (recent[0]?.ts ?? 0);
-  if (span < 30 * 60_000) return null;
-
-  const values = recent.map((s) => s.current).sort((a, b) => a - b);
-  const mid = Math.floor(values.length / 2);
-  if (values.length % 2 === 1) return values[mid] ?? null;
-  const lo = values[mid - 1];
-  const hi = values[mid];
-  if (lo == null || hi == null) return null;
-  return Math.round((lo + hi) / 2);
-}
-
-/**
- * Peak concurrent players ever recorded in local snapshots.
- * Returns null if no snapshots exist.
- */
 export function computeLocalPeak(snapshots: readonly Snapshot[]): number | null {
   if (snapshots.length === 0) return null;
   return Math.max(...snapshots.map((s) => s.current));
