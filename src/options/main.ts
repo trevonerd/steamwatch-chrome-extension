@@ -151,11 +151,6 @@ function buildGameRow(game: Game, gs: GameSettings): HTMLLIElement {
   const rowImg = li.querySelector<HTMLImageElement>(".game-row-thumb")!;
   const wrapEl = li.querySelector<HTMLElement>(".game-row-thumb-wrap")!;
   wireThumbFallback(rowImg, wrapEl, game.appid);
-  rowImg.addEventListener("error", () => {
-    if (rowImg.src.includes("header.jpg")) {
-      rowImg.style.display = "none";
-    }
-  });
 
   // ── Expand/collapse
   const expandBtn = li.querySelector<HTMLButtonElement>(".btn-expand")!;

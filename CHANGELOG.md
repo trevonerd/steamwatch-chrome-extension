@@ -2,6 +2,36 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.12.0] — 2026-03-30
+
+### Added
+- **Price history chart** in the Options History panel — interactive SVG sparkline showing price over time, with a hover tooltip displaying price, date, and source.
+- **Record Low** and **All-time Low** price stats in the History panel per game.
+- **Price drop alerts** — 💸 push notification when a tracked game hits a new historical low, powered by ITAD (Is There Any Deal) integration.
+- **Price history sparkline** in the popup per-game panel with a pill-based graph window selector (24h / 3d / 7d / 15d / 1m).
+- **Record low price row** in the popup panel.
+- **Favorite game badge** — toolbar badge shows the live player count (short format) of a pinned game instead of the rising/alerting count.
+- **IndexedDB storage** (`idb`) for price snapshots — persistent, high-capacity, auto-migrated from `chrome.storage.local` on first launch.
+- **Letter placeholder** for games with failed thumbnail images in both popup and options.
+
+### Changed
+- Data retention label in Options now reflects the actual compaction window (not a fixed string).
+- Popup sparkline tooltip is clamped within the container bounds.
+- Trend percentage in the popup badge uses the smoothed trend value.
+- Snapshot reads in the Options History panel switch to IndexedDB.
+
+### Fixed
+- Spurious `getSettings` call removed from `renderHistory` in options.
+
+---
+
+## [0.11.1] — 2025
+
+### Fixed
+- Initial stable release with full feature set through v0.11.
+
+---
+
 ## [0.6.0] — 2025
 
 ### Added
