@@ -417,22 +417,65 @@
             <div class="history-stat-label">All-time Low</div>
             <div class="history-stat-value" id="hStatAllTimeLow">—</div>
           </div>
+          <div class="history-stat">
+            <div class="history-stat-label">24h Peak</div>
+            <div class="history-stat-value" id="history-peak24h">—</div>
+          </div>
+          <div class="history-stat">
+            <div class="history-stat-label">All-time Peak</div>
+            <div class="history-stat-value" id="history-alltime-peak">—</div>
+          </div>
+          <div class="history-stat">
+            <div class="history-stat-label">24h Gain/Loss</div>
+            <div class="history-stat-value" id="history-24h-gain">—</div>
+          </div>
+          <div class="history-stat">
+            <div class="history-stat-label">Period Gain/Loss</div>
+            <div class="history-stat-value" id="history-period-gain">—</div>
+          </div>
+          <div class="history-stat">
+            <div class="history-stat-label">Trend</div>
+            <div class="history-stat-value" id="history-trend">—</div>
+          </div>
+          <div class="history-stat">
+            <div class="history-stat-label">Latest Change</div>
+            <div class="history-stat-value" id="history-latest-change">—</div>
+          </div>
         </div>
 
         <div class="history-price-stats" id="historyPriceStats" hidden>
-          <div class="history-price-title">Price Information <span class="itad-credit">via <a href="https://isthereanydeal.com" target="_blank" rel="noopener">IsThereAnyDeal</a></span></div>
-          <div class="history-price-grid">
-            <div class="history-stat">
-              <div class="history-stat-label">Historical Low</div>
-              <div class="history-stat-value" id="hStatHistLow">—</div>
+          <div id="historySteamPriceSection" hidden>
+            <div class="history-price-title">Steam Store Price</div>
+            <div class="history-price-grid">
+              <div class="history-stat">
+                <div class="history-stat-label">Current Price</div>
+                <div class="history-stat-value" id="history-steam-price">—</div>
+              </div>
+              <div class="history-stat" id="history-steam-original-wrap" hidden>
+                <div class="history-stat-label">Original Price</div>
+                <div class="history-stat-value" id="history-steam-original-price">—</div>
+              </div>
+              <div class="history-stat" id="history-steam-discount-wrap" hidden>
+                <div class="history-stat-label">Discount</div>
+                <div class="history-stat-value" id="history-steam-discount">—</div>
+              </div>
             </div>
-            <div class="history-stat">
-              <div class="history-stat-label">Current Price</div>
-              <div class="history-stat-value" id="hStatCurrentPrice">—</div>
-            </div>
-            <div class="history-stat">
-              <div class="history-stat-label">Discount</div>
-              <div class="history-stat-value" id="hStatDiscount">—</div>
+          </div>
+          <div id="historyItadPriceSection" hidden>
+            <div class="history-price-title">Price History <span class="itad-credit">via <a href="https://isthereanydeal.com" target="_blank" rel="noopener noreferrer">IsThereAnyDeal</a></span></div>
+            <div class="history-price-grid">
+              <div class="history-stat">
+                <div class="history-stat-label">Historical Low</div>
+                <div class="history-stat-value" id="hStatHistLow">—</div>
+              </div>
+              <div class="history-stat">
+                <div class="history-stat-label">Current Price</div>
+                <div class="history-stat-value" id="hStatCurrentPrice">—</div>
+              </div>
+              <div class="history-stat">
+                <div class="history-stat-label">Discount</div>
+                <div class="history-stat-value" id="hStatDiscount">—</div>
+              </div>
             </div>
           </div>
         </div>

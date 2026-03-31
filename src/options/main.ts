@@ -9,6 +9,7 @@ import {
   saveGameSettings,
   clearAllData,
   MAX_GAMES,
+  getCache,
 } from "../utils/storage.js";
 import { idbGetSnapshots, idbGetItadMapping, idbGetPriceHistory } from "../utils/idb-storage.js";
 import { searchGames } from "../utils/api.js";
@@ -25,7 +26,7 @@ import {
   sparklineColor,
   findNearestPointIndex,
 } from "../utils/sparkline.js";
-import { fmtNumber, compute24hAvg, computeRetentionAvg, computeLocalPeak, computeWindowMin } from "../utils/trend.js";
+import { fmtNumber, fmtPct, compute24hAvg, computeRetentionAvg, computeLocalPeak, computeWindowMin, compute24hGain, computeRetentionGain, computeTrend, computeLatestChangePct } from "../utils/trend.js";
 
 
 // ── Navigation ────────────────────────────────────────────────────────────────
@@ -530,6 +531,19 @@ async function initHistory(): Promise<void> {
   const hStatHistLow    = document.getElementById("hStatHistLow")       as HTMLDivElement | null;
   const hStatCurrentPrice = document.getElementById("hStatCurrentPrice") as HTMLDivElement | null;
   const hStatDiscount   = document.getElementById("hStatDiscount")      as HTMLDivElement | null;
+  const hSteamPriceSection   = document.getElementById("historySteamPriceSection")   as HTMLDivElement | null;
+  const hSteamPrice          = document.getElementById("history-steam-price")         as HTMLDivElement | null;
+  const hSteamOriginalWrap   = document.getElementById("history-steam-original-wrap") as HTMLDivElement | null;
+  const hSteamOriginalPrice  = document.getElementById("history-steam-original-price") as HTMLDivElement | null;
+  const hSteamDiscountWrap   = document.getElementById("history-steam-discount-wrap") as HTMLDivElement | null;
+  const hSteamDiscount       = document.getElementById("history-steam-discount")      as HTMLDivElement | null;
+  const hItadPriceSection    = document.getElementById("historyItadPriceSection")     as HTMLDivElement | null;
+  const hPeak24h      = document.getElementById("history-peak24h")      as HTMLDivElement | null;
+  const hAllTimePeak  = document.getElementById("history-alltime-peak")  as HTMLDivElement | null;
+  const h24hGain      = document.getElementById("history-24h-gain")      as HTMLDivElement | null;
+  const hPeriodGain   = document.getElementById("history-period-gain")   as HTMLDivElement | null;
+  const hTrend        = document.getElementById("history-trend")         as HTMLDivElement | null;
+  const hLatestChange = document.getElementById("history-latest-change") as HTMLDivElement | null;
   if (!selectEl || !tabsEl || !chartEl || !emptyEl || !noGameEl || !statsEl) return;
 
   const settings = await getSettings();
@@ -577,6 +591,9 @@ async function initHistory(): Promise<void> {
       if (emptyEl)  emptyEl.hidden = true;
       if (statsEl)  hide(statsEl);
       chartEl!.innerHTML = "";
+      [hPeak24h, hAllTimePeak, h24hGain, hPeriodGain, hTrend, hLatestChange].forEach(el => {
+        if (el) el.textContent = "—";
+      });
       return;
     }
     if (noGameEl) noGameEl.hidden = true;
@@ -589,6 +606,9 @@ async function initHistory(): Promise<void> {
       if (emptyEl) emptyEl.hidden = false;
       if (statsEl) hide(statsEl);
       chartEl!.innerHTML = "";
+      [hPeak24h, hAllTimePeak, h24hGain, hPeriodGain, hTrend, hLatestChange].forEach(el => {
+        if (el) el.textContent = "—";
+      });
       return;
     }
     if (emptyEl) emptyEl.hidden = true;
@@ -746,21 +766,96 @@ async function initHistory(): Promise<void> {
     if (hRecordLow)  hRecordLow.textContent  = recLow != null ? fmtNumber(recLow.value)  : "—";
     if (hAllTimeLow) hAllTimeLow.textContent = allLow != null ? fmtNumber(allLow.value) : "—";
 
+    // ── Extended player analytics ──
+    const cacheMap = await getCache();
+    const cached = cacheMap[appid];
+
+    if (hPeak24h)     hPeak24h.textContent     = fmtNumber(cached?.peak24h ?? null);
+    if (hAllTimePeak) hAllTimePeak.textContent = fmtNumber(cached?.allTimePeak ?? null);
+
+    const gain24h = compute24hGain(allSnaps);
+    if (h24hGain) {
+      if (gain24h == null) {
+        h24hGain.textContent = "—";
+      } else {
+        h24hGain.textContent = gain24h >= 0 ? `+${fmtNumber(gain24h)}` : fmtNumber(gain24h);
+      }
+    }
+
+    const periodGain = computeRetentionGain(allSnaps, settings.purgeAfterDays);
+    if (hPeriodGain) {
+      if (periodGain == null) {
+        hPeriodGain.textContent = "—";
+      } else {
+        hPeriodGain.textContent = periodGain >= 0 ? `+${fmtNumber(periodGain)}` : fmtNumber(periodGain);
+      }
+    }
+
+    const trend = computeTrend(allSnaps);
+    if (hTrend) {
+      hTrend.textContent = trend ? `${trend.level.icon} ${trend.level.label}` : "—";
+    }
+
+    const latestChangePct = computeLatestChangePct(allSnaps);
+    if (hLatestChange) {
+      hLatestChange.textContent = latestChangePct != null ? fmtPct(latestChangePct) : "—";
+    }
+
     const itadUuid = await idbGetItadMapping(appid);
-    if (itadUuid && priceStatsEl) {
-      const priceHistory = await idbGetPriceHistory(appid);
-      if (priceHistory.length > 0) {
+
+    const hasSteamPrice = !!(cached?.priceFormatted);
+    const hasItadData   = !!itadUuid;
+
+    if (priceStatsEl) {
+      if (hasSteamPrice || hasItadData) {
         show(priceStatsEl);
-        const histLow = priceHistory.reduce((min, r) => r.priceAmountInt < min.priceAmountInt ? r : min);
-        const latest = priceHistory[priceHistory.length - 1]!;
-        if (hStatHistLow)      hStatHistLow.textContent      = `$${(histLow.priceAmountInt / 100).toFixed(2)}`;
-        if (hStatCurrentPrice) hStatCurrentPrice.textContent = `$${(latest.priceAmountInt / 100).toFixed(2)}`;
-        if (hStatDiscount)     hStatDiscount.textContent     = latest.cut > 0 ? `-${latest.cut}%` : "—";
       } else {
         hide(priceStatsEl);
       }
-    } else if (priceStatsEl) {
-      hide(priceStatsEl);
+    }
+
+    if (hSteamPriceSection) {
+      if (hasSteamPrice) {
+        hSteamPriceSection.hidden = false;
+        if (hSteamPrice) hSteamPrice.textContent = cached!.priceFormatted!;
+        if (hSteamOriginalWrap && hSteamOriginalPrice) {
+          const isDiscounted = cached!.priceOriginalFormatted && cached!.priceOriginalFormatted !== cached!.priceFormatted;
+          if (isDiscounted) {
+            hSteamOriginalPrice.textContent = cached!.priceOriginalFormatted!;
+            hSteamOriginalWrap.hidden = false;
+          } else {
+            hSteamOriginalWrap.hidden = true;
+          }
+        }
+        if (hSteamDiscountWrap && hSteamDiscount) {
+          if (cached?.discountPct && cached.discountPct > 0) {
+            hSteamDiscount.textContent = `-${cached.discountPct}%`;
+            hSteamDiscountWrap.hidden = false;
+          } else {
+            hSteamDiscountWrap.hidden = true;
+          }
+        }
+      } else {
+        hSteamPriceSection.hidden = true;
+      }
+    }
+
+    if (hItadPriceSection) {
+      if (itadUuid) {
+        const priceHistory = await idbGetPriceHistory(appid);
+        if (priceHistory.length > 0) {
+          hItadPriceSection.hidden = false;
+          const histLow = priceHistory.reduce((min, r) => r.priceAmountInt < min.priceAmountInt ? r : min);
+          const latest = priceHistory[priceHistory.length - 1]!;
+          if (hStatHistLow)      hStatHistLow.textContent      = `$${(histLow.priceAmountInt / 100).toFixed(2)}`;
+          if (hStatCurrentPrice) hStatCurrentPrice.textContent = `$${(latest.priceAmountInt / 100).toFixed(2)}`;
+          if (hStatDiscount)     hStatDiscount.textContent     = latest.cut > 0 ? `-${latest.cut}%` : "—";
+        } else {
+          hItadPriceSection.hidden = true;
+        }
+      } else {
+        hItadPriceSection.hidden = true;
+      }
     }
   }
 

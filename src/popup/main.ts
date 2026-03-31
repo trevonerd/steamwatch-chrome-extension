@@ -321,10 +321,17 @@ function populatePanel(panel: HTMLDivElement, vm: CardViewModel): void {
   panel.innerHTML = `
     ${graphSelector}
     <div class="panel-sparkline" aria-hidden="true"></div>
-    <div class="panel-price-section"${vm.itadUuid ? "" : " hidden"}>
+    <div class="panel-price-section"${(vm.itadUuid || vm.priceFormatted) ? "" : " hidden"}>
+      ${vm.priceFormatted ? `
+      <div class="panel-steam-price">
+        <span class="panel-steam-price-current">${esc(vm.priceFormatted)}</span>
+        ${vm.priceOriginalFormatted && vm.priceOriginalFormatted !== vm.priceFormatted ? `<s class="panel-steam-price-orig">${esc(vm.priceOriginalFormatted)}</s>` : ""}
+        ${vm.discountPct && vm.discountPct > 0 ? `<span class="panel-steam-price-disc">-${esc(String(vm.discountPct))}%</span>` : ""}
+      </div>` : ""}
+      ${vm.itadUuid ? `
       <p class="panel-price-label">Price History</p>
       <div class="panel-price-loading">Loading price data...</div>
-      <div class="panel-price-sparkline" aria-hidden="true"></div>
+      <div class="panel-price-sparkline" aria-hidden="true"></div>` : ""}
     </div>
     <dl class="panel-stats">
       <div class="panel-stat">

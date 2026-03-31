@@ -453,6 +453,31 @@ body {
 .panel-price-sparkline { line-height: 0; }
 .panel-price-sparkline svg { display: block; width: 100%; border-radius: var(--r-sm); }
 
+.panel-steam-price {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0;
+  flex-wrap: wrap;
+}
+
+.panel-steam-price-current {
+  color: var(--text-1, #e2e8f0);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.panel-steam-price-orig {
+  color: var(--text-2, #94a3b8);
+  font-size: 12px;
+}
+
+.panel-steam-price-disc {
+  color: #4ade80;
+  font-size: 11px;
+  font-weight: 600;
+}
+
 .sparkline-tooltip {
   position:       absolute;
   top:            4px;
