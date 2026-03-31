@@ -397,18 +397,71 @@ describe("computeWindowMin", () => {
     expect(computeWindowMin(snaps)).toEqual({ value: 50, timestamp: 1000 });
   });
 
-  it("handles current=0 correctly (not treated as falsy)", () => {
+  it("filters out zero in mixed zero+non-zero array (the core fix)", () => {
     const snaps = [
       { ts: 1000, current: 100 },
       { ts: 2000, current: 0 },
       { ts: 3000, current: 25 },
     ];
-    expect(computeWindowMin(snaps)).toEqual({ value: 0, timestamp: 2000 });
+    // The zero is filtered out because non-zero values exist
+    expect(computeWindowMin(snaps)).toEqual({ value: 25, timestamp: 3000 });
   });
 
   it("finds min across 10 snapshots", () => {
     const snaps = Array.from({ length: 10 }, (_, i) => ({ ts: i * 1000, current: i === 5 ? 1 : 100 }));
     expect(computeWindowMin(snaps)).toEqual({ value: 1, timestamp: 5000 });
+  });
+
+  // ── New tests for zero-filtering behavior ──────────────────────────────────
+  
+  it("excludes zero-player snapshots when at least one non-zero exists", () => {
+    const snaps = [
+      { ts: 1000, current: 0 },    // failed fetch
+      { ts: 2000, current: 500 },  // real data
+      { ts: 3000, current: 300 },  // real data
+    ];
+    expect(computeWindowMin(snaps)).toEqual({ value: 300, timestamp: 3000 });
+  });
+
+  it("returns zero value when ALL snapshots are zero (dead game)", () => {
+    const snaps = [
+      { ts: 1000, current: 0 },
+      { ts: 2000, current: 0 },
+      { ts: 3000, current: 0 },
+    ];
+    expect(computeWindowMin(snaps)).toEqual({ value: 0, timestamp: 1000 });
+  });
+
+  it("ignores zeros in a mixed array with more complex data", () => {
+    const snaps = [
+      { ts: 1000, current: 0 },
+      { ts: 2000, current: 1000 },
+      { ts: 3000, current: 0 },
+      { ts: 4000, current: 250 },
+      { ts: 5000, current: 0 },
+      { ts: 6000, current: 500 },
+    ];
+    expect(computeWindowMin(snaps)).toEqual({ value: 250, timestamp: 4000 });
+  });
+
+  it("handles single zero snapshot (dead game with only one reading)", () => {
+    const snaps = [{ ts: 1000, current: 0 }];
+    expect(computeWindowMin(snaps)).toEqual({ value: 0, timestamp: 1000 });
+  });
+
+  it("handles single non-zero snapshot (unchanged behavior)", () => {
+    const snaps = [{ ts: 1000, current: 500 }];
+    expect(computeWindowMin(snaps)).toEqual({ value: 500, timestamp: 1000 });
+  });
+
+  it("uses zero when it is the true minimum in an all-nonzero array", () => {
+    // This is already tested above, but being explicit: if no zeros exist, behavior unchanged
+    const snaps = [
+      { ts: 1000, current: 100 },
+      { ts: 2000, current: 50 },
+      { ts: 3000, current: 75 },
+    ];
+    expect(computeWindowMin(snaps)).toEqual({ value: 50, timestamp: 2000 });
   });
 });
 

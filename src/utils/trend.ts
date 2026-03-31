@@ -131,8 +131,15 @@ export function computeWindowMin(
   snapshots: readonly Snapshot[],
 ): { value: number; timestamp: number } | null {
   if (snapshots.length === 0) return null;
-  let min = snapshots[0]!;
-  for (const snap of snapshots) {
+
+  // Check if any snapshot has non-zero current value
+  const hasNonZero = snapshots.some((s) => s.current > 0);
+
+  // If at least one non-zero exists, filter out zeros (failed fetches)
+  const filtered = hasNonZero ? snapshots.filter((s) => s.current > 0) : snapshots;
+
+  let min = filtered[0]!;
+  for (const snap of filtered) {
     if (snap.current < min.current) min = snap;
   }
   return { value: min.current, timestamp: min.ts };
