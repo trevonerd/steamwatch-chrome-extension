@@ -26,6 +26,8 @@ import {
   sparklineColor,
   findNearestPointIndex,
   buildPriceSparklineSVG,
+  filterPriceRecordsByWindow,
+  downsamplePriceRecords,
 } from "../utils/sparkline.js";
 import { fmtNumber, fmtPct, compute24hAvg, computeRetentionAvg, computeLocalPeak, computeWindowMin, compute24hGain, computeRetentionGain, computeTrend, computeLatestChangePct } from "../utils/trend.js";
 
@@ -595,6 +597,119 @@ async function initHistory(): Promise<void> {
   }
   buildTabs();
 
+  const priceChartEl = document.querySelector<SVGSVGElement>("#historyPriceChart");
+  const priceChartSectionEl = document.querySelector<HTMLElement>("#historyPriceChartSection");
+  const priceTabsEl = document.querySelector<HTMLElement>("#priceWindowTabs");
+  let activePriceWindow = windows[0]?.windowMs ?? 86_400_000;
+
+  function buildPriceTabs(): void {
+    if (!priceTabsEl) return;
+    priceTabsEl.innerHTML = "";
+    windows.forEach((w) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `panel-window-btn${w.windowMs === activePriceWindow ? " active" : ""}`;
+      btn.textContent = w.label;
+      btn.dataset["windowMs"] = String(w.windowMs);
+      btn.setAttribute("role", "tab");
+      btn.setAttribute("aria-selected", String(w.windowMs === activePriceWindow));
+      btn.addEventListener("click", () => {
+        activePriceWindow = w.windowMs;
+        priceTabsEl!.querySelectorAll<HTMLButtonElement>("[data-window-ms]").forEach((b) => {
+          const active = b === btn;
+          b.classList.toggle("active", active);
+          b.setAttribute("aria-selected", String(active));
+        });
+        void renderPriceChart(selectEl!.value);
+      });
+      priceTabsEl!.appendChild(btn);
+    });
+  }
+  buildPriceTabs();
+
+  async function renderPriceChart(appid: string): Promise<void> {
+    if (!appid || !priceChartSectionEl) return;
+
+    const allRecords = await idbGetPriceHistory(appid);
+    const filtered = filterPriceRecordsByWindow(allRecords, activePriceWindow);
+    const downsampled = downsamplePriceRecords(filtered, 120);
+
+    if (downsampled.length < 2) {
+      priceChartSectionEl.hidden = true;
+      return;
+    }
+
+    priceChartSectionEl.hidden = false;
+
+    const W = 600; const H = 120;
+    const padX = 60; const padY = 12;
+    const sorted = [...downsampled].sort((a, b) => a.timestamp - b.timestamp);
+    const prices = sorted.map((r) => r.priceAmountInt);
+    const maxP = Math.max(...prices);
+    const minP = Math.min(...prices);
+    const rangeP = maxP - minP;
+
+    const toX = (i: number): number => {
+      if (sorted.length === 1) return W / 2;
+      return padX + (i / (sorted.length - 1)) * (W - padX * 2);
+    };
+    const toY = (price: number): number => {
+      if (rangeP === 0) return H / 2;
+      return padY + ((maxP - price) / rangeP) * (H - padY * 2);
+    };
+
+    const pts = sorted.map((r, i) => ({ x: toX(i), y: toY(r.priceAmountInt) }));
+    const fmtPrice = (cents: number): string => `$${(cents / 100).toFixed(2)}`;
+    const fmtDate = (ts: number): string => {
+      const d = new Date(ts);
+      return `${d.getMonth() + 1}/${d.getDate()}`;
+    };
+
+    const midP = Math.round((maxP + minP) / 2);
+    const gridLines = [
+      { y: padY,                       label: fmtPrice(maxP) },
+      { y: padY + (H - padY * 2) / 2, label: fmtPrice(midP) },
+      { y: H - padY,                   label: fmtPrice(minP) },
+    ];
+
+    const segments: string[] = [];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const cur = pts[i]!;
+      const next = pts[i + 1]!;
+      const curPrice = prices[i]!;
+      const nextPrice = prices[i + 1]!;
+      let color = "#00c8ff";
+      if (nextPrice < curPrice) color = "#22c55e";
+      else if (nextPrice > curPrice) color = "#ef4444";
+      const midX = next.x;
+      const midY = cur.y;
+      segments.push(`<line x1="${cur.x.toFixed(1)}" y1="${cur.y.toFixed(1)}" x2="${midX.toFixed(1)}" y2="${midY.toFixed(1)}" stroke="${esc(color)}" stroke-width="1.8" stroke-linecap="square"/>`);
+      segments.push(`<line x1="${midX.toFixed(1)}" y1="${midY.toFixed(1)}" x2="${next.x.toFixed(1)}" y2="${next.y.toFixed(1)}" stroke="${esc(color)}" stroke-width="1.8" stroke-linecap="square"/>`);
+    }
+
+    const firstTs = sorted[0]!.timestamp;
+    const lastTs  = sorted[sorted.length - 1]!.timestamp;
+
+    if (priceChartEl) {
+      priceChartEl.innerHTML = `
+        ${gridLines.map((g) => `
+          <line x1="${padX}" y1="${g.y.toFixed(1)}" x2="${W - padX / 2}" y2="${g.y.toFixed(1)}"
+                stroke="rgba(255,255,255,.06)" stroke-width="1"/>
+          <text x="${(padX - 4).toFixed(1)}" y="${(g.y + 4).toFixed(1)}"
+                fill="rgba(148,163,184,.7)" font-size="10" text-anchor="end"
+                font-family="JetBrains Mono,monospace">${esc(g.label)}</text>
+        `).join("")}
+        <text x="${padX}" y="${(H - 2).toFixed(1)}"
+              fill="rgba(84,106,128,.8)" font-size="9.5" text-anchor="start"
+              font-family="JetBrains Mono,monospace">${esc(fmtDate(firstTs))}</text>
+        <text x="${(W - padX / 2).toFixed(1)}" y="${(H - 2).toFixed(1)}"
+              fill="rgba(84,106,128,.8)" font-size="9.5" text-anchor="end"
+              font-family="JetBrains Mono,monospace">${esc(fmtDate(lastTs))}</text>
+        ${segments.join("\n")}
+      `;
+    }
+  }
+
   async function renderHistory(appid: string): Promise<void> {
     if (!appid) {
       if (noGameEl) noGameEl.hidden = false;
@@ -608,6 +723,7 @@ async function initHistory(): Promise<void> {
       if (hTwitch) hTwitch.textContent = "—";
       if (hSaleBadgeWrap) hSaleBadgeWrap.style.display = "none";
       if (hPriceSparkline) { hPriceSparkline.innerHTML = ""; hPriceSparkline.hidden = true; }
+      if (priceChartSectionEl) priceChartSectionEl.hidden = true;
       return;
     }
     if (noGameEl) noGameEl.hidden = true;
@@ -627,6 +743,7 @@ async function initHistory(): Promise<void> {
       if (hTwitch) hTwitch.textContent = "—";
       if (hSaleBadgeWrap) hSaleBadgeWrap.style.display = "none";
       if (hPriceSparkline) { hPriceSparkline.innerHTML = ""; hPriceSparkline.hidden = true; }
+      if (priceChartSectionEl) priceChartSectionEl.hidden = true;
       return;
     }
     if (emptyEl) emptyEl.hidden = true;
@@ -913,6 +1030,7 @@ async function initHistory(): Promise<void> {
         if (hPriceSparkline) { hPriceSparkline.innerHTML = ""; hPriceSparkline.hidden = true; }
       }
     }
+    await renderPriceChart(appid);
   }
 
   selectEl.addEventListener("change", () => void renderHistory(selectEl.value));

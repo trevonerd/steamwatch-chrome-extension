@@ -780,6 +780,25 @@ code {
   font-weight: 600;
 }
 
+.history-price-chart-section {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.history-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0 0 10px;
+}
+
+.history-price-chart-controls {
+  margin-bottom: 8px;
+}
+
 @media (max-width: 520px) {
   .history-stats {
     grid-template-columns: repeat(2, 1fr);

@@ -219,6 +219,36 @@ export function downsampleSnapshotsForGraph(
     .filter(Boolean);
 }
 
+export function filterPriceRecordsByWindow(
+  records: readonly PriceRecord[],
+  windowMs: number,
+): PriceRecord[] {
+  if (windowMs === 0) return [...records]; // "all" window = no time filter
+  const cutoff = Date.now() - windowMs;
+  return records.filter((r) => r.timestamp >= cutoff);
+}
+
+export function downsamplePriceRecords(
+  records: readonly PriceRecord[],
+  maxPoints: number,
+): PriceRecord[] {
+  if (records.length <= maxPoints) return [...records];
+  if (maxPoints < 2) return records.length > 0 ? [records[records.length - 1]!] : [];
+
+  const lastIndex = records.length - 1;
+  const step = lastIndex / (maxPoints - 1);
+  const indexes = new Set<number>([0, lastIndex]);
+
+  for (let i = 1; i < maxPoints - 1; i++) {
+    indexes.add(Math.round(i * step));
+  }
+
+  return [...indexes]
+    .sort((a, b) => a - b)
+    .map((index) => records[index]!)
+    .filter(Boolean);
+}
+
 export function hasEnoughGraphHistory(
   snapshots: readonly Snapshot[],
   windowMs: number,
