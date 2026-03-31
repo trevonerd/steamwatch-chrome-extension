@@ -423,7 +423,8 @@ body {
 
 .panel-sparkline {
   position: relative;
-  overflow: hidden;
+  overflow: visible;
+  aspect-ratio: 372 / 56;
 }
 
 /* ── Price history sparkline ─────────────────────────────────── */
