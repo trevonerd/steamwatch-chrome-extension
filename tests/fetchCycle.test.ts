@@ -84,6 +84,65 @@ describe("buildCachedData — ITAD fields", () => {
   });
 });
 
+describe("buildCachedData — price fields", () => {
+  // T2-A: Full-price game (discountPct=0) with price data → caches all price fields
+  it("caches price fields for full-price game (discountPct === 0)", () => {
+    const result = buildCachedData({
+      currentPlayers: 500,
+      fetchedAt: 100,
+      twitchViewers: null,
+      discountPct: 0,
+      priceOriginal: 2499,
+      priceCurrent: 2499,
+      priceFormatted: "$24.99",
+      priceOriginalFormatted: "$24.99",
+    });
+    expect(result.priceFormatted).toBe("$24.99");
+    expect(result.priceOriginalFormatted).toBe("$24.99");
+    expect(result.discountPct).toBe(0);
+    expect(result.priceOriginal).toBe(2499);
+    expect(result.priceCurrent).toBe(2499);
+  });
+
+  // T2-B: Sale game (discountPct > 0) → caches all price + discount fields (regression check)
+  it("caches all price fields for sale game (discountPct > 0)", () => {
+    const result = buildCachedData({
+      currentPlayers: 500,
+      fetchedAt: 100,
+      twitchViewers: null,
+      discountPct: 50,
+      priceOriginal: 2999,
+      priceCurrent: 1499,
+      priceFormatted: "$14.99",
+      priceOriginalFormatted: "$29.99",
+    });
+    expect(result.discountPct).toBe(50);
+    expect(result.priceFormatted).toBe("$14.99");
+    expect(result.priceOriginalFormatted).toBe("$29.99");
+  });
+
+  // T2-C: No price data + prevCache has price → carries forward from prevCache
+  it("carries forward price fields from prevCache when no fresh price data", () => {
+    const result = buildCachedData({
+      currentPlayers: 500,
+      fetchedAt: 100,
+      twitchViewers: null,
+      // No price fields passed at all
+      prevCache: {
+        current: 400,
+        fetchedAt: 50,
+        localAllTimePeak: 400,
+        priceFormatted: "$19.99",
+        priceOriginalFormatted: "$19.99",
+        discountPct: 0,
+      },
+    });
+    expect(result.priceFormatted).toBe("$19.99");
+    expect(result.priceOriginalFormatted).toBe("$19.99");
+    expect(result.discountPct).toBe(0);
+  });
+});
+
 describe("mergeCycleCache", () => {
   const makeGame = (appid: string) => ({
     appid,

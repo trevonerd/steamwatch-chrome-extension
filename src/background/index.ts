@@ -211,13 +211,13 @@ async function fetchGame(
     twitchViewers,
     ...(priceData != null
       ? {
-          priceOriginal:         priceData.priceOriginal,
-          priceCurrent:          priceData.priceCurrent,
-          discountPct:           priceData.discountPct,
-          priceFormatted:        priceData.currentFormatted,
+          priceOriginal:          priceData.priceOriginal,
+          priceCurrent:           priceData.priceCurrent,
+          discountPct:            priceData.discountPct,
+          priceFormatted:         priceData.currentFormatted,
           priceOriginalFormatted: priceData.originalFormatted,
         }
-      : { discountPct: 0 }), // signal "not on sale" so buildCachedData clears prev price
+      : {}), // no price data: buildCachedData will carry forward from prevCache
   });
 
   let itadUuid: string | undefined;

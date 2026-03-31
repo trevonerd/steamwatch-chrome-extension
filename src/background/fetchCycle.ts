@@ -56,27 +56,22 @@ export function buildCachedData(input: BuildCachedDataInput): CachedData {
   const prevLocalPeak = prevCache?.localAllTimePeak ?? prevCache?.current ?? 0;
   const localAllTimePeak = Math.max(prevLocalPeak, currentPlayers, allTimePeak ?? 0);
 
-  // For price: if we received fresh price data (discountPct > 0) use it;
-  // if discountPct is 0/null, clear sale fields (sale ended).
-  // Carry forward only if we received no price data at all (null input).
   const hasFreshPrice = discountPct != null;
-  const priceFields: Partial<CachedData> = hasFreshPrice && discountPct > 0
+  const priceFields: Partial<CachedData> = hasFreshPrice
     ? {
-        priceOriginal,
-        priceCurrent,
-        discountPct,
-        ...(priceFormatted ? { priceFormatted } : {}),
+        ...(priceOriginal      != null ? { priceOriginal }      : {}),
+        ...(priceCurrent       != null ? { priceCurrent }       : {}),
+        discountPct,  // 0 for full-price, >0 for sale
+        ...(priceFormatted         ? { priceFormatted }         : {}),
         ...(priceOriginalFormatted ? { priceOriginalFormatted } : {}),
       }
-    : hasFreshPrice
-      ? {} // discountPct === 0: sale ended, clear cached price
-      : {  // no fresh data: carry forward from prev cache
-          ...(prevCache?.priceOriginal != null ? { priceOriginal: prevCache.priceOriginal } : {}),
-          ...(prevCache?.priceCurrent  != null ? { priceCurrent:  prevCache.priceCurrent  } : {}),
-          ...(prevCache?.discountPct   != null ? { discountPct:   prevCache.discountPct   } : {}),
-          ...(prevCache?.priceFormatted         ? { priceFormatted:         prevCache.priceFormatted         } : {}),
-          ...(prevCache?.priceOriginalFormatted ? { priceOriginalFormatted: prevCache.priceOriginalFormatted } : {}),
-        };
+    : {  // no fresh data: carry forward from prev cache
+        ...(prevCache?.priceOriginal         != null ? { priceOriginal:         prevCache.priceOriginal         } : {}),
+        ...(prevCache?.priceCurrent          != null ? { priceCurrent:          prevCache.priceCurrent          } : {}),
+        ...(prevCache?.discountPct           != null ? { discountPct:           prevCache.discountPct           } : {}),
+        ...(prevCache?.priceFormatted             ? { priceFormatted:         prevCache.priceFormatted         } : {}),
+        ...(prevCache?.priceOriginalFormatted ? { priceOriginalFormatted: prevCache.priceOriginalFormatted } : {}),
+      };
 
   return {
     current: currentPlayers,
