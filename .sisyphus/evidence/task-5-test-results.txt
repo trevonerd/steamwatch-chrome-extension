@@ -1,0 +1,15 @@
+
+> steamwatch@0.12.0 test /Users/m.trevisani/repos/trevonerd/steamwatch
+> vitest run tests/history-stats.test.ts
+
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v1.6.1 /Users/m.trevisani/repos/trevonerd/steamwatch
+
+ ✓ tests/history-stats.test.ts  (45 tests) 13ms
+
+ Test Files  1 passed (1)
+      Tests  45 passed (45)
+   Start at  11:59:42
+   Duration  658ms (transform 27ms, setup 56ms, collect 32ms, tests 13ms, environment 282ms, prepare 74ms)
+
