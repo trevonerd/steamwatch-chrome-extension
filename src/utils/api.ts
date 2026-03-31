@@ -193,7 +193,8 @@ const PriceOverviewSchema = z.object({
 
 /**
  * Fetch current price and sale discount from the Steam Store API.
- * Returns null for free games, network failures, or when discount is 0.
+ * Returns PriceData for all paid games (including full-price games not on sale).
+ * Returns null only for free games, network failures, or API errors.
  */
 export async function fetchPriceData(appid: string): Promise<PriceData | null> {
   try {
@@ -212,7 +213,6 @@ export async function fetchPriceData(appid: string): Promise<PriceData | null> {
     const parsed = PriceOverviewSchema.safeParse(price_overview);
     if (!parsed.success) return null;
     const { initial, final, discount_percent, final_formatted, initial_formatted } = parsed.data;
-    if (discount_percent === 0) return null; // not on sale
     return {
       priceOriginal:     initial,
       priceCurrent:      final,

@@ -291,12 +291,18 @@ describe("fetchPriceData", () => {
     expect(result!.currentFormatted).toBe("$12.49");
   });
 
-  it("returns null when discount is 0 (not on sale)", async () => {
+  it("returns price data when discount is 0 (full-price, not on sale)", async () => {
     mockFetch({ "570": {
       success: true,
       data: { price_overview: { initial: 2499, final: 2499, discount_percent: 0, initial_formatted: "$24.99", final_formatted: "$24.99" } },
     }});
-    expect(await fetchPriceData("570")).toBeNull();
+    const result = await fetchPriceData("570");
+    expect(result).not.toBeNull();
+    expect(result!.discountPct).toBe(0);
+    expect(result!.priceOriginal).toBe(2499);
+    expect(result!.priceCurrent).toBe(2499);
+    expect(result!.originalFormatted).toBe("$24.99");
+    expect(result!.currentFormatted).toBe("$24.99");
   });
 
   it("returns null for free game (no price_overview)", async () => {
