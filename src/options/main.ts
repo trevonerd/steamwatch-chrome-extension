@@ -25,6 +25,7 @@ import {
   buildAvailableGraphWindows,
   sparklineColor,
   findNearestPointIndex,
+  buildPriceSparklineSVG,
 } from "../utils/sparkline.js";
 import { fmtNumber, fmtPct, compute24hAvg, computeRetentionAvg, computeLocalPeak, computeWindowMin, compute24hGain, computeRetentionGain, computeTrend, computeLatestChangePct } from "../utils/trend.js";
 
@@ -551,6 +552,7 @@ async function initHistory(): Promise<void> {
   const hTwitch       = document.getElementById("history-twitch")       as HTMLDivElement    | null;
   const hSaleBadgeWrap = document.getElementById("history-sale-badge-wrap") as HTMLDivElement | null;
   const hSaleBadge    = document.getElementById("history-sale-badge")   as HTMLDivElement    | null;
+  const hPriceSparkline = document.getElementById("history-price-sparkline") as HTMLDivElement | null;
   if (!selectEl || !tabsEl || !chartEl || !emptyEl || !noGameEl || !statsEl) return;
 
   const settings = await getSettings();
@@ -604,6 +606,7 @@ async function initHistory(): Promise<void> {
       if (hInfoHeader) hInfoHeader.hidden = true;
       if (hTwitch) hTwitch.textContent = "—";
       if (hSaleBadgeWrap) hSaleBadgeWrap.style.display = "none";
+      if (hPriceSparkline) { hPriceSparkline.innerHTML = ""; hPriceSparkline.hidden = true; }
       return;
     }
     if (noGameEl) noGameEl.hidden = true;
@@ -622,6 +625,7 @@ async function initHistory(): Promise<void> {
       if (hInfoHeader) hInfoHeader.hidden = true;
       if (hTwitch) hTwitch.textContent = "—";
       if (hSaleBadgeWrap) hSaleBadgeWrap.style.display = "none";
+      if (hPriceSparkline) { hPriceSparkline.innerHTML = ""; hPriceSparkline.hidden = true; }
       return;
     }
     if (emptyEl) emptyEl.hidden = true;
@@ -887,11 +891,22 @@ async function initHistory(): Promise<void> {
           if (hStatHistLow)      hStatHistLow.textContent      = `$${(histLow.priceAmountInt / 100).toFixed(2)}`;
           if (hStatCurrentPrice) hStatCurrentPrice.textContent = `$${(latest.priceAmountInt / 100).toFixed(2)}`;
           if (hStatDiscount)     hStatDiscount.textContent     = latest.cut > 0 ? `-${latest.cut}%` : "—";
+          if (hPriceSparkline) {
+            const priceSvg = buildPriceSparklineSVG(priceHistory);
+            if (priceSvg) {
+              hPriceSparkline.innerHTML = priceSvg;
+              hPriceSparkline.hidden = false;
+            } else {
+              hPriceSparkline.hidden = true;
+            }
+          }
         } else {
           hItadPriceSection.hidden = true;
+          if (hPriceSparkline) { hPriceSparkline.innerHTML = ""; hPriceSparkline.hidden = true; }
         }
       } else {
         hItadPriceSection.hidden = true;
+        if (hPriceSparkline) { hPriceSparkline.innerHTML = ""; hPriceSparkline.hidden = true; }
       }
     }
   }

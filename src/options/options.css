@@ -635,6 +635,7 @@ code {
 .itad-credit { font-size: 10px; text-transform: none; letter-spacing: normal; }
 .itad-credit a { color: var(--accent); text-decoration: none; }
 .itad-credit a:hover { text-decoration: underline; }
+.history-price-sparkline { margin-top: 10px; overflow: visible; }
 
 /* ── Game row image placeholder ─────────────────────────────────────────── */
 .game-row-thumb-wrap {
