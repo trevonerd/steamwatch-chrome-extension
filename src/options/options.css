@@ -703,3 +703,44 @@ code {
   pointer-events: none;
   z-index:    10;
 }
+
+.history-info-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0;
+}
+
+.history-thumbnail {
+  width: 120px;
+  height: 45px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid rgba(255,255,255,.08);
+  flex-shrink: 0;
+}
+
+.history-info-links {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.history-link {
+  color: var(--accent, #60a5fa);
+  text-decoration: none;
+  font-size: 12px;
+  opacity: 0.85;
+  transition: opacity 0.15s;
+}
+
+.history-link:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
+.history-sale-badge {
+  color: #4ade80;
+  font-weight: 600;
+}

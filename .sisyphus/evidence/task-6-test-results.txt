@@ -1,0 +1,33 @@
+
+> steamwatch@0.12.0 test /Users/m.trevisani/repos/trevonerd/steamwatch
+> vitest run
+
+
+ RUN  v1.6.1 /Users/m.trevisani/repos/trevonerd/steamwatch
+
+ ✓ tests/storage.test.ts  (36 tests) 7ms
+ ✓ tests/quietHours.test.ts  (24 tests) 3ms
+ ✓ tests/forecast.test.ts  (22 tests) 3ms
+ ✓ tests/graph-windows.test.ts  (27 tests) 6ms
+ ✓ tests/mapToPoints.test.ts  (18 tests) 7ms
+ ✓ tests/sparkline.test.ts  (45 tests) 6ms
+ ✓ tests/trend.test.ts  (57 tests) 22ms
+ ✓ tests/api.test.ts  (34 tests) 10ms
+ ✓ tests/compaction.test.ts  (8 tests) 38ms
+ ✓ tests/exporter.test.ts  (17 tests) 7ms
+ ✓ tests/share.test.ts  (18 tests) 5ms
+ ✓ tests/card.test.ts  (44 tests) 7ms
+ ✓ tests/history-chart.test.ts  (4 tests) 3ms
+ ✓ tests/itad-api.test.ts  (8 tests) 3ms
+ ✓ tests/migrate.test.ts  (9 tests) 12ms
+ ✓ tests/idb-storage.test.ts  (7 tests) 18ms
+ ✓ tests/fetchCycle.test.ts  (9 tests) 2ms
+ ✓ tests/history-price.test.ts  (19 tests) 9ms
+ ✓ tests/popup-dom.test.ts  (12 tests) 8ms
+ ✓ tests/history-stats.test.ts  (45 tests) 13ms
+
+ Test Files  20 passed (20)
+      Tests  463 passed (463)
+   Start at  11:56:43
+   Duration  906ms (transform 501ms, setup 1.02s, collect 2.02s, tests 189ms, environment 755ms, prepare 2.11s)
+

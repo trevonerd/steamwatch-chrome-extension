@@ -544,6 +544,13 @@ async function initHistory(): Promise<void> {
   const hPeriodGain   = document.getElementById("history-period-gain")   as HTMLDivElement | null;
   const hTrend        = document.getElementById("history-trend")         as HTMLDivElement | null;
   const hLatestChange = document.getElementById("history-latest-change") as HTMLDivElement | null;
+  const hInfoHeader   = document.getElementById("historyInfoHeader")    as HTMLDivElement    | null;
+  const hThumbnail    = document.getElementById("history-thumbnail")    as HTMLImageElement  | null;
+  const hSteamLink    = document.getElementById("history-steam-link")   as HTMLAnchorElement | null;
+  const hSteamdbLink  = document.getElementById("history-steamdb-link") as HTMLAnchorElement | null;
+  const hTwitch       = document.getElementById("history-twitch")       as HTMLDivElement    | null;
+  const hSaleBadgeWrap = document.getElementById("history-sale-badge-wrap") as HTMLDivElement | null;
+  const hSaleBadge    = document.getElementById("history-sale-badge")   as HTMLDivElement    | null;
   if (!selectEl || !tabsEl || !chartEl || !emptyEl || !noGameEl || !statsEl) return;
 
   const settings = await getSettings();
@@ -594,6 +601,9 @@ async function initHistory(): Promise<void> {
       [hPeak24h, hAllTimePeak, h24hGain, hPeriodGain, hTrend, hLatestChange].forEach(el => {
         if (el) el.textContent = "—";
       });
+      if (hInfoHeader) hInfoHeader.hidden = true;
+      if (hTwitch) hTwitch.textContent = "—";
+      if (hSaleBadgeWrap) hSaleBadgeWrap.style.display = "none";
       return;
     }
     if (noGameEl) noGameEl.hidden = true;
@@ -609,6 +619,9 @@ async function initHistory(): Promise<void> {
       [hPeak24h, hAllTimePeak, h24hGain, hPeriodGain, hTrend, hLatestChange].forEach(el => {
         if (el) el.textContent = "—";
       });
+      if (hInfoHeader) hInfoHeader.hidden = true;
+      if (hTwitch) hTwitch.textContent = "—";
+      if (hSaleBadgeWrap) hSaleBadgeWrap.style.display = "none";
       return;
     }
     if (emptyEl) emptyEl.hidden = true;
@@ -799,6 +812,30 @@ async function initHistory(): Promise<void> {
     const latestChangePct = computeLatestChangePct(allSnaps);
     if (hLatestChange) {
       hLatestChange.textContent = latestChangePct != null ? fmtPct(latestChangePct) : "—";
+    }
+
+    // ── Info header: thumbnail + links ──
+    if (appid) {
+      if (hThumbnail) {
+        hThumbnail.src = `https://cdn.akamai.steamstatic.com/steam/apps/${appid}/capsule_sm_120.jpg`;
+        hThumbnail.alt = games.find((g) => g.appid === appid)?.name ?? "";
+      }
+      if (hSteamLink)   hSteamLink.href   = `https://store.steampowered.com/app/${appid}`;
+      if (hSteamdbLink) hSteamdbLink.href = `https://steamdb.info/app/${appid}`;
+      if (hInfoHeader)  hInfoHeader.hidden = false;
+    }
+
+    // ── Twitch viewers + sale badge ──
+    if (hTwitch) {
+      hTwitch.textContent = fmtNumber(cached?.twitchViewers ?? null);
+    }
+    if (hSaleBadgeWrap && hSaleBadge) {
+      if (cached?.discountPct && cached.discountPct > 0) {
+        hSaleBadge.textContent = `-${cached.discountPct}%`;
+        hSaleBadgeWrap.style.display = "";
+      } else {
+        hSaleBadgeWrap.style.display = "none";
+      }
     }
 
     const itadUuid = await idbGetItadMapping(appid);

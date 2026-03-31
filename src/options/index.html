@@ -392,6 +392,14 @@
           <p class="history-no-game" id="historyNoGame">Select a game above to view its history.</p>
         </div>
 
+        <div class="history-info-header" id="historyInfoHeader" hidden>
+          <img id="history-thumbnail" class="history-thumbnail" src="" alt="" loading="lazy">
+          <div class="history-info-links">
+            <a id="history-steam-link" class="history-link" href="" target="_blank" rel="noopener noreferrer">Steam Store ↗</a>
+            <a id="history-steamdb-link" class="history-link" href="" target="_blank" rel="noopener noreferrer">SteamDB ↗</a>
+          </div>
+        </div>
+
         <div class="history-stats" id="historyStats" hidden>
           <div class="history-stat">
             <div class="history-stat-label">Current</div>
@@ -440,6 +448,14 @@
           <div class="history-stat">
             <div class="history-stat-label">Latest Change</div>
             <div class="history-stat-value" id="history-latest-change">—</div>
+          </div>
+          <div class="history-stat">
+            <div class="history-stat-label">Twitch Viewers</div>
+            <div class="history-stat-value" id="history-twitch">—</div>
+          </div>
+          <div class="history-stat" id="history-sale-badge-wrap" style="display:none">
+            <div class="history-stat-label">On Sale</div>
+            <div class="history-stat-value history-sale-badge" id="history-sale-badge">—</div>
           </div>
         </div>
 
