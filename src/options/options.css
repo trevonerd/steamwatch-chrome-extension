@@ -732,6 +732,30 @@ code {
   flex-shrink: 0;
 }
 
+.history-thumbnail-wrapper {
+  position: relative;
+  display: inline-block;
+  width: 120px;
+  height: 45px;
+}
+
+.history-placeholder {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: var(--thumb-color, #2563eb);
+  border-radius: 4px;
+  border: 1px solid rgba(255,255,255,.08);
+}
+
+.history-thumbnail-wrapper.img-error .history-thumbnail { display: none; }
+.history-thumbnail-wrapper.img-error .history-placeholder { display: flex; }
+
 .history-info-links {
   display: flex;
   gap: 0.75rem;

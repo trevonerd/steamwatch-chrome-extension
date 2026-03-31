@@ -547,6 +547,7 @@ async function initHistory(): Promise<void> {
   const hLatestChange = document.getElementById("history-latest-change") as HTMLDivElement | null;
   const hInfoHeader   = document.getElementById("historyInfoHeader")    as HTMLDivElement    | null;
   const hThumbnail    = document.getElementById("history-thumbnail")    as HTMLImageElement  | null;
+  const hThumbnailWrapper = document.querySelector(".history-thumbnail-wrapper") as HTMLDivElement | null;
   const hSteamLink    = document.getElementById("history-steam-link")   as HTMLAnchorElement | null;
   const hSteamdbLink  = document.getElementById("history-steamdb-link") as HTMLAnchorElement | null;
   const hTwitch       = document.getElementById("history-twitch")       as HTMLDivElement    | null;
@@ -823,6 +824,9 @@ async function initHistory(): Promise<void> {
       if (hThumbnail) {
         hThumbnail.src = `https://cdn.akamai.steamstatic.com/steam/apps/${appid}/capsule_sm_120.jpg`;
         hThumbnail.alt = games.find((g) => g.appid === appid)?.name ?? "";
+        if (hThumbnailWrapper) {
+          wireThumbFallback(hThumbnail, hThumbnailWrapper, appid);
+        }
       }
       if (hSteamLink)   hSteamLink.href   = `https://store.steampowered.com/app/${appid}`;
       if (hSteamdbLink) hSteamdbLink.href = `https://steamdb.info/app/${appid}`;
