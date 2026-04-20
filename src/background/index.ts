@@ -15,8 +15,9 @@ import {
   setCache,
   getCache,
   setLastFetchTime,
+  getEffectiveRegion,
 } from "../utils/storage.js";
-import { idbSaveSnapshot, idbGetSnapshots, idbSaveItadMapping, idbGetItadMapping } from "../utils/idb-storage.js";
+import { idbSaveSnapshot, idbGetSnapshots, idbSaveItadMapping, idbGetItadMapping, idbGetCooldown, idbSetCooldown } from "../utils/idb-storage.js";
 import { migrateToIndexedDB } from "../utils/migrate.js";
 import { computeTrend, detectSpike, fmtNumber, fmtBadge } from "../utils/trend.js";
 import { isQuietNow } from "../utils/quietHours.js";
@@ -43,8 +44,6 @@ const COOLDOWNS: Record<string, number> = {
   absolute:   60 * 60_000,
   price_drop: 120 * 60_000,
 };
-
-const lastNotifiedAt = new Map<string, number>();
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
@@ -184,10 +183,11 @@ async function fetchGame(
     fetchCurrentPlayers(game.appid),
     fetchSteamSpyData(game.appid),
   ]);
-  const [chartsData, twitchViewers, priceData] = await Promise.all([
+  const region = getEffectiveRegion(settings);
+  const [chartsData, twitchViewers, priceResult] = await Promise.all([
     fetchSteamChartsData(game.appid),
     fetchTwitchViewers(game.name).catch(() => null),
-    fetchPriceData(game.appid).catch(() => null),
+    fetchPriceData(game.appid, region),
   ]);
 
   const resolvedCurrent = currentPlayers ?? chartsData.current ?? null;
@@ -201,6 +201,19 @@ async function fetchGame(
     resolvedCurrent,
   );
 
+  const priceInput =
+    priceResult.kind === "priced"
+      ? {
+          priceOriginal:          priceResult.data.priceOriginal,
+          priceCurrent:           priceResult.data.priceCurrent,
+          discountPct:            priceResult.data.discountPct,
+          priceFormatted:         priceResult.data.currentFormatted,
+          priceOriginalFormatted: priceResult.data.originalFormatted,
+        }
+      : priceResult.kind === "error"
+        ? { priceError: true as const }
+        : {};
+
   const cacheData = buildCachedData({
     currentPlayers: resolvedCurrent,
     peak24h: chartsData.peak24h,
@@ -209,15 +222,7 @@ async function fetchGame(
     prevCache,
     fetchedAt,
     twitchViewers,
-    ...(priceData != null
-      ? {
-          priceOriginal:          priceData.priceOriginal,
-          priceCurrent:           priceData.priceCurrent,
-          discountPct:            priceData.discountPct,
-          priceFormatted:         priceData.currentFormatted,
-          priceOriginalFormatted: priceData.originalFormatted,
-        }
-      : {}), // no price data: buildCachedData will carry forward from prevCache
+    ...priceInput,
   });
 
   let itadUuid: string | undefined;
@@ -370,15 +375,13 @@ async function notify(game: Game, type: string, title: string, message: string):
   const key = `${game.appid}__${type}`;
   const now = Date.now();
 
-  // Check cooldown first (cheap, synchronous-equivalent)
-  if ((lastNotifiedAt.get(key) ?? 0) + cooldown > now) return;
+  const expiresAt = await idbGetCooldown(key).catch(() => null);
+  if (expiresAt !== null && expiresAt > now) return;
 
-  // Quiet hours check — suppress silently WITHOUT consuming the cooldown slot,
-  // so the notification will fire on the next cycle once quiet hours are over.
   const settings = await getSettings();
   if (isQuietNow(settings)) return;
 
-  lastNotifiedAt.set(key, now);
+  await idbSetCooldown(key, now + cooldown).catch(() => undefined);
   chrome.notifications.create(`sw_${key}_${now}`, {
     type:     "basic",
     iconUrl:  "/icons/logo-128.png",

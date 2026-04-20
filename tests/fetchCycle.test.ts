@@ -141,6 +141,46 @@ describe("buildCachedData — price fields", () => {
     expect(result.priceOriginalFormatted).toBe("$19.99");
     expect(result.discountPct).toBe(0);
   });
+
+  it("sets priceError when fetch errored and no prevCache price", () => {
+    const result = buildCachedData({
+      currentPlayers: 500,
+      fetchedAt: 100,
+      twitchViewers: null,
+      priceError: true,
+    });
+    expect(result.priceError).toBe(true);
+    expect(result.priceFormatted).toBeUndefined();
+  });
+
+  it("carries forward price AND sets priceError when fetch errored with prevCache price", () => {
+    const result = buildCachedData({
+      currentPlayers: 500,
+      fetchedAt: 100,
+      twitchViewers: null,
+      priceError: true,
+      prevCache: {
+        current: 400,
+        fetchedAt: 50,
+        priceFormatted: "$29.99",
+        priceOriginalFormatted: "$29.99",
+        discountPct: 0,
+      },
+    });
+    expect(result.priceError).toBe(true);
+    expect(result.priceFormatted).toBe("$29.99");
+    expect(result.discountPct).toBe(0);
+  });
+
+  it("does not set priceError when priceError is false", () => {
+    const result = buildCachedData({
+      currentPlayers: 500,
+      fetchedAt: 100,
+      twitchViewers: null,
+      priceError: false,
+    });
+    expect(result.priceError).toBeUndefined();
+  });
 });
 
 describe("mergeCycleCache", () => {

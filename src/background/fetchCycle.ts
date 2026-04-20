@@ -18,6 +18,7 @@ export interface BuildCachedDataInput {
   readonly discountPct?: number;
   readonly priceFormatted?: string;
   readonly priceOriginalFormatted?: string;
+  readonly priceError?: boolean;
   readonly itadUuid?: string;
   readonly itadHistoricalLow?: { amountInt: number; cut: number; timestamp: string };
 }
@@ -49,6 +50,7 @@ export function buildCachedData(input: BuildCachedDataInput): CachedData {
     discountPct,
     priceFormatted,
     priceOriginalFormatted,
+    priceError,
     itadUuid,
     itadHistoricalLow,
   } = input;
@@ -65,12 +67,13 @@ export function buildCachedData(input: BuildCachedDataInput): CachedData {
         ...(priceFormatted         ? { priceFormatted }         : {}),
         ...(priceOriginalFormatted ? { priceOriginalFormatted } : {}),
       }
-    : {  // no fresh data: carry forward from prev cache
+    : {  // no fresh price data: carry forward from prevCache (or flag error)
         ...(prevCache?.priceOriginal         != null ? { priceOriginal:         prevCache.priceOriginal         } : {}),
         ...(prevCache?.priceCurrent          != null ? { priceCurrent:          prevCache.priceCurrent          } : {}),
         ...(prevCache?.discountPct           != null ? { discountPct:           prevCache.discountPct           } : {}),
         ...(prevCache?.priceFormatted             ? { priceFormatted:         prevCache.priceFormatted         } : {}),
         ...(prevCache?.priceOriginalFormatted ? { priceOriginalFormatted: prevCache.priceOriginalFormatted } : {}),
+        ...(priceError ? { priceError: true } : {}),
       };
 
   return {
