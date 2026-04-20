@@ -378,7 +378,86 @@ describe("buildCardViewModel — record lows and ITAD data", () => {
     ];
     const vm = buildCardViewModel(game, cache, snapsWithTimestamps, 7);
     expect(vm.allTimeLow?.value).toBe(10_000);
-    expect(vm.allTimeLow?.timestamp).toBe(snapsWithTimestamps[0]!.ts);
+   expect(vm.allTimeLow?.timestamp).toBe(snapsWithTimestamps[0]!.ts);
+   });
+});
+
+// ── priceState derivation ─────────────────────────────────────────────────────
+
+describe("priceState derivation", () => {
+  it("returns 'loading' when data is undefined (never fetched)", () => {
+    const vm = buildCardViewModel(game, {}, snaps12, 7);
+    expect(vm.priceState).toBe("loading");
+  });
+
+  it("returns 'available' when priceFormatted exists", () => {
+    const cacheWithPrice = {
+      "1245620": {
+        ...cache["1245620"]!,
+        priceFormatted: "$24.99",
+      },
+    };
+    const vm = buildCardViewModel(game, cacheWithPrice, snaps12, 7);
+    expect(vm.priceState).toBe("available");
+  });
+
+  it("returns 'unavailable' when priceError is true", () => {
+    const cacheWithError = {
+      "1245620": {
+        ...cache["1245620"]!,
+        priceError: true,
+      },
+    };
+    const vm = buildCardViewModel(game, cacheWithError, snaps12, 7);
+    expect(vm.priceState).toBe("unavailable");
+  });
+
+  it("returns 'free' when data exists but no price and no error", () => {
+    const cacheFreeGame = {
+      "1245620": {
+        ...cache["1245620"]!,
+        priceFormatted: undefined,
+        priceError: undefined,
+      },
+    };
+    const vm = buildCardViewModel(game, cacheFreeGame, snaps12, 7);
+    expect(vm.priceState).toBe("free");
+  });
+
+  it("prioritizes priceFormatted over free state", () => {
+    const cacheWithPrice = {
+      "1245620": {
+        ...cache["1245620"]!,
+        priceFormatted: "$9.99",
+        priceError: undefined,
+      },
+    };
+    const vm = buildCardViewModel(game, cacheWithPrice, snaps12, 7);
+    expect(vm.priceState).toBe("available");
+  });
+
+  it("prioritizes priceError over free state", () => {
+    const cacheWithError = {
+      "1245620": {
+        ...cache["1245620"]!,
+        priceFormatted: undefined,
+        priceError: true,
+      },
+    };
+    const vm = buildCardViewModel(game, cacheWithError, snaps12, 7);
+    expect(vm.priceState).toBe("unavailable");
+  });
+
+  it("returns 'available' when both priceFormatted and priceError are present (price takes precedence)", () => {
+    const cacheWithBoth = {
+      "1245620": {
+        ...cache["1245620"]!,
+        priceFormatted: "$19.99",
+        priceError: true,
+      },
+    };
+    const vm = buildCardViewModel(game, cacheWithBoth, snaps12, 7);
+    expect(vm.priceState).toBe("available");
   });
 });
 

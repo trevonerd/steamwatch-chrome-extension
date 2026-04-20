@@ -34,8 +34,12 @@ export interface CachedData {
   readonly priceFormatted?: string;
   readonly priceOriginalFormatted?: string;
   readonly itadUuid?: string;
-  readonly itadHistoricalLow?: { amountInt: number; cut: number; timestamp: string };
+   readonly itadHistoricalLow?: { amountInt: number; cut: number; timestamp: string };
+   readonly priceError?: boolean;
 }
+
+/** Price availability state for UI display. */
+export type PriceState = "available" | "free" | "unavailable" | "loading";
 
 // ── Settings ─────────────────────────────────────────────────────────────────
 
@@ -240,9 +244,10 @@ export interface CardViewModel {
   readonly snaps: readonly Snapshot[];
   readonly sparklineStroke: string;
   readonly svgStr: string | null;
-  /** Timestamp of the last successful fetch (0 if never). */
-  readonly fetchedAt: number;
-  readonly twitchViewers?: number;
+   /** Timestamp of the last successful fetch (0 if never). */
+   readonly fetchedAt: number;
+   readonly priceState: PriceState;
+   readonly twitchViewers?: number;
   /** Price drop / sale fields. Present only for paid games currently on sale. */
   readonly discountPct?: number;
   readonly priceFormatted?: string;
