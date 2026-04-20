@@ -58,6 +58,8 @@ export interface Settings {
   // Price drop alerts
   priceAlertsEnabled: boolean;  // notify on Steam sales
   priceDropMinPct: number;      // minimum discount % to trigger alert, e.g. 30
+  // Region detection
+  regionCode?: string;          // "auto" = detect at runtime, or 2-letter ISO 3166-1 code (e.g., "IT", "US")
   // Badge favorite
   badgeFavoriteAppid?: string;  // appid of the game whose count shows on the badge
 }
