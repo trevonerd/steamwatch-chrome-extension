@@ -6,6 +6,7 @@
 
 import { z } from "zod";
 import type { SearchResult, SteamChartsData, SteamSpyData } from "../types/index.js";
+import { withRetry } from "./retry.js";
 
 export const STEAM_CAPSULE_URL = (appid: string): string =>
   `https://cdn.akamai.steamstatic.com/steam/apps/${appid}/capsule_sm_120.jpg`;
@@ -183,6 +184,11 @@ export interface PriceData {
   readonly originalFormatted: string;
 }
 
+export type PriceResult =
+  | { kind: "priced"; data: PriceData }
+  | { kind: "free" }
+  | { kind: "error"; reason: string };
+
 const PriceOverviewSchema = z.object({
   initial:           z.number().int().nonnegative(),
   final:             z.number().int().nonnegative(),
@@ -193,35 +199,39 @@ const PriceOverviewSchema = z.object({
 
 /**
  * Fetch current price and sale discount from the Steam Store API.
- * Returns PriceData for all paid games (including full-price games not on sale).
- * Returns null only for free games, network failures, or API errors.
+ * Returns a discriminated union for priced, free, and error states.
  */
-export async function fetchPriceData(appid: string): Promise<PriceData | null> {
+export async function fetchPriceData(appid: string, regionCode = "US"): Promise<PriceResult> {
   try {
-    const res = await fetch(
-      `https://store.steampowered.com/api/appdetails?appids=${encodeURIComponent(appid)}&filters=price_overview&cc=US`
-    );
-    if (!res.ok) return null;
-    const json: unknown = await res.json();
-    if (typeof json !== "object" || json === null) return null;
-    const entry = (json as Record<string, unknown>)[appid];
-    if (typeof entry !== "object" || entry === null) return null;
-    const { success, data } = entry as Record<string, unknown>;
-    if (success !== true || typeof data !== "object" || data === null) return null;
-    const { price_overview } = data as Record<string, unknown>;
-    if (price_overview == null) return null; // free game
-    const parsed = PriceOverviewSchema.safeParse(price_overview);
-    if (!parsed.success) return null;
-    const { initial, final, discount_percent, final_formatted, initial_formatted } = parsed.data;
-    return {
-      priceOriginal:     initial,
-      priceCurrent:      final,
-      discountPct:       discount_percent,
-      currentFormatted:  final_formatted,
-      originalFormatted: initial_formatted,
-    };
-  } catch {
-    return null;
+    return await withRetry(async () => {
+      const res = await fetch(
+        `https://store.steampowered.com/api/appdetails?appids=${encodeURIComponent(appid)}&filters=price_overview&cc=${regionCode}`
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json: unknown = await res.json();
+      if (typeof json !== "object" || json === null) throw new Error("Invalid response");
+      const entry = (json as Record<string, unknown>)[appid];
+      if (typeof entry !== "object" || entry === null) throw new Error("Invalid entry");
+      const { success, data } = entry as Record<string, unknown>;
+      if (success !== true || typeof data !== "object" || data === null) throw new Error("API error");
+      const { price_overview } = data as Record<string, unknown>;
+      if (price_overview == null) return { kind: "free" };
+      const parsed = PriceOverviewSchema.safeParse(price_overview);
+      if (!parsed.success) throw new Error("Price parse failed");
+      const { initial, final, discount_percent, final_formatted, initial_formatted } = parsed.data;
+      return {
+        kind: "priced",
+        data: {
+          priceOriginal:     initial,
+          priceCurrent:      final,
+          discountPct:       discount_percent,
+          currentFormatted:  final_formatted,
+          originalFormatted: initial_formatted,
+        },
+      };
+    }, { maxRetries: 2, label: "fetchPriceData" });
+  } catch (err) {
+    return { kind: "error", reason: String(err) };
   }
 }
 
