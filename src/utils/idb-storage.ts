@@ -3,7 +3,7 @@ import { openDB, type IDBPDatabase, type DBSchema } from "idb";
 import type { PriceRecord, Snapshot } from "../types/index.js";
 
 const DB_NAME = "steamwatch";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 interface SnapshotRow {
   id?: number;
@@ -26,6 +26,11 @@ interface PriceHistoryRow {
   regularAmountInt: number;
   cut: number;
   shop: string;
+}
+
+interface CooldownRow {
+  key: string;
+  expiresAt: number;
 }
 
 interface SteamwatchDb extends DBSchema {
@@ -51,6 +56,10 @@ interface SteamwatchDb extends DBSchema {
       byApp: string;
       byAppTime: [string, number];
     };
+  };
+  cooldowns: {
+    key: string;
+    value: CooldownRow;
   };
 }
 
@@ -83,6 +92,12 @@ function getDB(): Promise<IDBPDatabase<SteamwatchDb>> {
           });
           ph.createIndex("byApp", "appId");
           ph.createIndex("byAppTime", ["appId", "timestamp"]);
+        }
+
+        if (!db.objectStoreNames.contains("cooldowns")) {
+          db.createObjectStore("cooldowns", {
+            keyPath: "key",
+          });
         }
       },
       blocked() {
@@ -225,4 +240,44 @@ export async function _resetDbForTesting(): Promise<void> {
     db.close();
   }
   dbPromise = null;
+}
+
+export async function idbGetCooldown(key: string): Promise<number | null> {
+  const db = await getDB();
+  const entry = await db.get("cooldowns", key);
+
+  if (!entry) {
+    return null;
+  }
+
+  if (entry.expiresAt <= Date.now()) {
+    return null;
+  }
+
+  return entry.expiresAt;
+}
+
+export async function idbSetCooldown(key: string, expiresAt: number): Promise<void> {
+  const db = await getDB();
+  const tx = db.transaction("cooldowns", "readwrite", { durability: "relaxed" });
+  await tx.store.put({
+    key,
+    expiresAt,
+  });
+  await tx.done;
+}
+
+export async function idbPurgeCooldowns(): Promise<void> {
+  const db = await getDB();
+  const tx = db.transaction("cooldowns", "readwrite", { durability: "relaxed" });
+  const now = Date.now();
+  const allEntries = await tx.store.getAll();
+
+  for (const entry of allEntries) {
+    if (entry.expiresAt <= now) {
+      await tx.store.delete(entry.key);
+    }
+  }
+
+  await tx.done;
 }

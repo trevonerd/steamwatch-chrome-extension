@@ -4,13 +4,16 @@ import type { PriceRecord, Snapshot } from "../src/types/index.js";
 import {
   _resetDbForTesting,
   idbDeleteSnapshots,
+  idbGetCooldown,
   idbGetItadMapping,
   idbGetPriceHistory,
   idbGetSnapshots,
   idbGetSnapshotsInRange,
+  idbPurgeCooldowns,
   idbSaveItadMapping,
   idbSavePriceHistory,
   idbSaveSnapshot,
+  idbSetCooldown,
 } from "../src/utils/idb-storage.js";
 
 describe("idb-storage", () => {
@@ -120,5 +123,99 @@ describe("idb-storage", () => {
 
     await expect(idbGetSnapshots("100")).resolves.toEqual([]);
     await expect(idbGetSnapshots("200")).resolves.toEqual([{ ts: 1000, current: 30 }]);
+  });
+
+  describe("cooldowns", () => {
+    it("sets and retrieves a cooldown", async () => {
+      const key = "730__spike";
+      const expiresAt = Date.now() + 60000;
+
+      await idbSetCooldown(key, expiresAt);
+      const result = await idbGetCooldown(key);
+
+      expect(result).toBe(expiresAt);
+    });
+
+    it("returns null for missing cooldown", async () => {
+      const result = await idbGetCooldown("nonexistent__key");
+      expect(result).toBeNull();
+    });
+
+    it("returns null for expired cooldown", async () => {
+      const key = "730__spike";
+      const expiresAt = Date.now() - 1000; // expired 1s ago
+
+      await idbSetCooldown(key, expiresAt);
+      const result = await idbGetCooldown(key);
+
+      expect(result).toBeNull();
+    });
+
+    it("returns expiresAt for non-expired cooldown", async () => {
+      const key = "730__spike";
+      const expiresAt = Date.now() + 60000;
+
+      await idbSetCooldown(key, expiresAt);
+      const result = await idbGetCooldown(key);
+
+      expect(result).toBe(expiresAt);
+    });
+
+    it("updates existing cooldown", async () => {
+      const key = "730__spike";
+      const firstExpiry = Date.now() + 30000;
+      const secondExpiry = Date.now() + 90000;
+
+      await idbSetCooldown(key, firstExpiry);
+      await idbSetCooldown(key, secondExpiry);
+
+      const result = await idbGetCooldown(key);
+      expect(result).toBe(secondExpiry);
+    });
+
+    it("purges all expired cooldowns", async () => {
+      const now = Date.now();
+      const expiredKey = "730__spike";
+      const validKey = "570__trend";
+
+      await idbSetCooldown(expiredKey, now - 1000); // expired
+      await idbSetCooldown(validKey, now + 60000); // valid
+
+      await idbPurgeCooldowns();
+
+      const expiredResult = await idbGetCooldown(expiredKey);
+      const validResult = await idbGetCooldown(validKey);
+
+      expect(expiredResult).toBeNull();
+      expect(validResult).toBe(now + 60000);
+    });
+
+    it("purges cooldowns with expiresAt exactly at current time", async () => {
+      const now = Date.now();
+      const key = "730__spike";
+
+      await idbSetCooldown(key, now);
+      await idbPurgeCooldowns();
+
+      const result = await idbGetCooldown(key);
+      expect(result).toBeNull();
+    });
+
+    it("keeps non-expired cooldowns after purge", async () => {
+      const now = Date.now();
+      const key1 = "730__spike";
+      const key2 = "570__trend";
+      const key3 = "440__price";
+
+      await idbSetCooldown(key1, now + 10000);
+      await idbSetCooldown(key2, now + 20000);
+      await idbSetCooldown(key3, now + 30000);
+
+      await idbPurgeCooldowns();
+
+      expect(await idbGetCooldown(key1)).toBe(now + 10000);
+      expect(await idbGetCooldown(key2)).toBe(now + 20000);
+      expect(await idbGetCooldown(key3)).toBe(now + 30000);
+    });
   });
 });
