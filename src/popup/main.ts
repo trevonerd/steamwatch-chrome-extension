@@ -75,7 +75,9 @@ async function init(): Promise<void> {
 
     const vms = await buildAllViewModels(games, cache, idbGetSnapshots, settings.purgeAfterDays);
 
-    if (!hasAttemptedRichDataHydration && vms.some(needsRichDataHydration)) {
+    const FIVE_MINUTES = 300_000;
+    const cacheIsStale = lastFetch != null && (Date.now() - lastFetch) > FIVE_MINUTES;
+    if (!hasAttemptedRichDataHydration && (vms.some(needsRichDataHydration) || cacheIsStale)) {
       hasAttemptedRichDataHydration = true;
       try {
         await chrome.runtime.sendMessage<MessageRequest, MessageResponse>({ type: "FETCH_NOW" });
@@ -294,6 +296,7 @@ function populatePanel(panel: HTMLDivElement, vm: CardViewModel): void {
     game, current, peak24h, allTimePeak,
     twitchViewers, avg24h, gain24h, retentionAvg, retentionGain, retentionDays,
     availableGraphWindows, defaultGraphWindow, discountPct, priceFormatted, priceOriginalFormatted,
+    priceState,
   } = vm;
 
   const twitchStr = twitchViewers != null ? fmtNumber(twitchViewers) : "—";
@@ -321,13 +324,16 @@ function populatePanel(panel: HTMLDivElement, vm: CardViewModel): void {
   panel.innerHTML = `
     ${graphSelector}
     <div class="panel-sparkline" aria-hidden="true"></div>
-    <div class="panel-price-section"${(vm.itadUuid || vm.priceFormatted) ? "" : " hidden"}>
-      ${vm.priceFormatted ? `
+    <div class="panel-price-section">
+      ${priceState === "available" ? `
       <div class="panel-steam-price">
-        <span class="panel-steam-price-current">${esc(vm.priceFormatted)}</span>
-        ${vm.priceOriginalFormatted && vm.priceOriginalFormatted !== vm.priceFormatted ? `<s class="panel-steam-price-orig">${esc(vm.priceOriginalFormatted)}</s>` : ""}
-        ${vm.discountPct && vm.discountPct > 0 ? `<span class="panel-steam-price-disc">-${esc(String(vm.discountPct))}%</span>` : ""}
+        <span class="panel-steam-price-current">${esc(priceFormatted ?? "")}</span>
+        ${priceOriginalFormatted && priceOriginalFormatted !== priceFormatted ? `<s class="panel-steam-price-orig">${esc(priceOriginalFormatted)}</s>` : ""}
+        ${discountPct && discountPct > 0 ? `<span class="panel-steam-price-disc">-${esc(String(discountPct))}%</span>` : ""}
       </div>` : ""}
+      ${priceState === "free" ? `<span class="panel-price-free">Free to Play</span>` : ""}
+      ${priceState === "unavailable" ? `<span class="panel-price-unavail">Price unavailable</span>` : ""}
+      ${priceState === "loading" ? `<span class="panel-price-loading">Loading...</span>` : ""}
       ${vm.itadUuid ? `
       <p class="panel-price-label">Price History</p>
       <div class="panel-price-loading">Loading price data...</div>
@@ -373,7 +379,7 @@ function populatePanel(panel: HTMLDivElement, vm: CardViewModel): void {
       const allTimeLowStr = fmtNumber(vm.allTimeLow.value);
       return `<div class="panel-record-low">${esc(windowLabel)} Low: <span class="panel-record-low-val">${esc(windowLowStr)}</span> • All-time Low: <span class="panel-record-low-val">${esc(allTimeLowStr)}</span></div>`;
     })() : `<div class="panel-record-low" hidden></div>`}
-    ${discountPct != null ? `
+    ${discountPct != null && discountPct > 0 ? `
     <div class="panel-sale-badge" aria-label="${esc(`On sale: ${discountPct}% off`)}">
       <span class="sale-pct">ON SALE −${esc(String(discountPct))}%</span>
       ${priceFormatted ? `<span class="sale-price">${esc(priceFormatted)}</span>` : ""}

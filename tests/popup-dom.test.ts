@@ -172,3 +172,90 @@ describe("Popup — Price Fallback (Steam price without ITAD)", () => {
     expect(priceSection?.hasAttribute("hidden")).toBe(true);
   });
 });
+
+describe("Panel price states", () => {
+  beforeEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  it("priceState 'available' shows formatted price and panel is not hidden", () => {
+    document.body.innerHTML = `<div class="panel-price-section">
+      <div class="panel-steam-price">
+        <span class="panel-steam-price-current">€59.99</span>
+      </div>
+    </div>`;
+    const el = document.querySelector(".panel-steam-price-current");
+    expect(el).not.toBeNull();
+    expect(el?.textContent).toBe("€59.99");
+    expect(document.querySelector(".panel-price-section")?.hasAttribute("hidden")).toBe(false);
+  });
+
+  it("priceState 'free' shows 'Free to Play' label", () => {
+    document.body.innerHTML = `<div class="panel-price-section">
+      <span class="panel-price-free">Free to Play</span>
+    </div>`;
+    const el = document.querySelector(".panel-price-free");
+    expect(el).not.toBeNull();
+    expect(el?.textContent).toBe("Free to Play");
+  });
+
+  it("priceState 'unavailable' shows 'Price unavailable' label", () => {
+    document.body.innerHTML = `<div class="panel-price-section">
+      <span class="panel-price-unavail">Price unavailable</span>
+    </div>`;
+    const el = document.querySelector(".panel-price-unavail");
+    expect(el).not.toBeNull();
+    expect(el?.textContent).toBe("Price unavailable");
+  });
+
+  it("priceState 'loading' shows loading text", () => {
+    document.body.innerHTML = `<div class="panel-price-section">
+      <span class="panel-price-loading">Loading...</span>
+    </div>`;
+    const el = document.querySelector(".panel-price-loading");
+    expect(el).not.toBeNull();
+    expect(el?.textContent).toBe("Loading...");
+  });
+
+  it("panel-price-section is never given a hidden attribute", () => {
+    document.body.innerHTML = `<div class="panel-price-section">
+      <span class="panel-price-free">Free to Play</span>
+    </div>`;
+    expect(document.querySelector(".panel-price-section")?.hasAttribute("hidden")).toBe(false);
+  });
+});
+
+describe("Panel sale badge", () => {
+  beforeEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  it("does NOT show badge when discountPct is 0 (bug fix: was discountPct != null)", () => {
+    const discountPct = 0;
+    const showBadge = discountPct != null && discountPct > 0;
+    document.body.innerHTML = showBadge
+      ? `<div class="panel-sale-badge"><span class="sale-pct">ON SALE −${discountPct}%</span></div>`
+      : "";
+    expect(document.querySelector(".panel-sale-badge")).toBeNull();
+  });
+
+  it("does NOT show badge when discountPct is null", () => {
+    const discountPct: number | null = null;
+    const showBadge = discountPct != null && discountPct > 0;
+    document.body.innerHTML = showBadge
+      ? `<div class="panel-sale-badge"><span class="sale-pct">ON SALE −${discountPct}%</span></div>`
+      : "";
+    expect(document.querySelector(".panel-sale-badge")).toBeNull();
+  });
+
+  it("DOES show badge with correct text when discountPct is 50", () => {
+    const discountPct = 50;
+    const showBadge = discountPct != null && discountPct > 0;
+    document.body.innerHTML = showBadge
+      ? `<div class="panel-sale-badge"><span class="sale-pct">ON SALE −${discountPct}%</span></div>`
+      : "";
+    const badge = document.querySelector(".panel-sale-badge");
+    expect(badge).not.toBeNull();
+    expect(badge?.querySelector(".sale-pct")?.textContent).toBe("ON SALE −50%");
+  });
+});

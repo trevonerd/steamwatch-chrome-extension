@@ -450,6 +450,23 @@ body {
   padding: 4px 0;
 }
 
+.panel-price-free {
+  font-size: 11px;
+  font-family: var(--ff-mono);
+  color: var(--text-3);
+  font-style: italic;
+  padding: 4px 0;
+  display: block;
+}
+
+.panel-price-unavail {
+  font-size: 11px;
+  font-family: var(--ff-mono);
+  color: var(--warn);
+  padding: 4px 0;
+  display: block;
+}
+
 .panel-price-sparkline { line-height: 0; }
 .panel-price-sparkline svg { display: block; width: 100%; border-radius: var(--r-sm); }
 
