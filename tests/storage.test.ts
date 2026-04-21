@@ -106,7 +106,7 @@ describe("removeGame", () => {
   });
 
   it("also removes entry from cache", async () => {
-    await setCache({ "1": { current: 1000, peak: 5000, fetchedAt: Date.now() } });
+    await setCache({ "1": { current: 1000, fetchedAt: Date.now() } });
     await removeGame("1");
     const cache = await getCache();
     expect(cache["1"]).toBeUndefined();
@@ -227,7 +227,7 @@ describe("getCache / setCache", () => {
   });
 
   it("stores and retrieves cached data", async () => {
-    const data = { current: 1234, peak: 5000, fetchedAt: Date.now() };
+    const data = { current: 1234, fetchedAt: Date.now() };
     await setCache({ "1": data });
     const cache = await getCache();
     expect(cache["1"]).toEqual(data);
@@ -235,8 +235,8 @@ describe("getCache / setCache", () => {
 
   it("writes a full cache map atomically", async () => {
     await setCache({
-      "1": { current: 100, peak: 500, fetchedAt: 1 },
-      "2": { current: 200, peak: 600, fetchedAt: 2 },
+      "1": { current: 100, fetchedAt: 1 },
+      "2": { current: 200, fetchedAt: 2 },
     });
     const cache = await getCache();
     expect(cache["1"]!.current).toBe(100);

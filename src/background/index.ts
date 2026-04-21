@@ -22,6 +22,7 @@ import { migrateToIndexedDB } from "../utils/migrate.js";
 import { computeTrend, detectSpike, fmtNumber, fmtBadge } from "../utils/trend.js";
 import { isQuietNow } from "../utils/quietHours.js";
 import { buildCachedData, mergeCycleCache } from "./fetchCycle.js";
+import type { BuildCachedDataInput } from "./fetchCycle.js";
 import { lookupItadGame, fetchHistoricalLow } from "../utils/itad-api.js";
 import type {
   CachedData,
@@ -201,7 +202,7 @@ async function fetchGame(
     resolvedCurrent,
   );
 
-  const priceInput =
+  const priceInput: Partial<BuildCachedDataInput> =
     priceResult.kind === "priced"
       ? {
           priceOriginal:          priceResult.data.priceOriginal,
@@ -216,10 +217,10 @@ async function fetchGame(
 
   const cacheData = buildCachedData({
     currentPlayers: resolvedCurrent,
-    peak24h: chartsData.peak24h,
-    allTimePeak: resolvedAllTimePeak > 0 ? resolvedAllTimePeak : undefined,
-    allTimePeakLabel: chartsData.allTimePeakLabel,
-    prevCache,
+    ...(chartsData.peak24h !== undefined ? { peak24h: chartsData.peak24h } : {}),
+    ...(resolvedAllTimePeak > 0 ? { allTimePeak: resolvedAllTimePeak } : {}),
+    ...(chartsData.allTimePeakLabel !== undefined ? { allTimePeakLabel: chartsData.allTimePeakLabel } : {}),
+    ...(prevCache !== undefined ? { prevCache } : {}),
     fetchedAt,
     twitchViewers,
     ...priceInput,

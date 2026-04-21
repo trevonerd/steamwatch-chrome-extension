@@ -7,8 +7,9 @@ import type { PriceRecord } from "../src/types/index.js";
 function makePriceRecords(count: number, spanMs: number): PriceRecord[] {
   const now = Date.now();
   return Array.from({ length: count }, (_, i) => ({
+    appId: "730",
     timestamp: now - spanMs + (i / (count - 1)) * spanMs,
-    priceAmountInt: 2499 + Math.round(Math.sin(i) * 500), // vary price
+    priceAmountInt: 2499 + Math.round(Math.sin(i) * 500),
     regularAmountInt: 2999,
     cut: 0,
     shop: "steam",
@@ -33,12 +34,13 @@ describe("filterPriceRecordsByWindow", () => {
 
   it("returns empty array when no records match window", () => {
     const oldRecords: PriceRecord[] = [{
-      timestamp: Date.now() - 60 * 86_400_000, // 60 days old
-      priceAmountInt: 1999,
-      regularAmountInt: 1999,
-      cut: 0,
-      shop: "steam",
-    }];
+    appId: "730",
+    timestamp: Date.now() - 60 * 86_400_000,
+    priceAmountInt: 1999,
+    regularAmountInt: 1999,
+    cut: 0,
+    shop: "steam",
+  }];
     const sevenDayMs = 7 * 86_400_000;
     expect(filterPriceRecordsByWindow(oldRecords, sevenDayMs)).toHaveLength(0);
   });

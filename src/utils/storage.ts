@@ -76,7 +76,7 @@ export function detectRegion(): string {
     // Try to extract region from locale string (e.g., "it-IT" → "IT")
     const parts = locale.split("-");
     if (parts.length >= 2) {
-      const region = parts[parts.length - 1].toUpperCase();
+      const region = parts[parts.length - 1]!.toUpperCase();
       if (region.length === 2) {
         return region;
       }
@@ -181,11 +181,13 @@ export async function getSettings(): Promise<Settings> {
   return merged;
 }
 
-export async function saveSettings(partial: Partial<Settings>): Promise<void> {
+type SettingsPatch = { [K in keyof Settings]?: Settings[K] | undefined };
+
+export async function saveSettings(partial: SettingsPatch): Promise<void> {
   const current = await getSettings();
   const next = { ...current, ...partial };
-  next.purgeAfterDays = Math.max(MIN_RETENTION_DAYS, next.purgeAfterDays);
-  next.fetchIntervalMinutes = Math.max(5, next.fetchIntervalMinutes);
+  next.purgeAfterDays = Math.max(MIN_RETENTION_DAYS, next.purgeAfterDays ?? MIN_RETENTION_DAYS);
+  next.fetchIntervalMinutes = Math.max(5, next.fetchIntervalMinutes ?? 5);
   await set(KEYS.settings, next);
 }
 

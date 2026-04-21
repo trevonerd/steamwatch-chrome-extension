@@ -265,7 +265,6 @@ describe("getEffectiveRegion", () => {
       rankByPlayers: true,
       priceAlertsEnabled: true,
       priceDropMinPct: 30,
-      regionCode: undefined,
     };
 
     expect(getEffectiveRegion(settings)).toBe("FR");
