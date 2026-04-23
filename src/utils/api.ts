@@ -133,7 +133,10 @@ export async function fetchSteamChartsData(appid: string): Promise<SteamChartsDa
 export async function fetchSteamChartsBootstrap(appid: string): Promise<Snapshot[]> {
   try {
     const res = await fetch(`https://steamcharts.com/app/${encodeURIComponent(appid)}/chart-data.json`);
-    if (!res.ok) return [];
+    if (!res.ok) {
+      console.warn('[SteamWatch] Bootstrap: chart-data.json returned', res.status, 'for', appid);
+      return [];
+    }
     const json: unknown = await res.json();
     const parsed = ChartDataSchema.safeParse(json);
     if (!parsed.success) {
