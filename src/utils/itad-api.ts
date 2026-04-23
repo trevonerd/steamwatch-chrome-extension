@@ -49,7 +49,7 @@ export async function lookupItadGame(steamAppId: string): Promise<string | null>
       const parsed = ItadLookupSchema.safeParse(data);
       if (!parsed.success || !parsed.data.found) return null;
       return parsed.data.game?.id ?? null;
-    }, { maxRetries: 2, label: "ITAD:lookupGame" });
+    }, { maxRetries: 2, label: "ITAD:lookupGame", warnOnly: true });
   } catch {
     return null;
   }
@@ -76,7 +76,7 @@ export async function fetchPriceHistory(
         cut: item.deal.cut,
         shop: "steam",
       }));
-    }, { maxRetries: 2, label: "ITAD:priceHistory" });
+    }, { maxRetries: 2, label: "ITAD:priceHistory", warnOnly: true });
   } catch {
     return [];
   }
@@ -108,7 +108,7 @@ export async function fetchHistoricalLow(
         });
       }
       return result;
-    }, { maxRetries: 2, label: "ITAD:historicalLow" });
+    }, { maxRetries: 2, label: "ITAD:historicalLow", warnOnly: true });
   } catch {
     return new Map();
   }

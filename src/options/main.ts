@@ -277,19 +277,18 @@ async function runSearch(query: string): Promise<void> {
     li.setAttribute("role", "option");
     li.setAttribute("tabindex", "-1");
     li.innerHTML = `
-      <img class="autocomplete-thumb" src="${esc(result.image)}" alt="" loading="lazy">
+      <div class="autocomplete-thumb-wrap">
+        <img class="autocomplete-thumb" src="${esc(result.image)}" alt="" loading="lazy">
+        <div class="thumb-placeholder"></div>
+      </div>
       <span class="autocomplete-name">${esc(result.name)}</span>
       <span class="autocomplete-id">#${esc(result.appid)}</span>
     `;
 
     // CSP-safe image error handler
     const acImg = li.querySelector<HTMLImageElement>(".autocomplete-thumb")!;
-    wireThumbFallback(acImg, acImg, result.appid);
-    acImg.addEventListener("error", () => {
-      if (acImg.src.includes("header.jpg")) {
-        acImg.style.display = "none";
-      }
-    });
+    const wrapDiv = li.querySelector<HTMLElement>(".autocomplete-thumb-wrap")!;
+    wireThumbFallback(acImg, wrapDiv, result.appid);
 
     li.addEventListener("click", async () => {
       acListEl.hidden = true;
@@ -504,6 +503,12 @@ function flashSaveButton(btn: HTMLButtonElement): void {
 // ── Boot ──────────────────────────────────────────────────────────────────────
 
 async function init(): Promise<void> {
+  const { version } = chrome.runtime.getManifest();
+  const sidebarVersionEl = document.getElementById("sidebarVersion");
+  const aboutVersionEl   = document.getElementById("aboutVersion");
+  if (sidebarVersionEl) sidebarVersionEl.textContent = `v${version}`;
+  if (aboutVersionEl)   aboutVersionEl.textContent   = version;
+
   await Promise.all([renderGames(), initTracking(), initNotifications()]);
   void initExport();
   void initQuietHours();

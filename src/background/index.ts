@@ -6,7 +6,7 @@
 // Not affiliated with Valve Corporation or Steam®.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { fetchCurrentPlayers, fetchSteamChartsData, fetchSteamSpyData, fetchTwitchViewers, fetchPriceData } from "../utils/api.js";
+import { fetchCurrentPlayers, fetchSteamChartsBootstrap, fetchSteamChartsData, fetchSteamSpyData, fetchTwitchViewers, fetchPriceData } from "../utils/api.js";
 import { compactSnapshots } from "../utils/compaction.js";
 import {
   getGames,
@@ -17,7 +17,7 @@ import {
   setLastFetchTime,
   getEffectiveRegion,
 } from "../utils/storage.js";
-import { idbSaveSnapshot, idbGetSnapshots, idbSaveItadMapping, idbGetItadMapping, idbGetCooldown, idbSetCooldown } from "../utils/idb-storage.js";
+import { idbBulkSaveSnapshots, idbSaveSnapshot, idbGetSnapshots, idbSaveItadMapping, idbGetItadMapping, idbGetCooldown, idbSetCooldown } from "../utils/idb-storage.js";
 import { migrateToIndexedDB } from "../utils/migrate.js";
 import { computeTrend, detectSpike, fmtNumber, fmtBadge } from "../utils/trend.js";
 import { isQuietNow } from "../utils/quietHours.js";
@@ -180,6 +180,20 @@ async function fetchGame(
   readonly signal: "rising" | "alerting" | "stable";
   readonly cacheData?: CachedData;
 }> {
+  try {
+    const bootstrapKey = `bootstrap__${game.appid}`;
+    const alreadyBootstrapped = await idbGetCooldown(bootstrapKey);
+    if (!alreadyBootstrapped) {
+      await idbSetCooldown(bootstrapKey, Date.now() + 10 * 365 * 86_400_000);
+      const bootstrapSnaps = await fetchSteamChartsBootstrap(game.appid);
+      if (bootstrapSnaps.length > 0) {
+        await idbBulkSaveSnapshots(game.appid, bootstrapSnaps);
+      }
+    }
+  } catch (err) {
+    console.warn("[SteamWatch] Bootstrap failed for", game.appid, err);
+  }
+
   const [currentPlayers, spyData] = await Promise.all([
     fetchCurrentPlayers(game.appid),
     fetchSteamSpyData(game.appid),

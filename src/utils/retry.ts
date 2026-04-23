@@ -2,6 +2,7 @@ export interface RetryOptions {
   maxRetries?: number;
   baseDelayMs?: number;
   label?: string;
+  warnOnly?: boolean;
 }
 
 export async function withRetry<T>(
@@ -11,6 +12,7 @@ export async function withRetry<T>(
   const maxRetries = opts?.maxRetries ?? 2;
   const baseDelayMs = opts?.baseDelayMs ?? 1000;
   const label = opts?.label ?? "operation";
+  const warnOnly = opts?.warnOnly ?? false;
 
   let lastError: Error | undefined;
 
@@ -31,6 +33,7 @@ export async function withRetry<T>(
     }
   }
 
-  console.error(`[SteamWatch] ${label} failed after ${maxRetries} retries`);
+  const logFn = warnOnly ? console.warn : console.error;
+  logFn(`[SteamWatch] ${label} failed after ${maxRetries} retries`);
   throw lastError;
 }

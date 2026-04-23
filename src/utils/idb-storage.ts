@@ -144,6 +144,26 @@ export async function idbSaveSnapshot(appId: string, snap: Snapshot): Promise<vo
   await tx.done;
 }
 
+export async function idbBulkSaveSnapshots(
+  appId: string,
+  snapshots: readonly Snapshot[],
+): Promise<void> {
+  if (snapshots.length === 0) {
+    return;
+  }
+
+  const db = await getDB();
+  const tx = db.transaction("snapshots", "readwrite", { durability: "relaxed" });
+  for (const snap of snapshots) {
+    await tx.store.add({
+      appId,
+      ts: snap.ts,
+      current: snap.current,
+    });
+  }
+  await tx.done;
+}
+
 export async function idbGetSnapshots(appId: string): Promise<Snapshot[]> {
   const db = await getDB();
   const rows = await db.getAllFromIndex("snapshots", "byApp", appId);

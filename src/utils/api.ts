@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { z } from "zod";
-import type { SearchResult, SteamChartsData, SteamSpyData } from "../types/index.js";
+import type { SearchResult, SteamChartsData, SteamSpyData, Snapshot } from "../types/index.js";
 import { withRetry } from "./retry.js";
 
 export const STEAM_CAPSULE_URL = (appid: string): string =>
@@ -45,6 +45,8 @@ const TwitchGqlSchema = z.array(
     }).optional(),
   })
 );
+
+export const ChartDataSchema = z.array(z.tuple([z.number(), z.number()]));
 
 // ── Fetchers ──────────────────────────────────────────────────────────────────
 
@@ -123,6 +125,37 @@ export async function fetchSteamChartsData(appid: string): Promise<SteamChartsDa
   }
 }
 
+/**
+ * Fetch historical player count data from SteamCharts JSON endpoint.
+ * Returns array of snapshots with timestamp and player count.
+ * On any error, returns empty array and logs warning.
+ */
+export async function fetchSteamChartsBootstrap(appid: string): Promise<Snapshot[]> {
+  try {
+    const res = await fetch(`https://steamcharts.com/app/${encodeURIComponent(appid)}/chart-data.json`);
+    if (!res.ok) return [];
+    const json: unknown = await res.json();
+    const parsed = ChartDataSchema.safeParse(json);
+    if (!parsed.success) {
+      console.warn('[SteamWatch] Bootstrap: failed to fetch chart-data.json for', appid, parsed.error);
+      return [];
+    }
+    
+    const snapshots = parsed.data
+      .filter(([ts]) => ts > 0)
+      .map(([ts, players]) => ({
+        ts,
+        current: Math.max(0, Math.round(players)),
+      }))
+      .sort((a, b) => a.ts - b.ts);
+    
+    return snapshots;
+  } catch (err) {
+    console.warn('[SteamWatch] Bootstrap: failed to fetch chart-data.json for', appid, err);
+    return [];
+  }
+}
+
 export async function fetchTwitchViewers(gameName: string): Promise<number | null> {
   for (const candidate of buildTwitchNameCandidates(gameName)) {
     try {
@@ -167,7 +200,7 @@ export async function searchGames(query: string): Promise<SearchResult[]> {
     return parsed.data.items.slice(0, 8).map((item) => ({
       appid: String(item.id),
       name:  item.name,
-      image: item.small_capsule_image ?? STEAM_CAPSULE_URL(String(item.id)),
+      image: item.small_capsule_image || STEAM_CAPSULE_URL(String(item.id)),
     }));
   } catch {
     return [];

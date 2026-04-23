@@ -182,6 +182,33 @@ describe("withRetry", () => {
     errorSpy.mockRestore();
   });
 
+  it("logs warn (not error) on final failure when warnOnly is true", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const fn = vi.fn().mockRejectedValue(new Error("persistent"));
+
+    const promise = withRetry(fn, {
+      maxRetries: 2,
+      baseDelayMs: 100,
+      label: "ITAD:lookupGame",
+      warnOnly: true,
+    });
+    promise.catch(() => {});
+
+    await vi.advanceTimersByTimeAsync(100);
+    await vi.advanceTimersByTimeAsync(200);
+
+    await expect(promise).rejects.toThrow();
+
+    expect(errorSpy).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenLastCalledWith(
+      "[SteamWatch] ITAD:lookupGame failed after 2 retries"
+    );
+
+    errorSpy.mockRestore();
+    warnSpy.mockRestore();
+  });
+
   it("logs error on final failure with default 'operation' label", async () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const fn = vi.fn().mockRejectedValue(new Error("persistent"));

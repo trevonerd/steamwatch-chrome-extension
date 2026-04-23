@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { PriceRecord, Snapshot } from "../src/types/index.js";
 import {
   _resetDbForTesting,
+  idbBulkSaveSnapshots,
   idbDeleteSnapshots,
   idbGetCooldown,
   idbGetItadMapping,
@@ -201,21 +202,87 @@ describe("idb-storage", () => {
       expect(result).toBeNull();
     });
 
-    it("keeps non-expired cooldowns after purge", async () => {
-      const now = Date.now();
-      const key1 = "730__spike";
-      const key2 = "570__trend";
-      const key3 = "440__price";
+     it("keeps non-expired cooldowns after purge", async () => {
+       const now = Date.now();
+       const key1 = "730__spike";
+       const key2 = "570__trend";
+       const key3 = "440__price";
 
-      await idbSetCooldown(key1, now + 10000);
-      await idbSetCooldown(key2, now + 20000);
-      await idbSetCooldown(key3, now + 30000);
+       await idbSetCooldown(key1, now + 10000);
+       await idbSetCooldown(key2, now + 20000);
+       await idbSetCooldown(key3, now + 30000);
 
-      await idbPurgeCooldowns();
+       await idbPurgeCooldowns();
 
-      expect(await idbGetCooldown(key1)).toBe(now + 10000);
-      expect(await idbGetCooldown(key2)).toBe(now + 20000);
-      expect(await idbGetCooldown(key3)).toBe(now + 30000);
-    });
-  });
-});
+       expect(await idbGetCooldown(key1)).toBe(now + 10000);
+       expect(await idbGetCooldown(key2)).toBe(now + 20000);
+       expect(await idbGetCooldown(key3)).toBe(now + 30000);
+     });
+   });
+
+   describe("idbBulkSaveSnapshots", () => {
+     it("bulk saves multiple snapshots and retrieves them sorted by ts", async () => {
+       const appId = "100";
+       const snapshots: Snapshot[] = [
+         { ts: 3000, current: 30 },
+         { ts: 1000, current: 10 },
+         { ts: 2000, current: 20 },
+       ];
+
+       await idbBulkSaveSnapshots(appId, snapshots);
+
+       const retrieved = await idbGetSnapshots(appId);
+       expect(retrieved).toEqual([
+         { ts: 1000, current: 10 },
+         { ts: 2000, current: 20 },
+         { ts: 3000, current: 30 },
+       ]);
+     });
+
+     it("empty array is a no-op", async () => {
+       const appId = "100";
+
+       await idbBulkSaveSnapshots(appId, []);
+
+       const retrieved = await idbGetSnapshots(appId);
+       expect(retrieved).toEqual([]);
+     });
+
+     it("bulk save doesn't affect other appId's data", async () => {
+       const appId1 = "100";
+       const appId2 = "200";
+       const snapshots1: Snapshot[] = [
+         { ts: 1000, current: 10 },
+         { ts: 2000, current: 20 },
+       ];
+       const snapshots2: Snapshot[] = [
+         { ts: 1000, current: 100 },
+         { ts: 2000, current: 200 },
+       ];
+
+       await idbBulkSaveSnapshots(appId1, snapshots1);
+       await idbBulkSaveSnapshots(appId2, snapshots2);
+
+       const retrieved1 = await idbGetSnapshots(appId1);
+       const retrieved2 = await idbGetSnapshots(appId2);
+
+       expect(retrieved1).toEqual(snapshots1);
+       expect(retrieved2).toEqual(snapshots2);
+     });
+
+     it("bulk saves 150 snapshots and retrieves all", async () => {
+       const appId = "100";
+       const snapshots: Snapshot[] = Array.from({ length: 150 }, (_, i) => ({
+         ts: (i + 1) * 1000,
+         current: i + 1,
+       }));
+
+       await idbBulkSaveSnapshots(appId, snapshots);
+
+       const retrieved = await idbGetSnapshots(appId);
+       expect(retrieved).toHaveLength(150);
+       expect(retrieved[0]).toEqual({ ts: 1000, current: 1 });
+       expect(retrieved[149]).toEqual({ ts: 150000, current: 150 });
+     });
+   });
+ });

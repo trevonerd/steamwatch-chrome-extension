@@ -8,6 +8,8 @@ import {
   parseSteamChartsData,
   searchGames,
   STEAM_CAPSULE_URL,
+  fetchSteamChartsBootstrap,
+  ChartDataSchema,
 } from "../src/utils/api.js";
 
 // ── Mock fetch ────────────────────────────────────────────────────────────────
@@ -406,5 +408,146 @@ describe("fetchPriceData", () => {
 
     expect(globalThis.fetch).toHaveBeenCalledTimes(3);
     expect(result).toEqual({ kind: "error", reason: "Error: boom" });
+  });
+});
+
+// ── fetchSteamChartsBootstrap ─────────────────────────────────────────────────
+
+describe("ChartDataSchema", () => {
+  it("validates array of [timestamp, players] tuples", () => {
+    const valid = [[1341100800000, 25123.4], [1343779200000, 0]];
+    const result = ChartDataSchema.safeParse(valid);
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects non-array input", () => {
+    const result = ChartDataSchema.safeParse({ data: [] });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects array with non-tuple elements", () => {
+    const result = ChartDataSchema.safeParse([{ ts: 123, players: 456 }]);
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("fetchSteamChartsBootstrap", () => {
+  it("converts valid response to Snapshot[] with rounding", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => [[1341100800000, 25123.4], [1343779200000, 0]],
+    } as Response);
+    
+    const result = await fetchSteamChartsBootstrap("570");
+    
+    expect(result).toHaveLength(2);
+    expect(result[0]).toEqual({ ts: 1341100800000, current: 25123 });
+    expect(result[1]).toEqual({ ts: 1343779200000, current: 0 });
+  });
+
+  it("filters out entries where timestamp <= 0", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => [[0, 100], [1341100800000, 200], [-1, 300]],
+    } as Response);
+    
+    const result = await fetchSteamChartsBootstrap("570");
+    
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual({ ts: 1341100800000, current: 200 });
+  });
+
+  it("sorts snapshots by timestamp ascending", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => [[1343779200000, 100], [1341100800000, 200]],
+    } as Response);
+    
+    const result = await fetchSteamChartsBootstrap("570");
+    
+    expect(result[0]!.ts).toBe(1341100800000);
+    expect(result[1]!.ts).toBe(1343779200000);
+  });
+
+  it("returns empty array on non-ok HTTP response", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 404,
+    } as Response);
+    
+    const result = await fetchSteamChartsBootstrap("570");
+    
+    expect(result).toEqual([]);
+  });
+
+  it("returns empty array on network error and logs console.warn", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    
+    globalThis.fetch = vi.fn().mockRejectedValueOnce(new Error("Network error"));
+    
+    const result = await fetchSteamChartsBootstrap("570");
+    
+    expect(result).toEqual([]);
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[SteamWatch] Bootstrap: failed to fetch chart-data.json for',
+      "570",
+      expect.any(Error)
+    );
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it("returns empty array on malformed JSON and logs console.warn", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    
+    globalThis.fetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => { throw new Error("Invalid JSON"); },
+    } as unknown as Response);
+    
+    const result = await fetchSteamChartsBootstrap("570");
+    
+    expect(result).toEqual([]);
+    expect(warnSpy).toHaveBeenCalled();
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it("returns empty array on validation failure and logs console.warn", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    
+    globalThis.fetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => [{ invalid: "shape" }],
+    } as Response);
+    
+    const result = await fetchSteamChartsBootstrap("570");
+    
+    expect(result).toEqual([]);
+    expect(warnSpy).toHaveBeenCalled();
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it("returns empty array for empty response", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => [],
+    } as Response);
+    
+    const result = await fetchSteamChartsBootstrap("570");
+    
+    expect(result).toEqual([]);
+  });
+
+  it("uses Math.max to ensure current is never negative", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => [[1341100800000, -50.5]],
+    } as Response);
+    
+    const result = await fetchSteamChartsBootstrap("570");
+    
+    expect(result[0]!.current).toBe(0);
   });
 });
