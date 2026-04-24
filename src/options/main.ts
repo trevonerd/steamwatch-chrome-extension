@@ -279,7 +279,7 @@ async function runSearch(query: string): Promise<void> {
     li.innerHTML = `
       <div class="autocomplete-thumb-wrap">
         <img class="autocomplete-thumb" src="${esc(result.image)}" alt="" loading="lazy">
-        <div class="thumb-placeholder"></div>
+        <div class="thumb-placeholder" style="--thumb-color:${esc(thumbColor(result.appid))}">${esc(result.name.charAt(0).toUpperCase())}</div>
       </div>
       <span class="autocomplete-name">${esc(result.name)}</span>
       <span class="autocomplete-id">#${esc(result.appid)}</span>
