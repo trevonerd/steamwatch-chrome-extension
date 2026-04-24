@@ -48,6 +48,24 @@ describe("wireThumbFallback", () => {
 
     expect(wrap.classList.contains("img-error")).toBe(true);
   });
+
+  it("handles already-errored image (complete=true, naturalWidth=0) on attachment", () => {
+    const wrap = document.createElement("div");
+    const img = document.createElement("img");
+    img.src = "https://cdn.akamai.steamstatic.com/steam/apps/3065800/capsule_sm_120.jpg";
+    
+    // Simulate an image that has already errored before wireThumbFallback is called
+    Object.defineProperty(img, "complete", { value: true, configurable: true });
+    Object.defineProperty(img, "naturalWidth", { value: 0, configurable: true });
+    
+    wireThumbFallback(img, wrap, "3065800");
+
+    // Should trigger fallback path: either src changes to header.jpg or img-error class is added
+    const srcHasHeaderFallback = img.src.includes("header.jpg");
+    const hasErrorClass = wrap.classList.contains("img-error");
+    
+    expect(srcHasHeaderFallback || hasErrorClass).toBe(true);
+  });
 });
 
 describe("share bar helpers", () => {
