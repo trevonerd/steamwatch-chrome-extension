@@ -21,4 +21,7 @@ export function wireThumbFallback(
       wrapEl.classList.add("img-error");
     }
   });
+  if (imgEl.complete && imgEl.naturalWidth === 0) {
+    imgEl.dispatchEvent(new Event("error"));
+  }
 }
