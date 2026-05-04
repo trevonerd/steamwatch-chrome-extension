@@ -14,7 +14,7 @@ import type {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-export const MAX_GAMES = 5;
+export const MAX_GAMES = 10;
 const MIN_RETENTION_DAYS = 3;
 const SNAPSHOT_BUFFER = 12;
 

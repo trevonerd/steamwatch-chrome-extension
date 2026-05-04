@@ -120,11 +120,11 @@ function renderGames(vms: CardViewModel[], rankByPlayers: boolean, favoriteAppid
     }
   });
 
-  if (vms.length >= 5) {
+  if (vms.length >= 10) {
     const notice = document.createElement("li");
     notice.className = "max-badge";
     notice.setAttribute("role", "status");
-    notice.textContent = "⚠ Max 5 games — remove one to add another";
+    notice.textContent = "⚠ Max 10 games — remove one to add another";
     gamesListEl.appendChild(notice);
   }
 }
