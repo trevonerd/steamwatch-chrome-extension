@@ -1,23 +1,105 @@
 {
-  "active_plan": "/Users/m.trevisani/repos/trevonerd/steamwatch/.sisyphus/plans/steamwatch-polish.md",
-  "started_at": "2026-03-27T14:05:19.436Z",
+  "active_plan": "/Users/m.trevisani/repos/trevonerd/steamwatch/.sisyphus/plans/steamwatch-cleanup.md",
+  "started_at": "2026-05-04T10:17:37.299Z",
   "session_ids": [
-    "ses_2d1656314ffe5I0VETK0iMcV9I",
-    "ses_2d06155c0ffes8JPulB7xEbLxd",
-    "ses_2d06106ddffeYeO5Dsd3C2lqAh",
-    "ses_2d060d559ffe170XwkmHcaQh14"
+    "ses_20db8fa9fffebK2o79viUsJ9Rf",
+    "ses_20c689d7dffeNRkBmuqr1B6J7j"
   ],
-  "plan_name": "steamwatch-polish",
+  "session_origins": {
+    "ses_20db8fa9fffebK2o79viUsJ9Rf": "direct",
+    "ses_20c689d7dffeNRkBmuqr1B6J7j": "appended"
+  },
+  "plan_name": "steamwatch-cleanup",
   "agent": "atlas",
   "task_sessions": {
     "todo:1": {
       "task_key": "todo:1",
       "task_label": "1",
-      "task_title": "Switch Options snapshot reads to IndexedDB (F3 fix)",
-      "session_id": "ses_2d06155c0ffes8JPulB7xEbLxd",
+      "task_title": "Remove price/ITAD types and schemas from `src/types/index.ts`",
+      "session_id": "ses_20d8027d7ffeQftu1hq1VVnyV8",
       "agent": "Sisyphus-Junior",
       "category": "quick",
-      "updated_at": "2026-03-27T14:07:49.229Z"
+      "updated_at": "2026-05-04T10:24:39.987Z"
+    },
+    "todo:2": {
+      "task_key": "todo:2",
+      "task_label": "2",
+      "task_title": "Update `manifest.json` — minimize permissions",
+      "session_id": "ses_20d79ab73ffeU55BFY6QKwNaSv",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "updated_at": "2026-05-04T10:27:19.445Z"
+    },
+    "todo:3": {
+      "task_key": "todo:3",
+      "task_label": "3",
+      "task_title": "Update `DEFAULT_SETTINGS` and `storage.ts` — remove price settings",
+      "session_id": "ses_20d785b91ffefi3YIDep5TPJHM",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "updated_at": "2026-05-04T10:30:13.910Z"
+    },
+    "todo:5": {
+      "task_key": "todo:5",
+      "task_label": "5",
+      "task_title": "Remove `fetchPriceData` and price schemas from `src/utils/api.ts`",
+      "session_id": "ses_20d751837ffedZLDlA04dojPe2",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "updated_at": "2026-05-04T10:37:56.371Z"
+    },
+    "todo:9": {
+      "task_key": "todo:9",
+      "task_label": "9",
+      "task_title": "Remove price/ITAD from `src/background/index.ts`",
+      "session_id": "ses_20d6ba13cffeK9zxqWQbzkRBba",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-05-04T10:43:00.904Z"
+    },
+    "todo:12": {
+      "task_key": "todo:12",
+      "task_label": "12",
+      "task_title": "Simplify notification system — merge spike/trend/crash",
+      "session_id": "ses_20d67f1f2ffew3hLLYgrdWxaY8",
+      "agent": "Sisyphus-Junior",
+      "category": "deep",
+      "updated_at": "2026-05-04T10:50:58.045Z"
+    },
+    "todo:13": {
+      "task_key": "todo:13",
+      "task_label": "13",
+      "task_title": "Remove price rendering from `src/popup/main.ts`",
+      "session_id": "ses_20d62572effehVwekXWCC6SJ7h",
+      "agent": "Sisyphus-Junior",
+      "category": "visual-engineering",
+      "updated_at": "2026-05-04T10:56:03.581Z"
+    },
+    "todo:16": {
+      "task_key": "todo:16",
+      "task_label": "16",
+      "task_title": "Update/delete affected test files",
+      "session_id": "ses_20d5a0d40ffem5YqhVoIbYphBl",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-05-04T11:07:38.134Z"
+    },
+    "todo:17": {
+      "task_key": "todo:17",
+      "task_label": "17",
+      "task_title": "Build + comprehensive grep audit",
+      "session_id": "ses_20d533a4cffeyqHr90mm3qOASN",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-low",
+      "updated_at": "2026-05-04T11:12:42.618Z"
+    },
+    "final-wave:f1": {
+      "task_key": "final-wave:f1",
+      "task_label": "F1",
+      "task_title": "**Plan Compliance Audit** — `oracle`",
+      "session_id": "ses_20d365496ffe52gSUR5Kh4Qefw",
+      "agent": "oracle",
+      "updated_at": "2026-05-04T11:40:49.776Z"
     }
   }
 }

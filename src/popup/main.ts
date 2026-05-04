@@ -10,11 +10,10 @@ import {
   getLastFetchTime,
   removeGame,
 } from "../utils/storage.js";
-import { idbGetSnapshots, idbGetSnapshotsInRange, idbGetPriceHistory, idbSavePriceHistory } from "../utils/idb-storage.js";
+import { idbGetSnapshots, idbGetSnapshotsInRange } from "../utils/idb-storage.js";
 import { fmtNumber, fmtPct, fmtTimeAgo, computeWindowMin } from "../utils/trend.js";
 import {
   buildSparklineSVGWithPoints,
-  buildPriceSparklineSVG,
   downsampleSnapshotsForGraph,
   findNearestPointIndex,
   sparklineColor,
@@ -24,7 +23,7 @@ import { buildShareText, renderShareCanvas } from "../utils/share.js";
 import { esc, mustGet, show, hide }          from "../utils/html.js";
 import { bindGlobalShareBarClose }           from "./shareBar.js";
 import { thumbColor, wireThumbFallback }     from "./thumb.js";
-import { fetchPriceHistory }                 from "../utils/itad-api.js";
+
 import type {
   CardViewModel,
   GraphWindowKey,
@@ -295,8 +294,7 @@ function populatePanel(panel: HTMLDivElement, vm: CardViewModel): void {
   const {
     game, current, peak24h, allTimePeak,
     twitchViewers, avg24h, gain24h, retentionAvg, retentionGain, retentionDays,
-    availableGraphWindows, defaultGraphWindow, discountPct, priceFormatted, priceOriginalFormatted,
-    priceState,
+    availableGraphWindows, defaultGraphWindow,
   } = vm;
 
   const twitchStr = twitchViewers != null ? fmtNumber(twitchViewers) : "—";
@@ -324,21 +322,6 @@ function populatePanel(panel: HTMLDivElement, vm: CardViewModel): void {
   panel.innerHTML = `
     ${graphSelector}
     <div class="panel-sparkline" aria-hidden="true"></div>
-    <div class="panel-price-section">
-      ${priceState === "available" ? `
-      <div class="panel-steam-price">
-        <span class="panel-steam-price-current">${esc(priceFormatted ?? "")}</span>
-        ${priceOriginalFormatted && priceOriginalFormatted !== priceFormatted ? `<s class="panel-steam-price-orig">${esc(priceOriginalFormatted)}</s>` : ""}
-        ${discountPct && discountPct > 0 ? `<span class="panel-steam-price-disc">-${esc(String(discountPct))}%</span>` : ""}
-      </div>` : ""}
-      ${priceState === "free" ? `<span class="panel-price-free">Free to Play</span>` : ""}
-      ${priceState === "unavailable" ? `<span class="panel-price-unavail">Price unavailable</span>` : ""}
-      ${priceState === "loading" ? `<span class="panel-price-loading">Loading...</span>` : ""}
-      ${vm.itadUuid ? `
-      <p class="panel-price-label">Price History</p>
-      <div class="panel-price-loading">Loading price data...</div>
-      <div class="panel-price-sparkline" aria-hidden="true"></div>` : ""}
-    </div>
     <dl class="panel-stats">
       <div class="panel-stat">
         <dt class="panel-stat-label">Current</dt>
@@ -379,12 +362,6 @@ function populatePanel(panel: HTMLDivElement, vm: CardViewModel): void {
       const allTimeLowStr = fmtNumber(vm.allTimeLow.value);
       return `<div class="panel-record-low">${esc(windowLabel)} Low: <span class="panel-record-low-val">${esc(windowLowStr)}</span> • All-time Low: <span class="panel-record-low-val">${esc(allTimeLowStr)}</span></div>`;
     })() : `<div class="panel-record-low" hidden></div>`}
-    ${discountPct != null && discountPct > 0 ? `
-    <div class="panel-sale-badge" aria-label="${esc(`On sale: ${discountPct}% off`)}">
-      <span class="sale-pct">ON SALE −${esc(String(discountPct))}%</span>
-      ${priceFormatted ? `<span class="sale-price">${esc(priceFormatted)}</span>` : ""}
-      ${priceOriginalFormatted ? `<s class="sale-orig">${esc(priceOriginalFormatted)}</s>` : ""}
-    </div>` : ""}
     <div class="panel-links">
       <a class="panel-link" href="https://store.steampowered.com/app/${esc(game.appid)}"
          target="_blank" rel="noopener noreferrer">Steam ↗</a>
@@ -394,7 +371,6 @@ function populatePanel(panel: HTMLDivElement, vm: CardViewModel): void {
   `;
 
   void renderPanelSparklineFromIdb(panel, vm.game.appid, defaultGraphWindow);
-  void renderPanelPriceSparkline(panel, vm);
 
   panel.querySelectorAll<HTMLButtonElement>(".graph-pill:not(.graph-pill--disabled)").forEach((button) => {
     button.addEventListener("click", () => {
@@ -473,42 +449,6 @@ async function renderPanelSparklineFromIdb(
   if (!result) return;
 
   attachSparklineHover(sparklineEl, result.points, graphSnaps);
-}
-
-async function renderPanelPriceSparkline(panel: HTMLDivElement, vm: CardViewModel): Promise<void> {
-  if (!vm.itadUuid) return;
-
-  const loadingEl = panel.querySelector<HTMLDivElement>(".panel-price-loading");
-  const sparklineEl = panel.querySelector<HTMLDivElement>(".panel-price-sparkline");
-  if (!loadingEl || !sparklineEl) return;
-
-  loadingEl.hidden = false;
-  sparklineEl.innerHTML = "";
-
-  const cached = await idbGetPriceHistory(vm.game.appid);
-  const isFresh = cached.length > 0 && Date.now() - cached[0]!.timestamp < 86_400_000;
-
-  let records = isFresh ? cached : await fetchPriceHistory(vm.itadUuid);
-  if (!isFresh && records.length > 0) {
-    await idbSavePriceHistory(vm.game.appid, records);
-  }
-
-  if (records.length === 0) {
-    records = cached;
-  }
-
-  if (records.length === 0) {
-    loadingEl.textContent = "No price data available";
-    return;
-  }
-
-  const svg = buildPriceSparklineSVG(records);
-  if (svg) {
-    sparklineEl.innerHTML = svg;
-    loadingEl.hidden = true;
-  } else {
-    loadingEl.textContent = "No price data available";
-  }
 }
 
 function attachSparklineHover(

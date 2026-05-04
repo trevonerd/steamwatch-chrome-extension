@@ -26,20 +26,7 @@ export interface CachedData {
   readonly localAllTimePeak?: number;
   readonly fetchedAt: number;
   readonly twitchViewers?: number;
-  /** Price in cents, e.g. 2499 = $24.99. Present only for paid games. */
-  readonly priceOriginal?: number;
-  readonly priceCurrent?: number;
-  /** 0–100 sale discount percentage. Absent or 0 = not on sale. */
-  readonly discountPct?: number;
-  readonly priceFormatted?: string;
-  readonly priceOriginalFormatted?: string;
-  readonly itadUuid?: string;
-   readonly itadHistoricalLow?: { amountInt: number; cut: number; timestamp: string };
-   readonly priceError?: boolean;
 }
-
-/** Price availability state for UI display. */
-export type PriceState = "available" | "free" | "unavailable" | "loading";
 
 // ── Settings ─────────────────────────────────────────────────────────────────
 
@@ -47,10 +34,8 @@ export interface Settings {
   trendEnabled: boolean;
   purgeAfterDays: number;
   notificationsEnabled: boolean;
-  spikeDetection: boolean;
   globalThresholdUp: number;    // positive %, e.g. 30
   globalThresholdDown: number;  // negative %, e.g. -25
-  crashThreshold: number;       // negative %, e.g. -50
   fetchIntervalMinutes: number;
   // Quiet hours
   quietHoursEnabled: boolean;
@@ -59,11 +44,6 @@ export interface Settings {
   quietDays: QuietDaysMask;     // bitmask; 0b1111111 = every day
   // Dynamic ranking
   rankByPlayers: boolean;       // sort popup cards by current player count
-  // Price drop alerts
-  priceAlertsEnabled: boolean;  // notify on Steam sales
-  priceDropMinPct: number;      // minimum discount % to trigger alert, e.g. 30
-  // Region detection
-  regionCode?: string;          // "auto" = detect at runtime, or 2-letter ISO 3166-1 code (e.g., "IT", "US")
   // Badge favorite
   badgeFavoriteAppid?: string;  // appid of the game whose count shows on the badge
 }
@@ -72,10 +52,8 @@ export interface Settings {
 export interface GameSettings {
   thresholdUp?: number;
   thresholdDown?: number;
-  crashThreshold?: number;
   notifyThresholdPlayers?: number;
   notificationsEnabled?: boolean;
-  priceAlertsEnabled?: boolean;  // per-game override for price drop alerts
 }
 
 // ── Trend ────────────────────────────────────────────────────────────────────
@@ -86,8 +64,7 @@ export type TrendKey =
   | "UP"
   | "STABLE"
   | "DOWN"
-  | "STRONG_DOWN"
-  | "CRASH";
+  | "STRONG_DOWN";
 
 export interface TrendLevel {
   readonly key: TrendKey;
@@ -102,11 +79,6 @@ export interface TrendResult {
   readonly level: TrendLevel;
   readonly pct: number;   // rounded to 1 decimal
   readonly delta: number; // absolute player count delta
-}
-
-export interface SpikeResult {
-  readonly type: "spike_up" | "spike_down";
-  readonly pct: number;
 }
 
 // ── Background ↔ UI messages ──────────────────────────────────────────────────
@@ -145,26 +117,6 @@ export interface SteamNewsItem {
   readonly title: string;
   readonly url: string;
   readonly date: number; // Unix timestamp (seconds)
-}
-
-// ── Sparkline ─────────────────────────────────────────────────────────────────
-
-export interface SparklineOptions {
-  readonly width: number;
-  readonly height: number;
-  readonly strokeColor: string;
-  readonly fillColor: string;
-  /** How many most-recent snapshots to include. */
-  readonly maxPoints: number;
-}
-
-export interface PriceRecord {
-  readonly appId: string;
-  readonly timestamp: number;
-  readonly priceAmountInt: number;
-  readonly regularAmountInt: number;
-  readonly cut: number;
-  readonly shop: string;
 }
 
 // ── Export ────────────────────────────────────────────────────────────────────
@@ -244,22 +196,11 @@ export interface CardViewModel {
   readonly snaps: readonly Snapshot[];
   readonly sparklineStroke: string;
   readonly svgStr: string | null;
-   /** Timestamp of the last successful fetch (0 if never). */
-   readonly fetchedAt: number;
-   readonly priceState: PriceState;
-   readonly twitchViewers?: number;
-  /** Price drop / sale fields. Present only for paid games currently on sale. */
-  readonly discountPct?: number;
-  readonly priceFormatted?: string;
-  readonly priceOriginalFormatted?: string;
+  /** Timestamp of the last successful fetch (0 if never). */
+  readonly fetchedAt: number;
+  readonly twitchViewers?: number;
   /** Minimum within the active graph window: { value, timestamp } or null. */
   readonly recordLow: { value: number; timestamp: number } | null;
   /** Minimum across all snapshots: { value, timestamp } or null. */
   readonly allTimeLow: { value: number; timestamp: number } | null;
-  /** ITAD historical low price record. */
-  readonly itadHistoricalLow?: { amountInt: number; cut: number; timestamp: string };
-  /** ITAD game identifier. */
-  readonly itadUuid?: string;
-  /** SVG sparkline for price history (placeholder — populated in Task 12). */
-  readonly priceSparklineSvg?: string;
 }

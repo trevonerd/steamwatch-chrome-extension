@@ -6,7 +6,7 @@
 // Not affiliated with Valve Corporation or Steam®.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { fetchCurrentPlayers, fetchSteamChartsBootstrap, fetchSteamChartsData, fetchSteamSpyData, fetchTwitchViewers, fetchPriceData } from "../utils/api.js";
+import { fetchCurrentPlayers, fetchSteamChartsBootstrap, fetchSteamChartsData, fetchSteamSpyData, fetchTwitchViewers } from "../utils/api.js";
 import { compactSnapshots } from "../utils/compaction.js";
 import {
   getGames,
@@ -15,15 +15,13 @@ import {
   setCache,
   getCache,
   setLastFetchTime,
-  getEffectiveRegion,
 } from "../utils/storage.js";
-import { idbBulkSaveSnapshots, idbSaveSnapshot, idbGetSnapshots, idbSaveItadMapping, idbGetItadMapping, idbGetCooldown, idbSetCooldown } from "../utils/idb-storage.js";
+import { idbBulkSaveSnapshots, idbSaveSnapshot, idbGetSnapshots, idbGetCooldown, idbSetCooldown } from "../utils/idb-storage.js";
 import { migrateToIndexedDB } from "../utils/migrate.js";
-import { computeTrend, detectSpike, fmtNumber, fmtBadge } from "../utils/trend.js";
+import { computeTrend, fmtNumber, fmtBadge } from "../utils/trend.js";
 import { isQuietNow } from "../utils/quietHours.js";
 import { buildCachedData, mergeCycleCache } from "./fetchCycle.js";
-import type { BuildCachedDataInput } from "./fetchCycle.js";
-import { lookupItadGame, fetchHistoricalLow } from "../utils/itad-api.js";
+
 import type {
   CachedData,
   Game,
@@ -38,12 +36,9 @@ const ALARM_NAME = "sw_fetch";
 const COMPACTION_ALARM_NAME = "steamwatch-compaction";
 
 const COOLDOWNS: Record<string, number> = {
-  spike:      20 * 60_000,
   trend_up:   30 * 60_000,
   trend_down: 30 * 60_000,
-  crash:      15 * 60_000,
   absolute:   60 * 60_000,
-  price_drop: 120 * 60_000,
 };
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
@@ -139,30 +134,7 @@ async function fetchAll(): Promise<void> {
     }
   }
 
-  const uuidLookupList: string[] = [];
-  const appIdToItadUuid = new Map<string, string>();
-  for (const game of games) {
-    const uuid = cacheResults.find(r => r.game.appid === game.appid)?.cacheData?.itadUuid
-      ?? prevCache[game.appid]?.itadUuid;
-    if (uuid) {
-      uuidLookupList.push(uuid);
-      appIdToItadUuid.set(game.appid, uuid);
-    }
-  }
-
-  const itadLowMap = uuidLookupList.length > 0
-    ? await fetchHistoricalLow(uuidLookupList).catch(() => new Map<string, { amountInt: number; cut: number; timestamp: string }>())
-    : new Map<string, { amountInt: number; cut: number; timestamp: string }>();
-
-  const enrichedResults = cacheResults.map(r => {
-    const uuid = appIdToItadUuid.get(r.game.appid);
-    if (!r.cacheData || !uuid) return r;
-    const low = itadLowMap.get(uuid);
-    if (!low) return r;
-    return { ...r, cacheData: { ...r.cacheData, itadHistoricalLow: low } };
-  });
-
-  const nextCache = mergeCycleCache(prevCache, enrichedResults);
+  const nextCache = mergeCycleCache(prevCache, cacheResults);
   await setCache(nextCache);
 
   await setLastFetchTime(fetchedAt);
@@ -198,11 +170,9 @@ async function fetchGame(
     fetchCurrentPlayers(game.appid),
     fetchSteamSpyData(game.appid),
   ]);
-  const region = getEffectiveRegion(settings);
-  const [chartsData, twitchViewers, priceResult] = await Promise.all([
+  const [chartsData, twitchViewers] = await Promise.all([
     fetchSteamChartsData(game.appid),
     fetchTwitchViewers(game.name).catch(() => null),
-    fetchPriceData(game.appid, region),
   ]);
 
   const resolvedCurrent = currentPlayers ?? chartsData.current ?? null;
@@ -216,19 +186,6 @@ async function fetchGame(
     resolvedCurrent,
   );
 
-  const priceInput: Partial<BuildCachedDataInput> =
-    priceResult.kind === "priced"
-      ? {
-          priceOriginal:          priceResult.data.priceOriginal,
-          priceCurrent:           priceResult.data.priceCurrent,
-          discountPct:            priceResult.data.discountPct,
-          priceFormatted:         priceResult.data.currentFormatted,
-          priceOriginalFormatted: priceResult.data.originalFormatted,
-        }
-      : priceResult.kind === "error"
-        ? { priceError: true as const }
-        : {};
-
   const cacheData = buildCachedData({
     currentPlayers: resolvedCurrent,
     ...(chartsData.peak24h !== undefined ? { peak24h: chartsData.peak24h } : {}),
@@ -237,36 +194,15 @@ async function fetchGame(
     ...(prevCache !== undefined ? { prevCache } : {}),
     fetchedAt,
     twitchViewers,
-    ...priceInput,
   });
 
-  let itadUuid: string | undefined;
-  const existingUuid = await idbGetItadMapping(game.appid).catch(() => null);
-  if (existingUuid) {
-    itadUuid = existingUuid;
-  } else {
-    const lookedUp = await lookupItadGame(game.appid).catch(() => null);
-    if (lookedUp) {
-      itadUuid = lookedUp;
-      await idbSaveItadMapping(game.appid, lookedUp).catch(() => undefined);
-    }
-  }
-
-  const cacheDataWithItad = itadUuid
-    ? { ...cacheData, itadUuid }
-    : cacheData;
-
   const perGame = await getGameSettings(game.appid);
-
-  if (settings.notificationsEnabled) {
-    await evaluatePriceNotification(game, cacheDataWithItad, prevCache, settings, perGame);
-  }
 
   if (!settings.trendEnabled) {
     if (settings.notificationsEnabled) {
       await evaluateAbsoluteNotification(game, resolvedCurrent, perGame);
     }
-    return { game, signal: "stable", cacheData: cacheDataWithItad };
+    return { game, signal: "stable", cacheData };
   }
 
   const snap: Snapshot = { ts: Date.now(), current: resolvedCurrent };
@@ -274,21 +210,18 @@ async function fetchGame(
   const updatedSnaps = await idbGetSnapshots(game.appid);
 
   if (!settings.notificationsEnabled) {
-    return { game, signal: deriveSignal(updatedSnaps), cacheData: cacheDataWithItad };
+    return { game, signal: deriveSignal(updatedSnaps), cacheData };
   }
 
   const alerted = await evaluateNotifications(game, resolvedCurrent, updatedSnaps, settings, perGame);
 
-  if (alerted === "crash" || alerted === "trend_down") {
-    return { game, signal: "alerting", cacheData: cacheDataWithItad };
+  if (alerted === "trend_down") {
+    return { game, signal: "alerting", cacheData };
   }
-  if (alerted === "spike_down") {
-    return { game, signal: "alerting", cacheData: cacheDataWithItad };
+  if (alerted === "trend_up") {
+    return { game, signal: "rising", cacheData };
   }
-  if (alerted === "trend_up" || alerted === "spike_up") {
-    return { game, signal: "rising", cacheData: cacheDataWithItad };
-  }
-  return { game, signal: deriveSignal(updatedSnaps), cacheData: cacheDataWithItad };
+  return { game, signal: deriveSignal(updatedSnaps), cacheData };
 }
 
 function deriveSignal(snaps: readonly Snapshot[]): "rising" | "alerting" | "stable" {
@@ -313,62 +246,22 @@ async function evaluateNotifications(
   const absoluteAlert = await evaluateAbsoluteNotification(game, current, perGame);
   if (absoluteAlert) return absoluteAlert;
 
-  if (global.spikeDetection && snapshots.length >= 2) {
-    const spike = detectSpike(snapshots);
-    if (spike) {
-      const symbol = spike.type === "spike_up" ? "⚡ Spike UP" : "⚡ Spike DOWN";
-      const pctStr = spike.pct > 0 ? `+${spike.pct}%` : `${spike.pct}%`;
-
-      await notify(game, "spike", `${symbol} — ${game.name}`, `${pctStr} in one interval`);
-      return spike.type;
-    }
-  }
-
   const trend = computeTrend(snapshots);
   if (!trend) return null;
 
   const tUp    = perGame.thresholdUp    ?? global.globalThresholdUp;
   const tDown  = perGame.thresholdDown  ?? global.globalThresholdDown;
-  const tCrash = perGame.crashThreshold ?? global.crashThreshold;
 
   if (trend.pct >= tUp) {
     await notify(game, "trend_up",   `📈 ${game.name} — Rising`,    `+${trend.pct}% · ${fmtNumber(current)} online`);
     return "trend_up";
   }
-  if (trend.pct <= tCrash) {
-    await notify(game, "crash",      `💀 ${game.name} — Crash`,     `${trend.pct}% collapse · ${fmtNumber(current)} remaining`);
-    return "crash";
-  }
-  if (trend.pct <= tDown) {
+  if (trend.pct <= tDown && trend.pct !== 0) {
     await notify(game, "trend_down", `📉 ${game.name} — Declining`,  `${trend.pct}% drop · ${fmtNumber(current)} online`);
     return "trend_down";
   }
 
   return null;
-}
-
-async function evaluatePriceNotification(
-  game: Game,
-  cache: CachedData,
-  prevCache: CachedData | undefined,
-  global: Settings,
-  perGame: GameSettings,
-): Promise<void> {
-  if (!global.priceAlertsEnabled) return;
-  if (perGame.priceAlertsEnabled === false) return;
-  const disc = cache.discountPct;
-  if (!disc || disc < global.priceDropMinPct) return;
-  // Only fire when the sale is newly detected (wasn't on sale before, or discount increased)
-  const prevDisc = prevCache?.discountPct ?? 0;
-  if (disc <= prevDisc) return;
-  const price = cache.priceFormatted ?? "";
-  const orig  = cache.priceOriginalFormatted ?? "";
-  await notify(
-    game,
-    "price_drop",
-    `💸 ${game.name} — ${disc}% OFF`,
-    price && orig ? `${price} (was ${orig})` : `${disc}% discount!`,
-  );
 }
 
 async function evaluateAbsoluteNotification(
@@ -402,7 +295,7 @@ async function notify(game: Game, type: string, title: string, message: string):
     iconUrl:  "/icons/logo-128.png",
     title,
     message,
-    priority: type === "crash" ? 2 : 1,
+    priority: type === "absolute" ? 2 : 1,
   });
 }
 

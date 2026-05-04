@@ -320,43 +320,6 @@ describe("buildCardViewModel — record lows and ITAD data", () => {
     expect(vm.allTimeLow?.value).toBe(5_000);
   });
 
-  it("passes through itadHistoricalLow from CachedData", () => {
-    const cacheWithItad = {
-      "1245620": {
-        ...cache["1245620"]!,
-        itadHistoricalLow: { amountInt: 2399, cut: 5, timestamp: "2025-03-27T00:00:00Z" },
-      },
-    };
-    const vm = buildCardViewModel(game, cacheWithItad, snaps12, 7);
-    expect(vm.itadHistoricalLow).toEqual({ amountInt: 2399, cut: 5, timestamp: "2025-03-27T00:00:00Z" });
-  });
-
-  it("passes through itadUuid from CachedData", () => {
-    const cacheWithItad = {
-      "1245620": {
-        ...cache["1245620"]!,
-        itadUuid: "abc123-def456",
-      },
-    };
-    const vm = buildCardViewModel(game, cacheWithItad, snaps12, 7);
-    expect(vm.itadUuid).toBe("abc123-def456");
-  });
-
-  it("itadHistoricalLow is undefined when not in CachedData", () => {
-    const vm = buildCardViewModel(game, cache, snaps12, 7);
-    expect(vm.itadHistoricalLow).toBeUndefined();
-  });
-
-  it("itadUuid is undefined when not in CachedData", () => {
-    const vm = buildCardViewModel(game, cache, snaps12, 7);
-    expect(vm.itadUuid).toBeUndefined();
-  });
-
-  it("priceSparklineSvg is undefined (placeholder)", () => {
-    const vm = buildCardViewModel(game, cache, snaps12, 7);
-    expect(vm.priceSparklineSvg).toBeUndefined();
-  });
-
   it("recordLow includes correct timestamp", () => {
     const snapsWithTimestamps: Snapshot[] = [
       { ts: Date.now() - 5 * 86_400_000, current: 50_000 },
@@ -380,72 +343,6 @@ describe("buildCardViewModel — record lows and ITAD data", () => {
     expect(vm.allTimeLow?.value).toBe(10_000);
    expect(vm.allTimeLow?.timestamp).toBe(snapsWithTimestamps[0]!.ts);
    });
-});
-
-// ── priceState derivation ─────────────────────────────────────────────────────
-
-describe("priceState derivation", () => {
-  it("returns 'loading' when data is undefined (never fetched)", () => {
-    const vm = buildCardViewModel(game, {}, snaps12, 7);
-    expect(vm.priceState).toBe("loading");
-  });
-
-  it("returns 'available' when priceFormatted exists", () => {
-    const cacheWithPrice = {
-      "1245620": {
-        ...cache["1245620"]!,
-        priceFormatted: "$24.99",
-      },
-    };
-    const vm = buildCardViewModel(game, cacheWithPrice, snaps12, 7);
-    expect(vm.priceState).toBe("available");
-  });
-
-  it("returns 'unavailable' when priceError is true", () => {
-    const cacheWithError = {
-      "1245620": {
-        ...cache["1245620"]!,
-        priceError: true,
-      },
-    };
-    const vm = buildCardViewModel(game, cacheWithError, snaps12, 7);
-    expect(vm.priceState).toBe("unavailable");
-  });
-
-  it("returns 'free' when data exists but no price and no error", () => {
-    const { priceFormatted: _pf, priceError: _pe, ...baseForFree } = cache["1245620"]!;
-    const cacheFreeGame = { "1245620": baseForFree };
-    const vm = buildCardViewModel(game, cacheFreeGame, snaps12, 7);
-    expect(vm.priceState).toBe("free");
-  });
-
-  it("prioritizes priceFormatted over free state", () => {
-    const { priceError: _pe, ...baseForPrice } = cache["1245620"]!;
-    const cacheWithPrice = {
-      "1245620": { ...baseForPrice, priceFormatted: "$9.99" },
-    };
-    const vm = buildCardViewModel(game, cacheWithPrice, snaps12, 7);
-    expect(vm.priceState).toBe("available");
-  });
-
-  it("prioritizes priceError over free state", () => {
-    const { priceFormatted: _pf, ...baseForError } = cache["1245620"]!;
-    const cacheWithError = { "1245620": { ...baseForError, priceError: true as const } };
-    const vm = buildCardViewModel(game, cacheWithError, snaps12, 7);
-    expect(vm.priceState).toBe("unavailable");
-  });
-
-  it("returns 'available' when both priceFormatted and priceError are present (price takes precedence)", () => {
-    const cacheWithBoth = {
-      "1245620": {
-        ...cache["1245620"]!,
-        priceFormatted: "$19.99",
-        priceError: true,
-      },
-    };
-    const vm = buildCardViewModel(game, cacheWithBoth, snaps12, 7);
-    expect(vm.priceState).toBe("available");
-  });
 });
 
 // ── buildAllViewModels ─────────────────────────────────────────────────────────

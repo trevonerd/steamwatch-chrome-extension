@@ -2,6 +2,30 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.14.0] - 2026-05-04
+
+### Removed
+- All price tracking: fetchPriceData, PriceOverviewSchema, price notifications
+- ITAD integration: itad-api.ts deleted, price history stores removed
+- Price types: PriceState, PriceRecord, SpikeResult
+- Spike/crash notification types (merged into trend)
+- Price UI elements from popup and options pages
+- clipboardWrite permission, unused host domains from manifest
+- IsThereAnyDeal About section
+
+### Changed
+- DB_VERSION bumped to 3 (drops orphaned price/ITAD stores)
+- Default fetch interval: 15 → 30 minutes
+- Default data retention: 7 → 30 days (max 60)
+- Notification system: 3 types (trend_up, trend_down, absolute)
+- Manifest permissions minimized for faster CWS review
+
+### Fixed
+- Options page thumbnail now uses cached game.image (was hardcoded CDN URL)
+- About section cleaned up, added Marco Trevisani + Trevisoft links
+
+---
+
 ## [0.12.0] — 2026-03-30
 
 ### Added

@@ -69,10 +69,7 @@ export async function migrateToIndexedDB(): Promise<MigrationStats> {
         validCount += 1;
       } catch (error) {
         stats.errors += 1;
-        console.error("[migrate] Failed to save snapshot to IndexedDB", {
-          appId,
-          error,
-        });
+        console.error(`[migrate] Failed to save snapshot to IndexedDB — appId: ${appId}`, error);
       }
     }
 
@@ -84,22 +81,17 @@ export async function migrateToIndexedDB(): Promise<MigrationStats> {
   for (const [appId, expectedCount] of expectedByApp.entries()) {
     try {
       const stored = await idbGetSnapshots(appId);
-      if (stored.length !== expectedCount) {
+      if (stored.length < expectedCount) {
         allVerified = false;
         stats.errors += 1;
-        console.error("[migrate] Snapshot verification count mismatch", {
-          appId,
-          expectedCount,
-          actualCount: stored.length,
-        });
+        console.error(
+          `[migrate] Snapshot verification count mismatch — appId: ${appId}, expected: ${expectedCount}, actual: ${stored.length}`,
+        );
       }
     } catch (error) {
       allVerified = false;
       stats.errors += 1;
-      console.error("[migrate] Failed to verify snapshots after migration", {
-        appId,
-        error,
-      });
+      console.error(`[migrate] Failed to verify snapshots after migration — appId: ${appId}`, error);
     }
   }
 

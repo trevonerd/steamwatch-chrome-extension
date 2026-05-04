@@ -427,73 +427,6 @@ body {
   aspect-ratio: 372 / 56;
 }
 
-/* ── Price history sparkline ─────────────────────────────────── */
-.panel-price-section {
-  padding: 6px 12px 4px;
-  border-top: 1px solid var(--border);
-}
-
-.panel-price-label {
-  font-size: 10px;
-  font-family: var(--ff-mono);
-  font-weight: 500;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-  color: var(--text-3);
-  margin-bottom: 4px;
-}
-
-.panel-price-loading {
-  font-size: 11px;
-  font-family: var(--ff-mono);
-  color: var(--text-3);
-  padding: 4px 0;
-}
-
-.panel-price-free {
-  font-size: 11px;
-  font-family: var(--ff-mono);
-  color: var(--text-3);
-  font-style: italic;
-  padding: 4px 0;
-  display: block;
-}
-
-.panel-price-unavail {
-  font-size: 11px;
-  font-family: var(--ff-mono);
-  color: var(--warn);
-  padding: 4px 0;
-  display: block;
-}
-
-.panel-price-sparkline { line-height: 0; }
-.panel-price-sparkline svg { display: block; width: 100%; border-radius: var(--r-sm); }
-
-.panel-steam-price {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.35rem 0;
-  flex-wrap: wrap;
-}
-
-.panel-steam-price-current {
-  color: var(--text-1, #e2e8f0);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.panel-steam-price-orig {
-  color: var(--text-2, #94a3b8);
-  font-size: 12px;
-}
-
-.panel-steam-price-disc {
-  color: #4ade80;
-  font-size: 11px;
-  font-weight: 600;
-}
 
 .sparkline-tooltip {
   position:       absolute;
@@ -585,23 +518,7 @@ body {
   font-weight: 600;
 }
 
-/* ── Sale badge ──────────────────────────────────────────────── */
-.panel-sale-badge {
-  display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
-  padding: 5px 12px 5px;
-  background: rgba(245 158 11 / .1);
-  border-top: 1px solid rgba(245 158 11 / .25);
-  border-bottom: 1px solid rgba(245 158 11 / .25);
-}
-.sale-pct {
-  font: 600 11px var(--ff-mono); color: var(--warn);
-  background: rgba(245 158 11 / .18); border-radius: var(--r-pill);
-  padding: 2px 7px; letter-spacing: .03em;
-}
-.sale-price { font: 600 12px var(--ff-mono); color: var(--warn); }
-.sale-orig  { font: 400 11px var(--ff-mono); color: var(--text-3); text-decoration: line-through; }
 
-/* ── Divider ─────────────────────────────────────────────────── */
 .game-divider { height: 1px; background: var(--border); margin: 0; }
 
 /* ── Max badge ───────────────────────────────────────────────── */

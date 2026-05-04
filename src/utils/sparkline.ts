@@ -4,7 +4,7 @@
 // Pure function — no side effects, no DOM dependency, fully testable.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import type { GraphWindowKey, GraphWindowOption, PriceRecord, Snapshot, SparklineOptions } from "../types/index.js";
+import type { GraphWindowKey, GraphWindowOption, Snapshot } from "../types/index.js";
 
 // ── Coordinate mapper (shared by SVG and Canvas renderers) ───────────────────
 
@@ -37,13 +37,15 @@ export function mapToPoints(
   }));
 }
 
-export const DEFAULT_SPARKLINE_OPTIONS: SparklineOptions = {
+export const DEFAULT_SPARKLINE_OPTIONS = {
   width:       160,
   height:       36,
   strokeColor: "#00c8ff",
   fillColor:   "rgba(0,200,255,0.08)",
   maxPoints:   48, // ~12h at 15min intervals
-};
+} as const;
+
+type SparklineOpts = typeof DEFAULT_SPARKLINE_OPTIONS;
 
 export const GRAPH_WINDOW_MS = {
   "24h": 86_400_000,
@@ -62,9 +64,9 @@ export const GRAPH_WINDOW_MS = {
  */
 export function buildSparklineSVG(
   snapshots: readonly Snapshot[],
-  opts: Partial<SparklineOptions> = {}
+  opts: Partial<SparklineOpts> = {}
 ): string | null {
-  const o: SparklineOptions = { ...DEFAULT_SPARKLINE_OPTIONS, ...opts };
+  const o: SparklineOpts = { ...DEFAULT_SPARKLINE_OPTIONS, ...opts };
 
   // Take the N most recent, maintain chronological order
   const points = snapshots.slice(-o.maxPoints);
@@ -147,9 +149,9 @@ export function findNearestPointIndex(
  */
 export function buildSparklineSVGWithPoints(
   snapshots: readonly Snapshot[],
-  opts: Partial<SparklineOptions> = {},
+  opts: Partial<SparklineOpts> = {},
 ): { svg: string; points: ReadonlyArray<{ x: number; y: number }> } | null {
-  const o: SparklineOptions = { ...DEFAULT_SPARKLINE_OPTIONS, ...opts };
+  const o: SparklineOpts = { ...DEFAULT_SPARKLINE_OPTIONS, ...opts };
 
   const sliced = snapshots.slice(-o.maxPoints);
   if (sliced.length < 2) return null;
@@ -219,36 +221,6 @@ export function downsampleSnapshotsForGraph(
     .filter(Boolean);
 }
 
-export function filterPriceRecordsByWindow(
-  records: readonly PriceRecord[],
-  windowMs: number,
-): PriceRecord[] {
-  if (windowMs === 0) return [...records]; // "all" window = no time filter
-  const cutoff = Date.now() - windowMs;
-  return records.filter((r) => r.timestamp >= cutoff);
-}
-
-export function downsamplePriceRecords(
-  records: readonly PriceRecord[],
-  maxPoints: number,
-): PriceRecord[] {
-  if (records.length <= maxPoints) return [...records];
-  if (maxPoints < 2) return records.length > 0 ? [records[records.length - 1]!] : [];
-
-  const lastIndex = records.length - 1;
-  const step = lastIndex / (maxPoints - 1);
-  const indexes = new Set<number>([0, lastIndex]);
-
-  for (let i = 1; i < maxPoints - 1; i++) {
-    indexes.add(Math.round(i * step));
-  }
-
-  return [...indexes]
-    .sort((a, b) => a - b)
-    .map((index) => records[index]!)
-    .filter(Boolean);
-}
-
 export function hasEnoughGraphHistory(
   snapshots: readonly Snapshot[],
   windowMs: number,
@@ -304,96 +276,4 @@ function segmentColor(prev: number, next: number): string {
   if (pct <= -8) return "#dc2626";
   if (pct <= -2) return "#ef4444";
   return "#00c8ff";
-}
-
-// ── Price sparkline (step chart) ──────────────────────────────────────────────
-
-const PRICE_SPARKLINE_W = 372;
-const PRICE_SPARKLINE_H = 40;
-const PRICE_PAD_X = 2;
-const PRICE_PAD_Y = 3;
-
-/**
- * Build a step-chart SVG sparkline from an array of PriceRecord entries.
- *
- * - Step rendering: horizontal then vertical for each segment (staircase).
- * - Inverted color logic: falling price → green (good deal), rising price → red.
- * - Returns null for empty array.
- */
-export function buildPriceSparklineSVG(records: PriceRecord[]): string | null {
-  if (records.length === 0) return null;
-
-  const sorted = [...records].sort((a, b) => a.timestamp - b.timestamp);
-  const prices = sorted.map((r) => r.priceAmountInt);
-
-  const W = PRICE_SPARKLINE_W;
-  const H = PRICE_SPARKLINE_H;
-  const padX = PRICE_PAD_X;
-  const padY = PRICE_PAD_Y;
-
-  const maxP = Math.max(...prices);
-  const range = maxP - Math.min(...prices);
-
-  function toX(i: number): number {
-    if (sorted.length === 1) return W / 2;
-    return padX + (i / (sorted.length - 1)) * (W - padX * 2);
-  }
-
-  function toY(price: number): number {
-    if (range === 0) return H / 2;
-    return padY + ((maxP - price) / range) * (H - padY * 2);
-  }
-
-  const pts = sorted.map((r, i) => ({
-    x: toX(i),
-    y: toY(r.priceAmountInt),
-  }));
-
-  if (sorted.length === 1) {
-    const y = toY(prices[0]!);
-    return [
-      `<svg`,
-      `  xmlns="http://www.w3.org/2000/svg"`,
-      `  viewBox="0 0 ${W} ${H}"`,
-      `  preserveAspectRatio="none"`,
-      `  aria-hidden="true"`,
-      `  role="img"`,
-      `>`,
-      `  <line x1="${padX.toFixed(1)}" y1="${y.toFixed(1)}" x2="${(W - padX).toFixed(1)}" y2="${y.toFixed(1)}" stroke="#00c8ff" stroke-width="1.8" stroke-linecap="round" />`,
-      `</svg>`,
-    ].join("\n");
-  }
-
-  const segments: string[] = [];
-  for (let i = 0; i < pts.length - 1; i++) {
-    const cur = pts[i]!;
-    const next = pts[i + 1]!;
-    const curPrice = prices[i]!;
-    const nextPrice = prices[i + 1]!;
-
-    // Inverted: segmentColor(next, cur) so falling price → green (good deal)
-    const color = segmentColor(nextPrice, curPrice);
-
-    const midX = next.x;
-    const midY = cur.y;
-
-    segments.push(
-      `  <line x1="${cur.x.toFixed(1)}" y1="${cur.y.toFixed(1)}" x2="${midX.toFixed(1)}" y2="${midY.toFixed(1)}" stroke="${color}" stroke-width="1.8" stroke-linecap="square" />`,
-    );
-    segments.push(
-      `  <line x1="${midX.toFixed(1)}" y1="${midY.toFixed(1)}" x2="${next.x.toFixed(1)}" y2="${next.y.toFixed(1)}" stroke="${color}" stroke-width="1.8" stroke-linecap="square" />`,
-    );
-  }
-
-  return [
-    `<svg`,
-    `  xmlns="http://www.w3.org/2000/svg"`,
-    `  viewBox="0 0 ${W} ${H}"`,
-    `  preserveAspectRatio="none"`,
-    `  aria-hidden="true"`,
-    `  role="img"`,
-    `>`,
-    ...segments,
-    `</svg>`,
-  ].join("\n");
 }

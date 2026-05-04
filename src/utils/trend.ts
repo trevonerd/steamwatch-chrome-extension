@@ -7,7 +7,6 @@ import type {
   Snapshot,
   TrendLevel,
   TrendResult,
-  SpikeResult,
   ForecastResult,
 } from "../types/index.js";
 
@@ -20,7 +19,6 @@ export const TREND_LEVELS: readonly TrendLevel[] = [
   { key: "STABLE",     label: "Stable",       icon: "➡️",   cls: "stable",     minPct: -5  },
   { key: "DOWN",       label: "Declining",    icon: "📉",   cls: "down",       minPct: -20 },
   { key: "STRONG_DOWN",label: "Strong Drop",  icon: "⬇️",   cls: "strong-down",minPct: -50 },
-  { key: "CRASH",      label: "Crash",        icon: "💀",   cls: "crash",      minPct: -Infinity },
 ] as const;
 
 // ── Core trend computation ────────────────────────────────────────────────────
@@ -51,31 +49,6 @@ export function computeTrend(
   const level = TREND_LEVELS.find((t) => pct >= t.minPct) ?? TREND_LEVELS[TREND_LEVELS.length - 1]!;
 
   return { level, pct, delta };
-}
-
-/**
- * Detect a large single-interval change (last snapshot vs second-to-last).
- * Returns null if not enough data or below threshold.
- */
-export function detectSpike(
-  snapshots: readonly Snapshot[],
-  thresholdPct = 40
-): SpikeResult | null {
-  if (snapshots.length < 2) return null;
-
-  const last = snapshots[snapshots.length - 1]!;
-  const prev = snapshots[snapshots.length - 2]!;
-
-  if (prev.current === 0) return null;
-
-  const pct = ((last.current - prev.current) / prev.current) * 100;
-
-  if (Math.abs(pct) < thresholdPct) return null;
-
-  return {
-    type: pct > 0 ? "spike_up" : "spike_down",
-    pct: Math.round(pct),
-  };
 }
 
 /**

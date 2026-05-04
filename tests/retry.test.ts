@@ -3,11 +3,18 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { withRetry } from "../src/utils/retry.js";
 
 describe("withRetry", () => {
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+  let errorSpy: ReturnType<typeof vi.spyOn>;
+
   beforeEach(() => {
     vi.useFakeTimers();
+    warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
   });
 
   afterEach(() => {
+    warnSpy.mockRestore();
+    errorSpy.mockRestore();
     vi.restoreAllMocks();
     vi.useRealTimers();
   });
@@ -109,7 +116,6 @@ describe("withRetry", () => {
   });
 
   it("logs warnings on each retry with label", async () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const fn = vi.fn();
     fn.mockRejectedValueOnce(new Error("fail 1"));
     fn.mockRejectedValueOnce(new Error("fail 2"));
@@ -137,11 +143,9 @@ describe("withRetry", () => {
       expect.any(Error)
     );
 
-    warnSpy.mockRestore();
   });
 
   it("logs warnings with 'operation' label when label not provided", async () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const fn = vi.fn();
     fn.mockRejectedValueOnce(new Error("fail"));
     fn.mockResolvedValueOnce("success");
@@ -156,11 +160,9 @@ describe("withRetry", () => {
       expect.any(Error)
     );
 
-    warnSpy.mockRestore();
   });
 
   it("logs error on final failure with label", async () => {
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const fn = vi.fn().mockRejectedValue(new Error("persistent"));
 
     const promise = withRetry(fn, {
@@ -179,12 +181,9 @@ describe("withRetry", () => {
       "[SteamWatch] fetchData failed after 2 retries"
     );
 
-    errorSpy.mockRestore();
   });
 
   it("logs warn (not error) on final failure when warnOnly is true", async () => {
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const fn = vi.fn().mockRejectedValue(new Error("persistent"));
 
     const promise = withRetry(fn, {
@@ -205,12 +204,9 @@ describe("withRetry", () => {
       "[SteamWatch] ITAD:lookupGame failed after 2 retries"
     );
 
-    errorSpy.mockRestore();
-    warnSpy.mockRestore();
   });
 
   it("logs error on final failure with default 'operation' label", async () => {
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const fn = vi.fn().mockRejectedValue(new Error("persistent"));
 
     const promise = withRetry(fn, { maxRetries: 1, baseDelayMs: 100 });
@@ -224,7 +220,6 @@ describe("withRetry", () => {
       "[SteamWatch] operation failed after 1 retries"
     );
 
-    errorSpy.mockRestore();
   });
 
   it("preserves generic type through retries", async () => {

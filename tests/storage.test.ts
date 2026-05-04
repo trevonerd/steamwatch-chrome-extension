@@ -276,16 +276,6 @@ describe("getSnapshotCapacity", () => {
 // ── new Settings defaults ─────────────────────────────────────────────────────
 
 describe("DEFAULT_SETTINGS includes new v0.12 fields", () => {
-  it("priceAlertsEnabled defaults to true", async () => {
-    const s = await getSettings();
-    expect(s.priceAlertsEnabled).toBe(true);
-  });
-
-  it("priceDropMinPct defaults to 30", async () => {
-    const s = await getSettings();
-    expect(s.priceDropMinPct).toBe(30);
-  });
-
   it("badgeFavoriteAppid defaults to undefined", async () => {
     const s = await getSettings();
     expect(s.badgeFavoriteAppid).toBeUndefined();

@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { z } from "zod";
-import type { SearchResult, SteamChartsData, SteamSpyData, Snapshot } from "../types/index.js";
+import type { SearchResult, SteamChartsData, SteamSpyData, Snapshot, SteamNewsItem } from "../types/index.js";
 import { withRetry } from "./retry.js";
 
 export const STEAM_CAPSULE_URL = (appid: string): string =>
@@ -210,70 +210,7 @@ export async function searchGames(query: string): Promise<SearchResult[]> {
   }
 }
 
-// ── Price data ────────────────────────────────────────────────────────────────
-
-export interface PriceData {
-  readonly priceOriginal: number;    // cents
-  readonly priceCurrent: number;     // cents
-  readonly discountPct: number;      // 0–100
-  readonly currentFormatted: string;
-  readonly originalFormatted: string;
-}
-
-export type PriceResult =
-  | { kind: "priced"; data: PriceData }
-  | { kind: "free" }
-  | { kind: "error"; reason: string };
-
-const PriceOverviewSchema = z.object({
-  initial:           z.number().int().nonnegative(),
-  final:             z.number().int().nonnegative(),
-  discount_percent:  z.number().int().min(0).max(100),
-  final_formatted:   z.string(),
-  initial_formatted: z.string(),
-});
-
-/**
- * Fetch current price and sale discount from the Steam Store API.
- * Returns a discriminated union for priced, free, and error states.
- */
-export async function fetchPriceData(appid: string, regionCode = "US"): Promise<PriceResult> {
-  try {
-    return await withRetry(async () => {
-      const res = await fetch(
-        `https://store.steampowered.com/api/appdetails?appids=${encodeURIComponent(appid)}&filters=price_overview&cc=${regionCode}`
-      );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json: unknown = await res.json();
-      if (typeof json !== "object" || json === null) throw new Error("Invalid response");
-      const entry = (json as Record<string, unknown>)[appid];
-      if (typeof entry !== "object" || entry === null) throw new Error("Invalid entry");
-      const { success, data } = entry as Record<string, unknown>;
-      if (success !== true || typeof data !== "object" || data === null) throw new Error("API error");
-      const { price_overview } = data as Record<string, unknown>;
-      if (price_overview == null) return { kind: "free" };
-      const parsed = PriceOverviewSchema.safeParse(price_overview);
-      if (!parsed.success) throw new Error("Price parse failed");
-      const { initial, final, discount_percent, final_formatted, initial_formatted } = parsed.data;
-      return {
-        kind: "priced",
-        data: {
-          priceOriginal:     initial,
-          priceCurrent:      final,
-          discountPct:       discount_percent,
-          currentFormatted:  final_formatted,
-          originalFormatted: initial_formatted,
-        },
-      };
-    }, { maxRetries: 2, label: "fetchPriceData" });
-  } catch (err) {
-    return { kind: "error", reason: String(err) };
-  }
-}
-
 // ── Steam News ────────────────────────────────────────────────────────────────
-
-import type { SteamNewsItem } from "../types/index.js";
 
 const SteamNewsSchema = z.object({
   appnews: z.object({

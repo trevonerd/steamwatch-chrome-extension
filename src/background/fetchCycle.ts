@@ -13,14 +13,6 @@ export interface BuildCachedDataInput {
   readonly prevCache?: CachedData;
   readonly fetchedAt: number;
   readonly twitchViewers: number | null;
-  readonly priceOriginal?: number;
-  readonly priceCurrent?: number;
-  readonly discountPct?: number;
-  readonly priceFormatted?: string;
-  readonly priceOriginalFormatted?: string;
-  readonly priceError?: boolean;
-  readonly itadUuid?: string;
-  readonly itadHistoricalLow?: { amountInt: number; cut: number; timestamp: string };
 }
 
 export function mergeCycleCache(
@@ -45,36 +37,10 @@ export function buildCachedData(input: BuildCachedDataInput): CachedData {
     prevCache,
     fetchedAt,
     twitchViewers,
-    priceOriginal,
-    priceCurrent,
-    discountPct,
-    priceFormatted,
-    priceOriginalFormatted,
-    priceError,
-    itadUuid,
-    itadHistoricalLow,
   } = input;
 
   const prevLocalPeak = prevCache?.localAllTimePeak ?? prevCache?.current ?? 0;
   const localAllTimePeak = Math.max(prevLocalPeak, currentPlayers, allTimePeak ?? 0);
-
-  const hasFreshPrice = discountPct != null;
-  const priceFields: Partial<CachedData> = hasFreshPrice
-    ? {
-        ...(priceOriginal      != null ? { priceOriginal }      : {}),
-        ...(priceCurrent       != null ? { priceCurrent }       : {}),
-        discountPct,  // 0 for full-price, >0 for sale
-        ...(priceFormatted         ? { priceFormatted }         : {}),
-        ...(priceOriginalFormatted ? { priceOriginalFormatted } : {}),
-      }
-    : {  // no fresh price data: carry forward from prevCache (or flag error)
-        ...(prevCache?.priceOriginal         != null ? { priceOriginal:         prevCache.priceOriginal         } : {}),
-        ...(prevCache?.priceCurrent          != null ? { priceCurrent:          prevCache.priceCurrent          } : {}),
-        ...(prevCache?.discountPct           != null ? { discountPct:           prevCache.discountPct           } : {}),
-        ...(prevCache?.priceFormatted             ? { priceFormatted:         prevCache.priceFormatted         } : {}),
-        ...(prevCache?.priceOriginalFormatted ? { priceOriginalFormatted: prevCache.priceOriginalFormatted } : {}),
-        ...(priceError ? { priceError: true } : {}),
-      };
 
   return {
     current: currentPlayers,
@@ -100,8 +66,5 @@ export function buildCachedData(input: BuildCachedDataInput): CachedData {
       : prevCache?.twitchViewers != null
         ? { twitchViewers: prevCache.twitchViewers }
         : {}),
-    ...priceFields,
-    ...(itadUuid          ? { itadUuid }                       : prevCache?.itadUuid          ? { itadUuid: prevCache.itadUuid }                           : {}),
-    ...(itadHistoricalLow ? { itadHistoricalLow }              : prevCache?.itadHistoricalLow ? { itadHistoricalLow: prevCache.itadHistoricalLow }          : {}),
   };
 }

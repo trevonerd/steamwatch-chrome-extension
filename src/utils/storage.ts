@@ -20,13 +20,11 @@ const SNAPSHOT_BUFFER = 12;
 
 export const DEFAULT_SETTINGS: Settings = {
   trendEnabled: true,
-  purgeAfterDays: 7,
+  purgeAfterDays: 30,
   notificationsEnabled: true,
-  spikeDetection: true,
   globalThresholdUp: 30,
   globalThresholdDown: -25,
-  crashThreshold: -50,
-  fetchIntervalMinutes: 15,
+  fetchIntervalMinutes: 30,
   // Quiet hours — off by default
   quietHoursEnabled: false,
   quietStart: "23:00",
@@ -34,11 +32,6 @@ export const DEFAULT_SETTINGS: Settings = {
   quietDays: 0b1111111, // all 7 days
   // Ranking
   rankByPlayers: true,
-  // Price drop alerts
-  priceAlertsEnabled: true,
-  priceDropMinPct: 30,
-  // Region detection
-  regionCode: "auto",
 };
 
 // ── Storage keys ──────────────────────────────────────────────────────────────
@@ -52,50 +45,6 @@ const KEYS = {
   /** Unix ms timestamp of the last successful global fetch cycle. */
   lastFetchTime: "sw_last_fetch",
 } as const;
-
-// ── Region detection ──────────────────────────────────────────────────────────
-
-const LANGUAGE_TO_REGION: Record<string, string> = {
-  it: "IT",
-  de: "DE",
-  fr: "FR",
-  es: "ES",
-  pt: "PT",
-  nl: "NL",
-  pl: "PL",
-  ru: "RU",
-  ko: "KR",
-  zh: "CN",
-  ja: "JP",
-};
-
-export function detectRegion(): string {
-  try {
-    const locale = new Intl.DateTimeFormat().resolvedOptions().locale;
-    
-    // Try to extract region from locale string (e.g., "it-IT" → "IT")
-    const parts = locale.split("-");
-    if (parts.length >= 2) {
-      const region = parts[parts.length - 1]!.toUpperCase();
-      if (region.length === 2) {
-        return region;
-      }
-    }
-    
-    // Fall back to language-only mapping (e.g., "it" → "IT")
-    const lang = parts[0]!.toLowerCase();
-    return LANGUAGE_TO_REGION[lang] ?? "US";
-  } catch {
-    return "US";
-  }
-}
-
-export function getEffectiveRegion(settings: Settings): string {
-  if (settings.regionCode === "auto" || settings.regionCode === undefined) {
-    return detectRegion();
-  }
-  return settings.regionCode;
-}
 
 // ── Generic helpers ───────────────────────────────────────────────────────────
 

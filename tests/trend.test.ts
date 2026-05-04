@@ -2,7 +2,6 @@
 import { describe, it, expect } from "vitest";
 import {
   computeTrend,
-  detectSpike,
   compute24hAvg,
   compute24hGain,
   computeRetentionAvg,
@@ -83,14 +82,6 @@ describe("computeTrend", () => {
     expect(result!.level.key).toBe("STRONG_DOWN");
   });
 
-  it("detects CRASH (<-50%)", () => {
-    // prev avg: 1000, recent avg: ~300 → -70%
-    const snaps = makeSnaps([1000, 1000, 1000, 310, 300, 290]);
-    const result = computeTrend(snaps);
-    expect(result).not.toBeNull();
-    expect(result!.level.key).toBe("CRASH");
-  });
-
   it("rounds pct to 1 decimal", () => {
     const snaps = makeSnaps([1000, 1000, 1000, 1100, 1100, 1100]);
     const result = computeTrend(snaps);
@@ -112,48 +103,6 @@ describe("computeTrend", () => {
     const result = computeTrend([...old, ...recent]);
     expect(result).not.toBeNull();
     expect(result!.level.key).toBe("STABLE");
-  });
-});
-
-// ── detectSpike ───────────────────────────────────────────────────────────────
-
-describe("detectSpike", () => {
-  it("returns null with fewer than 2 snapshots", () => {
-    expect(detectSpike(makeSnaps([1000]))).toBeNull();
-  });
-
-  it("returns null when prev is zero", () => {
-    expect(detectSpike(makeSnaps([0, 500]))).toBeNull();
-  });
-
-  it("returns null when change is below threshold", () => {
-    expect(detectSpike(makeSnaps([1000, 1200]))).toBeNull(); // +20% < default 40%
-  });
-
-  it("detects spike_up when change exceeds threshold", () => {
-    const result = detectSpike(makeSnaps([1000, 1500])); // +50%
-    expect(result).not.toBeNull();
-    expect(result!.type).toBe("spike_up");
-    expect(result!.pct).toBe(50);
-  });
-
-  it("detects spike_down when drop exceeds threshold", () => {
-    const result = detectSpike(makeSnaps([1000, 500])); // -50%
-    expect(result).not.toBeNull();
-    expect(result!.type).toBe("spike_down");
-    expect(result!.pct).toBe(-50);
-  });
-
-  it("respects custom threshold", () => {
-    expect(detectSpike(makeSnaps([1000, 1150]), 10)).not.toBeNull(); // +15% > 10%
-    expect(detectSpike(makeSnaps([1000, 1150]), 20)).toBeNull();     // +15% < 20%
-  });
-
-  it("uses only the last two snapshots", () => {
-    // Large earlier jump should be ignored
-    const snaps = makeSnaps([100, 10000, 1000, 1050]);
-    const result = detectSpike(snaps);
-    expect(result).toBeNull(); // 1000 → 1050 is only +5%
   });
 });
 

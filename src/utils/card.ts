@@ -10,7 +10,7 @@
 // No side effects. No I/O. Fully unit-testable.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import type { Game, CachedData, Snapshot, CardViewModel, PriceState } from "../types/index.js";
+import type { Game, CachedData, Snapshot, CardViewModel } from "../types/index.js";
 import {
   compute24hAvg,
   compute24hGain,
@@ -29,13 +29,6 @@ import {
   filterSnapshotsByWindow,
   GRAPH_WINDOW_MS,
 } from "./sparkline.js";
-
-function derivePriceState(data: CachedData | undefined): PriceState {
-  if (!data) return "loading";
-  if (data.priceFormatted) return "available";
-  if (data.priceError === true) return "unavailable";
-  return "free";
-}
 
 /**
  * Build the complete view model for a single game card.
@@ -74,7 +67,7 @@ export function buildCardViewModel(
   const display = computeDisplayTrend(trend, latestChangePct);
   const stroke     = sparklineColor(snaps);
   const svgStr     = buildSparklineSVG(snaps);
-  
+
   const activeWindowKey = defaultGraphWindow ?? "all";
   const activeWindowMs = GRAPH_WINDOW_MS[activeWindowKey];
   const filteredSnapsForWindow = filterSnapshotsByWindow(snaps, activeWindowMs);
@@ -104,15 +97,9 @@ export function buildCardViewModel(
     sparklineStroke: stroke,
     svgStr,
     fetchedAt: data?.fetchedAt ?? 0,
-    priceState: derivePriceState(data),
     ...(data?.twitchViewers != null ? { twitchViewers: data.twitchViewers } : {}),
-    ...(data?.discountPct   != null ? { discountPct:   data.discountPct   } : {}),
-    ...(data?.priceFormatted         ? { priceFormatted:         data.priceFormatted         } : {}),
-    ...(data?.priceOriginalFormatted ? { priceOriginalFormatted: data.priceOriginalFormatted } : {}),
     recordLow,
     allTimeLow,
-    ...(data?.itadHistoricalLow ? { itadHistoricalLow: data.itadHistoricalLow } : {}),
-    ...(data?.itadUuid ? { itadUuid: data.itadUuid } : {}),
   };
 }
 

@@ -1,18 +1,14 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import type { PriceRecord, Snapshot } from "../src/types/index.js";
+import type { Snapshot } from "../src/types/index.js";
 import {
   _resetDbForTesting,
   idbBulkSaveSnapshots,
   idbDeleteSnapshots,
   idbGetCooldown,
-  idbGetItadMapping,
-  idbGetPriceHistory,
   idbGetSnapshots,
   idbGetSnapshotsInRange,
   idbPurgeCooldowns,
-  idbSaveItadMapping,
-  idbSavePriceHistory,
   idbSaveSnapshot,
   idbSetCooldown,
 } from "../src/utils/idb-storage.js";
@@ -61,58 +57,6 @@ describe("idb-storage", () => {
 
     expect(await idbGetSnapshots("100")).toEqual([{ ts: 1000, current: 10 }]);
     expect(await idbGetSnapshots("200")).toEqual([{ ts: 1000, current: 20 }]);
-  });
-
-  it("round-trips ITAD mapping", async () => {
-    await idbSaveItadMapping("100", "itad-uuid-100");
-    await expect(idbGetItadMapping("100")).resolves.toBe("itad-uuid-100");
-  });
-
-  it("returns null for unknown ITAD mapping", async () => {
-    await expect(idbGetItadMapping("999")).resolves.toBeNull();
-  });
-
-  it("round-trips price history sorted by timestamp asc", async () => {
-    const appId = "100";
-    const records: PriceRecord[] = [
-      {
-        appId,
-        timestamp: 2000,
-        priceAmountInt: 1499,
-        regularAmountInt: 1999,
-        cut: 25,
-        shop: "steam",
-      },
-      {
-        appId,
-        timestamp: 1000,
-        priceAmountInt: 1999,
-        regularAmountInt: 1999,
-        cut: 0,
-        shop: "steam",
-      },
-    ];
-
-    await idbSavePriceHistory(appId, records);
-
-    await expect(idbGetPriceHistory(appId)).resolves.toEqual([
-      {
-        appId,
-        timestamp: 1000,
-        priceAmountInt: 1999,
-        regularAmountInt: 1999,
-        cut: 0,
-        shop: "steam",
-      },
-      {
-        appId,
-        timestamp: 2000,
-        priceAmountInt: 1499,
-        regularAmountInt: 1999,
-        cut: 25,
-        shop: "steam",
-      },
-    ]);
   });
 
   it("deletes all snapshots for an appId", async () => {

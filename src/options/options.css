@@ -663,15 +663,6 @@ code {
   color: var(--accent);
 }
 
-/* ── History price stats section ───────────────────────────────────────── */
-.history-price-stats { margin-top: 12px; }
-.history-price-title { font-size: 11px; font-family: var(--ff-mono); color: var(--text-3); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; }
-.history-price-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-.itad-credit { font-size: 10px; text-transform: none; letter-spacing: normal; }
-.itad-credit a { color: var(--accent); text-decoration: none; }
-.itad-credit a:hover { text-decoration: underline; }
-.history-price-sparkline { margin-top: 10px; overflow: visible; }
-
 /* ── Game row image placeholder ─────────────────────────────────────────── */
 .game-row-thumb-wrap {
   position: relative;
@@ -799,30 +790,6 @@ code {
 .history-link:hover {
   opacity: 1;
   text-decoration: underline;
-}
-
-.history-sale-badge {
-  color: #4ade80;
-  font-weight: 600;
-}
-
-.history-price-chart-section {
-  margin-top: 20px;
-  padding-top: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.history-section-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-2);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  margin: 0 0 10px;
-}
-
-.history-price-chart-controls {
-  margin-bottom: 8px;
 }
 
 @media (max-width: 520px) {

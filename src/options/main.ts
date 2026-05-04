@@ -11,7 +11,7 @@ import {
   MAX_GAMES,
   getCache,
 } from "../utils/storage.js";
-import { idbGetSnapshots, idbGetItadMapping, idbGetPriceHistory } from "../utils/idb-storage.js";
+import { idbGetSnapshots } from "../utils/idb-storage.js";
 import { searchGames } from "../utils/api.js";
 import { esc, mustGet, show, hide } from "../utils/html.js";
 import type { Game, GameSettings, MessageRequest, MessageResponse } from "../types/index.js";
@@ -25,9 +25,6 @@ import {
   buildAvailableGraphWindows,
   sparklineColor,
   findNearestPointIndex,
-  buildPriceSparklineSVG,
-  filterPriceRecordsByWindow,
-  downsamplePriceRecords,
 } from "../utils/sparkline.js";
 import { fmtNumber, fmtPct, compute24hAvg, computeRetentionAvg, computeLocalPeak, computeWindowMin, compute24hGain, computeRetentionGain, computeTrend, computeLatestChangePct } from "../utils/trend.js";
 
@@ -127,12 +124,6 @@ function buildGameRow(game: Game, gs: GameSettings): HTMLLIElement {
           <span class="setting-hint">Overrides global drop alert %.</span>
         </div>
         <div class="setting-group">
-          <label class="setting-label" for="gs-crash-${esc(game.appid)}">💀 Crash threshold (%)</label>
-          <input class="input-sm" type="number" id="gs-crash-${esc(game.appid)}" name="crashThreshold"
-                 placeholder="Global default" min="1" max="200" value="${gs.crashThreshold != null ? Math.abs(gs.crashThreshold) : ""}">
-          <span class="setting-hint">Overrides global crash alert %.</span>
-        </div>
-        <div class="setting-group">
           <label class="setting-label" for="gs-abs-${esc(game.appid)}">🎯 Absolute player alert</label>
           <input class="input-sm" type="number" id="gs-abs-${esc(game.appid)}" name="notifyThresholdPlayers"
                  placeholder="e.g. 100000" min="0" value="${gs.notifyThresholdPlayers ?? ""}">
@@ -181,13 +172,11 @@ function buildGameRow(game: Game, gs: GameSettings): HTMLLIElement {
 
     const upVal    = li.querySelector<HTMLInputElement>("[name='thresholdUp']")!.value;
     const downVal  = li.querySelector<HTMLInputElement>("[name='thresholdDown']")!.value;
-    const crashVal = li.querySelector<HTMLInputElement>("[name='crashThreshold']")!.value;
     const absVal   = li.querySelector<HTMLInputElement>("[name='notifyThresholdPlayers']")!.value;
     const notifOn  = li.querySelector<HTMLInputElement>("[name='notificationsEnabled']")!.checked;
 
     if (upVal)    partial.thresholdUp = Number(upVal);
     if (downVal)  partial.thresholdDown = -Math.abs(Number(downVal));
-    if (crashVal) partial.crashThreshold = -Math.abs(Number(crashVal));
     if (absVal)   partial.notifyThresholdPlayers = Number(absVal);
     partial.notificationsEnabled = notifOn;
 
@@ -372,7 +361,6 @@ async function initNotifications(): Promise<void> {
   const s = await getSettings();
 
   mustGet<HTMLInputElement>("notificationsEnabled").checked = s.notificationsEnabled;
-  mustGet<HTMLInputElement>("spikeDetection").checked       = s.spikeDetection;
 
   const upEl  = mustGet<HTMLInputElement>("globalThresholdUp");
   const upVal = mustGet<HTMLSpanElement>("thresholdUpVal");
@@ -385,20 +373,6 @@ async function initNotifications(): Promise<void> {
   downEl.value  = String(Math.abs(s.globalThresholdDown));
   downVal.textContent = `-${Math.abs(s.globalThresholdDown)}%`;
   downEl.addEventListener("input", () => { downVal.textContent = `-${downEl.value}%`; });
-
-  const crashEl  = mustGet<HTMLInputElement>("crashThreshold");
-  const crashVal = mustGet<HTMLSpanElement>("crashThresholdVal");
-  crashEl.value  = String(Math.abs(s.crashThreshold));
-  crashVal.textContent = `-${Math.abs(s.crashThreshold)}%`;
-  crashEl.addEventListener("input", () => { crashVal.textContent = `-${crashEl.value}%`; });
-
-  mustGet<HTMLInputElement>("priceAlertsEnabled").checked = s.priceAlertsEnabled;
-
-  const priceEl  = mustGet<HTMLInputElement>("priceDropMinPct");
-  const priceVal = mustGet<HTMLSpanElement>("priceDropMinPctVal");
-  priceEl.value  = String(s.priceDropMinPct);
-  priceVal.textContent = `${s.priceDropMinPct}%`;
-  priceEl.addEventListener("input", () => { priceVal.textContent = `${priceEl.value}%`; });
 }
 
 async function initQuietHours(): Promise<void> {
@@ -462,16 +436,12 @@ mustGet<HTMLButtonElement>("saveNotifs").addEventListener("click", async () => {
 
     await saveSettings({
       notificationsEnabled: mustGet<HTMLInputElement>("notificationsEnabled").checked,
-      spikeDetection:       mustGet<HTMLInputElement>("spikeDetection").checked,
       globalThresholdUp:    Number(mustGet<HTMLInputElement>("globalThresholdUp").value),
       globalThresholdDown: -Math.abs(Number(mustGet<HTMLInputElement>("globalThresholdDown").value)),
-      crashThreshold:      -Math.abs(Number(mustGet<HTMLInputElement>("crashThreshold").value)),
       quietHoursEnabled:   mustGet<HTMLInputElement>("quietHoursEnabled").checked,
       quietStart:          mustGet<HTMLInputElement>("quietStart").value,
       quietEnd:            mustGet<HTMLInputElement>("quietEnd").value,
       quietDays:           buildDayMask(activeDays),
-      priceAlertsEnabled:  mustGet<HTMLInputElement>("priceAlertsEnabled").checked,
-      priceDropMinPct:     Number(mustGet<HTMLInputElement>("priceDropMinPct").value),
     });
     showToast("savedNotifs");
   } catch (err) {
@@ -535,17 +505,6 @@ async function initHistory(): Promise<void> {
   const hPeak     = document.getElementById("hStatPeak")     as HTMLDivElement | null;
   const hRecordLow  = document.getElementById("hStatRecordLow")  as HTMLDivElement | null;
   const hAllTimeLow = document.getElementById("hStatAllTimeLow") as HTMLDivElement | null;
-  const priceStatsEl    = document.getElementById("historyPriceStats")  as HTMLDivElement | null;
-  const hStatHistLow    = document.getElementById("hStatHistLow")       as HTMLDivElement | null;
-  const hStatCurrentPrice = document.getElementById("hStatCurrentPrice") as HTMLDivElement | null;
-  const hStatDiscount   = document.getElementById("hStatDiscount")      as HTMLDivElement | null;
-  const hSteamPriceSection   = document.getElementById("historySteamPriceSection")   as HTMLDivElement | null;
-  const hSteamPrice          = document.getElementById("history-steam-price")         as HTMLDivElement | null;
-  const hSteamOriginalWrap   = document.getElementById("history-steam-original-wrap") as HTMLDivElement | null;
-  const hSteamOriginalPrice  = document.getElementById("history-steam-original-price") as HTMLDivElement | null;
-  const hSteamDiscountWrap   = document.getElementById("history-steam-discount-wrap") as HTMLDivElement | null;
-  const hSteamDiscount       = document.getElementById("history-steam-discount")      as HTMLDivElement | null;
-  const hItadPriceSection    = document.getElementById("historyItadPriceSection")     as HTMLDivElement | null;
   const hPeak24h      = document.getElementById("history-peak24h")      as HTMLDivElement | null;
   const hAllTimePeak  = document.getElementById("history-alltime-peak")  as HTMLDivElement | null;
   const h24hGain      = document.getElementById("history-24h-gain")      as HTMLDivElement | null;
@@ -558,9 +517,6 @@ async function initHistory(): Promise<void> {
   const hSteamLink    = document.getElementById("history-steam-link")   as HTMLAnchorElement | null;
   const hSteamdbLink  = document.getElementById("history-steamdb-link") as HTMLAnchorElement | null;
   const hTwitch       = document.getElementById("history-twitch")       as HTMLDivElement    | null;
-  const hSaleBadgeWrap = document.getElementById("history-sale-badge-wrap") as HTMLDivElement | null;
-  const hSaleBadge    = document.getElementById("history-sale-badge")   as HTMLDivElement    | null;
-  const hPriceSparkline = document.getElementById("history-price-sparkline") as HTMLDivElement | null;
   if (!selectEl || !tabsEl || !chartEl || !emptyEl || !noGameEl || !statsEl) return;
 
   const settings = await getSettings();
@@ -602,119 +558,6 @@ async function initHistory(): Promise<void> {
   }
   buildTabs();
 
-  const priceChartEl = document.querySelector<SVGSVGElement>("#historyPriceChart");
-  const priceChartSectionEl = document.querySelector<HTMLElement>("#historyPriceChartSection");
-  const priceTabsEl = document.querySelector<HTMLElement>("#priceWindowTabs");
-  let activePriceWindow = windows[0]?.windowMs ?? 86_400_000;
-
-  function buildPriceTabs(): void {
-    if (!priceTabsEl) return;
-    priceTabsEl.innerHTML = "";
-    windows.forEach((w) => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = `panel-window-btn${w.windowMs === activePriceWindow ? " active" : ""}`;
-      btn.textContent = w.label;
-      btn.dataset["windowMs"] = String(w.windowMs);
-      btn.setAttribute("role", "tab");
-      btn.setAttribute("aria-selected", String(w.windowMs === activePriceWindow));
-      btn.addEventListener("click", () => {
-        activePriceWindow = w.windowMs;
-        priceTabsEl!.querySelectorAll<HTMLButtonElement>("[data-window-ms]").forEach((b) => {
-          const active = b === btn;
-          b.classList.toggle("active", active);
-          b.setAttribute("aria-selected", String(active));
-        });
-        void renderPriceChart(selectEl!.value);
-      });
-      priceTabsEl!.appendChild(btn);
-    });
-  }
-  buildPriceTabs();
-
-  async function renderPriceChart(appid: string): Promise<void> {
-    if (!appid || !priceChartSectionEl) return;
-
-    const allRecords = await idbGetPriceHistory(appid);
-    const filtered = filterPriceRecordsByWindow(allRecords, activePriceWindow);
-    const downsampled = downsamplePriceRecords(filtered, 120);
-
-    if (downsampled.length < 2) {
-      priceChartSectionEl.hidden = true;
-      return;
-    }
-
-    priceChartSectionEl.hidden = false;
-
-    const W = 600; const H = 120;
-    const padX = 60; const padY = 12;
-    const sorted = [...downsampled].sort((a, b) => a.timestamp - b.timestamp);
-    const prices = sorted.map((r) => r.priceAmountInt);
-    const maxP = Math.max(...prices);
-    const minP = Math.min(...prices);
-    const rangeP = maxP - minP;
-
-    const toX = (i: number): number => {
-      if (sorted.length === 1) return W / 2;
-      return padX + (i / (sorted.length - 1)) * (W - padX * 2);
-    };
-    const toY = (price: number): number => {
-      if (rangeP === 0) return H / 2;
-      return padY + ((maxP - price) / rangeP) * (H - padY * 2);
-    };
-
-    const pts = sorted.map((r, i) => ({ x: toX(i), y: toY(r.priceAmountInt) }));
-    const fmtPrice = (cents: number): string => `$${(cents / 100).toFixed(2)}`;
-    const fmtDate = (ts: number): string => {
-      const d = new Date(ts);
-      return `${d.getMonth() + 1}/${d.getDate()}`;
-    };
-
-    const midP = Math.round((maxP + minP) / 2);
-    const gridLines = [
-      { y: padY,                       label: fmtPrice(maxP) },
-      { y: padY + (H - padY * 2) / 2, label: fmtPrice(midP) },
-      { y: H - padY,                   label: fmtPrice(minP) },
-    ];
-
-    const segments: string[] = [];
-    for (let i = 0; i < pts.length - 1; i++) {
-      const cur = pts[i]!;
-      const next = pts[i + 1]!;
-      const curPrice = prices[i]!;
-      const nextPrice = prices[i + 1]!;
-      let color = "#00c8ff";
-      if (nextPrice < curPrice) color = "#22c55e";
-      else if (nextPrice > curPrice) color = "#ef4444";
-      const midX = next.x;
-      const midY = cur.y;
-      segments.push(`<line x1="${cur.x.toFixed(1)}" y1="${cur.y.toFixed(1)}" x2="${midX.toFixed(1)}" y2="${midY.toFixed(1)}" stroke="${esc(color)}" stroke-width="1.8" stroke-linecap="square"/>`);
-      segments.push(`<line x1="${midX.toFixed(1)}" y1="${midY.toFixed(1)}" x2="${next.x.toFixed(1)}" y2="${next.y.toFixed(1)}" stroke="${esc(color)}" stroke-width="1.8" stroke-linecap="square"/>`);
-    }
-
-    const firstTs = sorted[0]!.timestamp;
-    const lastTs  = sorted[sorted.length - 1]!.timestamp;
-
-    if (priceChartEl) {
-      priceChartEl.innerHTML = `
-        ${gridLines.map((g) => `
-          <line x1="${padX}" y1="${g.y.toFixed(1)}" x2="${W - padX / 2}" y2="${g.y.toFixed(1)}"
-                stroke="rgba(255,255,255,.06)" stroke-width="1"/>
-          <text x="${(padX - 4).toFixed(1)}" y="${(g.y + 4).toFixed(1)}"
-                fill="rgba(148,163,184,.7)" font-size="10" text-anchor="end"
-                font-family="JetBrains Mono,monospace">${esc(g.label)}</text>
-        `).join("")}
-        <text x="${padX}" y="${(H - 2).toFixed(1)}"
-              fill="rgba(84,106,128,.8)" font-size="9.5" text-anchor="start"
-              font-family="JetBrains Mono,monospace">${esc(fmtDate(firstTs))}</text>
-        <text x="${(W - padX / 2).toFixed(1)}" y="${(H - 2).toFixed(1)}"
-              fill="rgba(84,106,128,.8)" font-size="9.5" text-anchor="end"
-              font-family="JetBrains Mono,monospace">${esc(fmtDate(lastTs))}</text>
-        ${segments.join("\n")}
-      `;
-    }
-  }
-
   async function renderHistory(appid: string): Promise<void> {
     if (!appid) {
       if (noGameEl) noGameEl.hidden = false;
@@ -726,9 +569,6 @@ async function initHistory(): Promise<void> {
       });
       if (hInfoHeader) hInfoHeader.hidden = true;
       if (hTwitch) hTwitch.textContent = "—";
-      if (hSaleBadgeWrap) hSaleBadgeWrap.style.display = "none";
-      if (hPriceSparkline) { hPriceSparkline.innerHTML = ""; hPriceSparkline.hidden = true; }
-      if (priceChartSectionEl) priceChartSectionEl.hidden = true;
       return;
     }
     if (noGameEl) noGameEl.hidden = true;
@@ -746,9 +586,6 @@ async function initHistory(): Promise<void> {
       });
       if (hInfoHeader) hInfoHeader.hidden = true;
       if (hTwitch) hTwitch.textContent = "—";
-      if (hSaleBadgeWrap) hSaleBadgeWrap.style.display = "none";
-      if (hPriceSparkline) { hPriceSparkline.innerHTML = ""; hPriceSparkline.hidden = true; }
-      if (priceChartSectionEl) priceChartSectionEl.hidden = true;
       return;
     }
     if (emptyEl) emptyEl.hidden = true;
@@ -943,9 +780,10 @@ async function initHistory(): Promise<void> {
 
     // ── Info header: thumbnail + links ──
     if (appid) {
+      const historyGame = games.find((g) => g.appid === appid);
       if (hThumbnail) {
-        hThumbnail.src = `https://cdn.akamai.steamstatic.com/steam/apps/${appid}/capsule_sm_120.jpg`;
-        hThumbnail.alt = games.find((g) => g.appid === appid)?.name ?? "";
+        hThumbnail.src = historyGame?.image ?? "";
+        hThumbnail.alt = historyGame?.name ?? "";
         if (hThumbnailWrapper) {
           wireThumbFallback(hThumbnail, hThumbnailWrapper, appid);
         }
@@ -955,87 +793,10 @@ async function initHistory(): Promise<void> {
       if (hInfoHeader)  hInfoHeader.hidden = false;
     }
 
-    // ── Twitch viewers + sale badge ──
+    // ── Twitch viewers ──
     if (hTwitch) {
       hTwitch.textContent = fmtNumber(cached?.twitchViewers ?? null);
     }
-    if (hSaleBadgeWrap && hSaleBadge) {
-      if (cached?.discountPct && cached.discountPct > 0) {
-        hSaleBadge.textContent = `-${cached.discountPct}%`;
-        hSaleBadgeWrap.style.display = "";
-      } else {
-        hSaleBadgeWrap.style.display = "none";
-      }
-    }
-
-    const itadUuid = await idbGetItadMapping(appid);
-
-    const hasSteamPrice = !!(cached?.priceFormatted);
-    const hasItadData   = !!itadUuid;
-
-    if (priceStatsEl) {
-      if (hasSteamPrice || hasItadData) {
-        show(priceStatsEl);
-      } else {
-        hide(priceStatsEl);
-      }
-    }
-
-    if (hSteamPriceSection) {
-      if (hasSteamPrice) {
-        hSteamPriceSection.hidden = false;
-        if (hSteamPrice) hSteamPrice.textContent = cached!.priceFormatted!;
-        if (hSteamOriginalWrap && hSteamOriginalPrice) {
-          const isDiscounted = cached!.priceOriginalFormatted && cached!.priceOriginalFormatted !== cached!.priceFormatted;
-          if (isDiscounted) {
-            hSteamOriginalPrice.textContent = cached!.priceOriginalFormatted!;
-            hSteamOriginalWrap.hidden = false;
-          } else {
-            hSteamOriginalWrap.hidden = true;
-          }
-        }
-        if (hSteamDiscountWrap && hSteamDiscount) {
-          if (cached?.discountPct && cached.discountPct > 0) {
-            hSteamDiscount.textContent = `-${cached.discountPct}%`;
-            hSteamDiscountWrap.hidden = false;
-          } else {
-            hSteamDiscountWrap.hidden = true;
-          }
-        }
-      } else {
-        hSteamPriceSection.hidden = true;
-      }
-    }
-
-    if (hItadPriceSection) {
-      if (itadUuid) {
-        const priceHistory = await idbGetPriceHistory(appid);
-        if (priceHistory.length > 0) {
-          hItadPriceSection.hidden = false;
-          const histLow = priceHistory.reduce((min, r) => r.priceAmountInt < min.priceAmountInt ? r : min);
-          const latest = priceHistory[priceHistory.length - 1]!;
-          if (hStatHistLow)      hStatHistLow.textContent      = `$${(histLow.priceAmountInt / 100).toFixed(2)}`;
-          if (hStatCurrentPrice) hStatCurrentPrice.textContent = `$${(latest.priceAmountInt / 100).toFixed(2)}`;
-          if (hStatDiscount)     hStatDiscount.textContent     = latest.cut > 0 ? `-${latest.cut}%` : "—";
-          if (hPriceSparkline) {
-            const priceSvg = buildPriceSparklineSVG(priceHistory);
-            if (priceSvg) {
-              hPriceSparkline.innerHTML = priceSvg;
-              hPriceSparkline.hidden = false;
-            } else {
-              hPriceSparkline.hidden = true;
-            }
-          }
-        } else {
-          hItadPriceSection.hidden = true;
-          if (hPriceSparkline) { hPriceSparkline.innerHTML = ""; hPriceSparkline.hidden = true; }
-        }
-      } else {
-        hItadPriceSection.hidden = true;
-        if (hPriceSparkline) { hPriceSparkline.innerHTML = ""; hPriceSparkline.hidden = true; }
-      }
-    }
-    await renderPriceChart(appid);
   }
 
   selectEl.addEventListener("change", () => void renderHistory(selectEl.value));

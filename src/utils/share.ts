@@ -269,7 +269,6 @@ function hexToRgba(hex: string, alpha: number): string {
 function trendStripColor(cls: string): string {
   if (["explosion", "strong-up", "up"].includes(cls)) return "#22c55e";
   if (["down", "strong-down"].includes(cls))           return "#ef4444";
-  if (cls === "crash")                                  return "#ff3366";
   return "#1e3a5f";
 }
 
@@ -277,8 +276,6 @@ function trendStripColor(cls: string): string {
 function trendBadgeColor(cls: string): { bg: string; text: string } {
   if (["explosion", "strong-up", "up"].includes(cls))
     return { bg: "rgba(34,197,94,0.15)",  text: "#22c55e" };
-  if (cls === "crash")
-    return { bg: "rgba(255,51,102,0.15)", text: "#ff3366" };
   if (["down", "strong-down"].includes(cls))
     return { bg: "rgba(239,68,68,0.15)",  text: "#ef4444" };
   return { bg: "rgba(100,116,139,0.15)", text: "#64748b" };

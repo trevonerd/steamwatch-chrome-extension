@@ -1,6 +1,6 @@
 # SteamWatch Chrome Extension
 
-[![Version](https://img.shields.io/badge/version-0.12.0-blue)](CHANGELOG.md)
+[![Changelog](https://img.shields.io/badge/changelog-latest-blue)](CHANGELOG.md)
 
 Chrome extension for tracking Steam games with live player counts, local trend history, Twitch viewers, alerts, and quick popup insights.
 
