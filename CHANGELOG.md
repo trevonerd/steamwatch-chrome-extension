@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.14.5] - 2026-05-05
+
+### Fixed
+- Trend indicator now reflects the true 24h trajectory instead of a ~90-minute micro-window
+  - Old logic compared the last 3 snapshots vs the previous 3 (~90 min total), causing a
+    collapsed game (e.g. peak 41 → current 8) to show +60% "Explosion" due to local noise
+  - New logic splits all available 24h snapshots into two time-based halves and compares
+    their averages, so a collapse correctly shows Strong Drop and a genuine spike correctly
+    shows Explosion / Rising
+  - Notifications triggered by `trend.pct` thresholds are now accurate as a result
+
+---
+
 ## [0.14.4] - 2026-05-05
 
 ### Changed

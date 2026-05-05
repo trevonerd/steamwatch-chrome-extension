@@ -16,10 +16,24 @@ import type { Snapshot } from "../src/types/index.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Build N snapshots with evenly spaced timestamps. */
-function makeSnaps(values: number[], offsetMs = 0): Snapshot[] {
-  const base = Date.now() - values.length * 60_000 + offsetMs;
-  return values.map((current, i) => ({ ts: base + i * 60_000, current }));
+/**
+ * Build N snapshots spaced `intervalMs` apart, ending at Date.now().
+ * Default interval is 30 minutes (default fetch interval).
+ */
+function makeSnaps(values: number[], intervalMs = 30 * 60_000): Snapshot[] {
+  const base = Date.now() - (values.length - 1) * intervalMs;
+  return values.map((current, i) => ({ ts: base + i * intervalMs, current }));
+}
+
+/**
+ * Build snapshots that span `totalHours` hours, evenly distributed.
+ * Useful for explicit time-window tests.
+ */
+function makeSnapsOverHours(values: number[], totalHours: number): Snapshot[] {
+  const totalMs = totalHours * 3_600_000;
+  const base = Date.now() - totalMs;
+  const step = values.length > 1 ? totalMs / (values.length - 1) : 0;
+  return values.map((current, i) => ({ ts: base + i * step, current }));
 }
 
 // ── computeTrend ─────────────────────────────────────────────────────────────
@@ -29,77 +43,117 @@ describe("computeTrend", () => {
     expect(computeTrend(makeSnaps([1000, 2000, 3000, 4000, 5000]))).toBeNull();
   });
 
-  it("returns null when prev average is zero", () => {
-    const snaps = makeSnaps([0, 0, 0, 1000, 2000, 3000]);
+  it("returns null when older-half average is zero", () => {
+    // All zeros in older half → division by zero guard
+    const snaps = makeSnapsOverHours([0, 0, 0, 1000, 2000, 3000], 6);
     expect(computeTrend(snaps)).toBeNull();
   });
 
-  it("detects EXPLOSION (>50%)", () => {
-    // prev avg: 1000, recent avg: 2000 → +100%
-    const snaps = makeSnaps([900, 1000, 1100, 1800, 2000, 2200]);
+  it("detects EXPLOSION: sudden spike from stable base (30 → 50 000)", () => {
+    // Game stable at ~30, then explodes to 50 000 in recent half
+    const snaps = makeSnapsOverHours([30, 28, 32, 30, 49000, 50000, 51000], 6);
     const result = computeTrend(snaps);
     expect(result).not.toBeNull();
     expect(result!.level.key).toBe("EXPLOSION");
     expect(result!.pct).toBeGreaterThan(50);
   });
 
-  it("detects STRONG_UP (+20% to +50%)", () => {
-    // prev avg: ~1000, recent avg: ~1300 → +30%
-    const snaps = makeSnaps([950, 1000, 1050, 1250, 1300, 1350]);
+  it("detects EXPLOSION: gradual strong doubling over 24h", () => {
+    // older half avg ~1000, recent half avg ~2000 → +100%
+    const snaps = makeSnapsOverHours([900, 950, 1000, 1050, 1800, 2000, 2200], 24);
+    const result = computeTrend(snaps);
+    expect(result).not.toBeNull();
+    expect(result!.level.key).toBe("EXPLOSION");
+    expect(result!.pct).toBeGreaterThan(50);
+  });
+
+  it("detects STRONG_UP: ~30% increase over full window", () => {
+    // older half avg ~1000, recent half avg ~1300 → +30%
+    const snaps = makeSnapsOverHours([950, 1000, 1050, 1250, 1300, 1350], 12);
     const result = computeTrend(snaps);
     expect(result).not.toBeNull();
     expect(result!.level.key).toBe("STRONG_UP");
   });
 
-  it("detects UP (+5% to +20%)", () => {
-    // prev avg: 1000, recent avg: ~1100 → +10%
-    const snaps = makeSnaps([950, 1000, 1050, 1080, 1100, 1120]);
+  it("detects UP: ~10% increase over full window", () => {
+    // older half avg ~1000, recent half avg ~1100 → +10%
+    const snaps = makeSnapsOverHours([950, 1000, 1050, 1080, 1100, 1120], 12);
     const result = computeTrend(snaps);
     expect(result).not.toBeNull();
     expect(result!.level.key).toBe("UP");
   });
 
-  it("detects STABLE (-5% to +5%)", () => {
-    const snaps = makeSnaps([1000, 1000, 1000, 1010, 1000, 990]);
+  it("detects STABLE: flat over full window", () => {
+    const snaps = makeSnapsOverHours([1000, 1000, 1000, 1010, 1000, 990], 12);
     const result = computeTrend(snaps);
     expect(result).not.toBeNull();
     expect(result!.level.key).toBe("STABLE");
   });
 
-  it("detects DOWN (-20% to -5%)", () => {
-    // prev avg: 1000, recent avg: ~880 → -12%
-    const snaps = makeSnaps([1000, 1000, 1000, 900, 880, 860]);
+  it("detects DOWN: ~12% decline over full window", () => {
+    // older half avg ~1000, recent half avg ~880 → -12%
+    const snaps = makeSnapsOverHours([1000, 1000, 1000, 900, 880, 860], 12);
     const result = computeTrend(snaps);
     expect(result).not.toBeNull();
     expect(result!.level.key).toBe("DOWN");
   });
 
-  it("detects STRONG_DOWN (-50% to -20%)", () => {
-    // prev avg: 1000, recent avg: ~600 → -40%
-    const snaps = makeSnaps([1000, 1000, 1000, 620, 600, 580]);
+  it("detects STRONG_DOWN: ~40% decline over full window", () => {
+    // older half avg ~1000, recent half avg ~600 → -40%
+    const snaps = makeSnapsOverHours([1000, 1000, 1000, 620, 600, 580], 12);
     const result = computeTrend(snaps);
     expect(result).not.toBeNull();
     expect(result!.level.key).toBe("STRONG_DOWN");
   });
 
+  it("correctly shows STRONG_DOWN for collapsed game (peak 41 → current 8)", () => {
+    // Reproduces the real bug: game peaked at 41 earlier, now sitting at ~8.
+    // Old logic saw 5→8 in the last 6 snaps and reported +60% EXPLOSION.
+    // New logic sees the full 24h trajectory and correctly reports a collapse.
+    const snaps = makeSnapsOverHours(
+      [38, 41, 35, 20, 12, 10, 8, 7, 8, 6, 8, 8],
+      24,
+    );
+    const result = computeTrend(snaps);
+    expect(result).not.toBeNull();
+    // Older half avg ~31, recent half avg ~8 → roughly -74% → STRONG_DOWN
+    expect(result!.pct).toBeLessThan(-20);
+    expect(["STRONG_DOWN", "DOWN"].includes(result!.level.key)).toBe(true);
+  });
+
+  it("does NOT show a rise when recent micro-fluctuation is up but overall trend is down", () => {
+    // Game collapsed from 1000 to 100, last two readings went 95→105 (micro +10%).
+    // Old logic: +10% → UP. New logic: overall down → DOWN or STRONG_DOWN.
+    const snaps = makeSnapsOverHours(
+      [1000, 950, 800, 600, 400, 200, 120, 95, 100, 105],
+      24,
+    );
+    const result = computeTrend(snaps);
+    expect(result).not.toBeNull();
+    expect(result!.pct).toBeLessThan(0);
+  });
+
   it("rounds pct to 1 decimal", () => {
-    const snaps = makeSnaps([1000, 1000, 1000, 1100, 1100, 1100]);
+    const snaps = makeSnapsOverHours([1000, 1000, 1000, 1100, 1100, 1100], 12);
     const result = computeTrend(snaps);
     expect(result).not.toBeNull();
     expect(result!.pct).toBe(10);
   });
 
   it("computes correct delta", () => {
-    const snaps = makeSnaps([1000, 1000, 1000, 1100, 1100, 1100]);
+    const snaps = makeSnapsOverHours([1000, 1000, 1000, 1100, 1100, 1100], 12);
     const result = computeTrend(snaps);
     expect(result!.delta).toBe(100);
   });
 
-  it("uses only the last 6 snapshots regardless of array length", () => {
-    // Extra old snaps with wildly different values should be ignored.
-    // Recent window: [1000,1000,1000] vs [1000,1000,1000] → 0% → STABLE
-    const old = makeSnaps([50000, 50000, 50000]);
-    const recent = makeSnaps([1000, 1000, 1000, 1000, 1000, 1000]);
+  it("uses 24h window and ignores older snapshots beyond 24h", () => {
+    // Very old snaps with high values — should be excluded from computation.
+    // Within 24h the game is stable at ~1000, so trend should be STABLE.
+    const old = makeSnapsOverHours([50000, 50000, 50000], 48).map((s) => ({
+      ...s,
+      ts: s.ts - 86_400_000 * 2, // push 2 extra days back
+    }));
+    const recent = makeSnapsOverHours([1000, 1000, 1000, 1000, 1000, 1000], 20);
     const result = computeTrend([...old, ...recent]);
     expect(result).not.toBeNull();
     expect(result!.level.key).toBe("STABLE");

@@ -24,23 +24,41 @@ export const TREND_LEVELS: readonly TrendLevel[] = [
 // ── Core trend computation ────────────────────────────────────────────────────
 
 /**
- * Compare smoothed averages: last N snapshots vs previous N snapshots.
- * Returns null if there are not enough data points yet.
+ * Compare the average of the older half of snapshots vs the recent half,
+ * using up to the last 24 hours of data (or all available data if less).
  *
- * Using a window of 3 each side: spike-resistant without excessive lag.
+ * This time-based split ensures the trend reflects the full trajectory:
+ * - A game that peaked at 41 and collapsed to 8 will show STRONG_DOWN,
+ *   because the older-half average (~25) dwarfs the recent-half average (~8).
+ * - A game that surged from 30 to 50 000 will show EXPLOSION because the
+ *   recent-half average far exceeds the older-half average.
+ *
+ * Returns null when fewer than 6 snapshots are available.
  */
 export function computeTrend(
   snapshots: readonly Snapshot[],
-  windowSize = 3
 ): TrendResult | null {
-  const needed = windowSize * 2;
-  if (snapshots.length < needed) return null;
+  if (snapshots.length < 6) return null;
 
-  const recent = snapshots.slice(-windowSize);
-  const prev   = snapshots.slice(-needed, -windowSize);
+  // Use last 24 h of data (or everything available).
+  const cutoff24h = Date.now() - 86_400_000;
+  const window = snapshots.filter((s) => s.ts >= cutoff24h);
+  const pool = window.length >= 6 ? window : snapshots.slice(-Math.max(6, snapshots.length));
 
-  const recentAvg = average(recent.map((s) => s.current));
-  const prevAvg   = average(prev.map((s) => s.current));
+  if (pool.length < 6) return null;
+
+  // Split by time midpoint so each half represents an equal time span.
+  const tStart = pool[0]!.ts;
+  const tEnd   = pool[pool.length - 1]!.ts;
+  const tMid   = (tStart + tEnd) / 2;
+
+  const olderHalf  = pool.filter((s) => s.ts <= tMid);
+  const recentHalf = pool.filter((s) => s.ts > tMid);
+
+  if (olderHalf.length === 0 || recentHalf.length === 0) return null;
+
+  const prevAvg   = average(olderHalf.map((s) => s.current));
+  const recentAvg = average(recentHalf.map((s) => s.current));
 
   if (prevAvg === 0) return null;
 
