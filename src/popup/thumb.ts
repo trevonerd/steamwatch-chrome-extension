@@ -1,3 +1,6 @@
+import { fetchAppDetails } from "../utils/api.js";
+import { updateGameImage } from "../utils/storage.js";
+
 export function thumbColor(appid: string): string {
   const PALETTE = [
     "#2563eb", "#7c3aed", "#db2777", "#dc2626",
@@ -13,14 +16,25 @@ export function wireThumbFallback(
   wrapEl: HTMLElement,
   appid: string,
 ): void {
-  imgEl.addEventListener("error", () => {
-    const fallback = `https://cdn.akamai.steamstatic.com/steam/apps/${appid}/header.jpg`;
-    if (!imgEl.src.includes("header.jpg")) {
-      imgEl.src = fallback;
-    } else {
-      wrapEl.classList.add("img-error");
+  imgEl.addEventListener("error", async () => {
+    if (imgEl.dataset.retrying) return;
+    imgEl.dataset.retrying = "true";
+
+    try {
+      const { fetchAppDetails } = await import("../utils/api.js");
+      const details = await fetchAppDetails(appid);
+      if (details?.image) {
+        imgEl.src = details.image;
+        await updateGameImage(appid, details.image);
+        return;
+      }
+    } catch {
+      /* empty */
     }
+
+    wrapEl.classList.add("img-error");
   });
+
   if (imgEl.complete && imgEl.naturalWidth === 0) {
     imgEl.dispatchEvent(new Event("error"));
   }

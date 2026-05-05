@@ -9,7 +9,7 @@ import type { SearchResult, SteamChartsData, SteamSpyData, Snapshot, SteamNewsIt
 import { withRetry } from "./retry.js";
 
 export const STEAM_CAPSULE_URL = (appid: string): string =>
-  `https://cdn.akamai.steamstatic.com/steam/apps/${appid}/capsule_sm_120.jpg`;
+  `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appid}/header.jpg`;
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
@@ -25,6 +25,7 @@ const StoreSearchSchema = z.object({
       z.object({
         id: z.number(),
         name: z.string(),
+        tiny_image: z.string().optional(),
         small_capsule_image: z.string().optional(),
       })
     )
@@ -45,6 +46,17 @@ const TwitchGqlSchema = z.array(
     }).optional(),
   })
 );
+
+const AppDetailsSchema = z.object({
+  [z.string()]: z.object({
+    success: z.boolean(),
+    data: z.object({
+      name: z.string(),
+      header_image: z.string().optional(),
+      capsule_image: z.string().optional(),
+    }).optional(),
+  }),
+});
 
 export const ChartDataSchema = z.array(z.tuple([z.number(), z.number()]));
 
@@ -86,6 +98,27 @@ export async function fetchSteamSpyData(appid: string): Promise<SteamSpyData> {
     };
   } catch {
     return fallback;
+  }
+}
+
+export async function fetchAppDetails(appid: string): Promise<{ name: string; image: string | null } | null> {
+  try {
+    const res = await fetch(`https://store.steampowered.com/api/appdetails?appids=${appid}`);
+    if (!res.ok) return null;
+    const raw: unknown = await res.json();
+    const parsed = AppDetailsSchema.safeParse(raw);
+    if (!parsed.success) return null;
+    const appData = parsed.data[appid];
+    if (!appData?.success || !appData.data) return null;
+    // Prefer capsule_image (231x87) — correct size for game cards.
+    // Fall back to header_image (460x215) if capsule_image unavailable.
+    const image = appData.data.capsule_image ?? appData.data.header_image ?? null;
+    return {
+      name: appData.data.name,
+      image,
+    };
+  } catch {
+    return null;
   }
 }
 
@@ -203,7 +236,7 @@ export async function searchGames(query: string): Promise<SearchResult[]> {
     return parsed.data.items.slice(0, 8).map((item) => ({
       appid: String(item.id),
       name:  item.name,
-      image: item.small_capsule_image || STEAM_CAPSULE_URL(String(item.id)),
+      image: item.tiny_image || item.small_capsule_image || STEAM_CAPSULE_URL(String(item.id)),
     }));
   } catch {
     return [];

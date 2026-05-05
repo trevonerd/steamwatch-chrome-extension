@@ -30,3 +30,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# ── Local agent artifacts ─────────────────────────────────────────────────────
+.sisyphus/
+
+# ── Release artifacts (never commit) ───────────────────────────────────────────
+*.zip
+

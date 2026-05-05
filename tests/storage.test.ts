@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import {
   getGames,
   addGame,
+  updateGameImage,
   removeGame,
   getSnapshotsForGame,
   addSnapshot,
@@ -110,6 +111,32 @@ describe("removeGame", () => {
     await removeGame("1");
     const cache = await getCache();
     expect(cache["1"]).toBeUndefined();
+  });
+});
+
+describe("updateGameImage", () => {
+  it("updates the image for a matching appid", async () => {
+    await addGame(mockGame(1));
+    await updateGameImage("1", "https://new-image.com/1.jpg");
+    const games = await getGames();
+    expect(games[0]!.image).toBe("https://new-image.com/1.jpg");
+  });
+
+  it("leaves other games unchanged", async () => {
+    await addGame(mockGame(1));
+    await addGame(mockGame(2));
+    await updateGameImage("1", "https://new-image.com/1.jpg");
+    const games = await getGames();
+    expect(games[0]!.image).toBe("https://new-image.com/1.jpg");
+    expect(games[1]!.image).toBe("https://example.com/2.jpg");
+  });
+
+  it("silently returns when appid not found", async () => {
+    await addGame(mockGame(1));
+    await expect(updateGameImage("999", "https://new.com/img.jpg")).resolves.toBeUndefined();
+    const games = await getGames();
+    expect(games).toHaveLength(1);
+    expect(games[0]!.image).toBe("https://example.com/1.jpg");
   });
 });
 

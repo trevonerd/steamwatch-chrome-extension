@@ -50,7 +50,7 @@ Then in Chrome:
 
 ```bash
 pnpm run dev         # Vite watch mode
-pnpm test            # Vitest (289 tests)
+pnpm test            # Vitest (433 tests)
 pnpm run test:coverage
 ```
 

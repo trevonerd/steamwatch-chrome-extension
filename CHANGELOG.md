@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.14.3] - 2026-05-05
+
+### Fixed
+- Game thumbnails now load correctly for all games, including newer titles (Marathon, Windrose, Last Flag)
+  - Search results use the `tiny_image` field from the Steam search API, which includes a content hash and works universally
+  - Images that fail to load trigger a fallback that fetches the correct URL from the Steam appdetails API and persists it
+  - Fixed a storage key mismatch (`"games"` vs `"sw_games"`) that prevented fallback URLs from being saved
+  - Added `shared.akamai.steamstatic.com` to manifest host_permissions for the new CDN domain
+- Added one-time image URL migration: on extension startup, existing games with stale CDN URLs are automatically updated via the Steam appdetails API
+
+---
+
 ## [0.14.1] - 2026-05-04
 
 ### Changed

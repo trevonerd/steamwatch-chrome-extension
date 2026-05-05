@@ -11,6 +11,18 @@ import {
 } from "../src/popup/shareBar.js";
 import { thumbColor, wireThumbFallback } from "../src/popup/thumb.js";
 
+const mockFetchAppDetails = vi.fn();
+const mockUpdateGameImage = vi.fn();
+
+vi.mock("../src/utils/api.js", () => ({
+  fetchAppDetails: (...args: any[]) => mockFetchAppDetails(...args),
+  STEAM_CAPSULE_URL: (appid: string) => `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appid}/header.jpg`,
+}));
+
+vi.mock("../src/utils/storage.js", () => ({
+  updateGameImage: (...args: any[]) => mockUpdateGameImage(...args),
+}));
+
 describe("thumbColor", () => {
   it("returns a deterministic palette color from the appid", () => {
     expect(thumbColor("1245620")).toBe("#2563eb");
@@ -19,6 +31,19 @@ describe("thumbColor", () => {
 });
 
 describe("wireThumbFallback", () => {
+  beforeEach(() => {
+    mockFetchAppDetails.mockClear();
+    mockUpdateGameImage.mockClear();
+    (globalThis as any).chrome = {
+      storage: {
+        local: {
+          get: vi.fn().mockResolvedValue({ games: [] }),
+          set: vi.fn().mockResolvedValue(undefined),
+        },
+      },
+    };
+  });
+
   it("does not rely on inline event handlers", () => {
     const wrap = document.createElement("div");
     const img = document.createElement("img");
@@ -26,45 +51,118 @@ describe("wireThumbFallback", () => {
     expect(img.getAttribute("onerror")).toBeNull();
   });
 
-  it("switches to header.jpg on first error", () => {
+  it("calls fetchAppDetails and updates img src on error", async () => {
     const wrap = document.createElement("div");
     const img = document.createElement("img");
+    const apiImage = "https://cdn.akamai.steamstatic.com/steam/apps/3065800/header.jpg";
+
+    mockFetchAppDetails.mockResolvedValueOnce({
+      name: "Test Game",
+      image: apiImage,
+    });
+
     img.src = "https://cdn.akamai.steamstatic.com/steam/apps/3065800/capsule_sm_120.jpg";
     wireThumbFallback(img, wrap, "3065800");
 
     img.dispatchEvent(new Event("error"));
+    await new Promise((r) => setTimeout(r, 10));
 
-    expect(img.src).toContain("header.jpg");
+    expect(mockFetchAppDetails).toHaveBeenCalledWith("3065800");
+    expect(img.src).toBe(apiImage);
   });
 
-  it("adds img-error to the wrapper after the fallback also fails", () => {
+  it("adds img-error class when API returns no image", async () => {
     const wrap = document.createElement("div");
     const img = document.createElement("img");
+
+    mockFetchAppDetails.mockResolvedValueOnce({
+      name: "Test Game",
+      image: null,
+    });
+
     img.src = "https://cdn.akamai.steamstatic.com/steam/apps/3065800/capsule_sm_120.jpg";
     wireThumbFallback(img, wrap, "3065800");
 
     img.dispatchEvent(new Event("error"));
-    img.dispatchEvent(new Event("error"));
+    await new Promise((r) => setTimeout(r, 10));
 
     expect(wrap.classList.contains("img-error")).toBe(true);
   });
 
-  it("handles already-errored image (complete=true, naturalWidth=0) on attachment", () => {
+  it("adds img-error class when API fails", async () => {
     const wrap = document.createElement("div");
     const img = document.createElement("img");
+
+    mockFetchAppDetails.mockRejectedValueOnce(new Error("Network error"));
+
     img.src = "https://cdn.akamai.steamstatic.com/steam/apps/3065800/capsule_sm_120.jpg";
-    
-    // Simulate an image that has already errored before wireThumbFallback is called
-    Object.defineProperty(img, "complete", { value: true, configurable: true });
-    Object.defineProperty(img, "naturalWidth", { value: 0, configurable: true });
-    
     wireThumbFallback(img, wrap, "3065800");
 
-    // Should trigger fallback path: either src changes to header.jpg or img-error class is added
-    const srcHasHeaderFallback = img.src.includes("header.jpg");
-    const hasErrorClass = wrap.classList.contains("img-error");
-    
-    expect(srcHasHeaderFallback || hasErrorClass).toBe(true);
+    img.dispatchEvent(new Event("error"));
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(wrap.classList.contains("img-error")).toBe(true);
+  });
+
+  it("updates chrome.storage when game exists with different image", async () => {
+    const wrap = document.createElement("div");
+    const img = document.createElement("img");
+    const apiImage = "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/3065800/header.jpg";
+    const existingGames = [{ appid: "3065800", name: "Test Game", image: "https://old-image.jpg" }];
+
+    (chrome.storage.local.get as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ games: existingGames });
+
+    mockFetchAppDetails.mockResolvedValueOnce({
+      name: "Test Game",
+      image: apiImage,
+    });
+
+    img.src = "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/3065800/capsule_sm_120.jpg";
+    wireThumbFallback(img, wrap, "3065800");
+
+    img.dispatchEvent(new Event("error"));
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(mockUpdateGameImage).toHaveBeenCalledWith("3065800", apiImage);
+  });
+
+  it("prevents duplicate API calls with retrying flag", async () => {
+    const wrap = document.createElement("div");
+    const img = document.createElement("img");
+    const apiImage = "https://cdn.akamai.steamstatic.com/steam/apps/3065800/header.jpg";
+
+    mockFetchAppDetails.mockResolvedValue({
+      name: "Test Game",
+      image: apiImage,
+    });
+
+    img.src = "https://cdn.akamai.steamstatic.com/steam/apps/3065800/capsule_sm_120.jpg";
+    wireThumbFallback(img, wrap, "3065800");
+
+    img.dispatchEvent(new Event("error"));
+    img.dispatchEvent(new Event("error"));
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(mockFetchAppDetails).toHaveBeenCalledTimes(1);
+  });
+
+  it("handles already-errored image (complete=true, naturalWidth=0) on attachment", async () => {
+    const wrap = document.createElement("div");
+    const img = document.createElement("img");
+
+    mockFetchAppDetails.mockRejectedValueOnce(new Error("Network error"));
+
+    img.src = "https://cdn.akamai.steamstatic.com/steam/apps/3065800/capsule_sm_120.jpg";
+
+    Object.defineProperty(img, "complete", { value: true, configurable: true });
+    Object.defineProperty(img, "naturalWidth", { value: 0, configurable: true });
+
+    wireThumbFallback(img, wrap, "3065800");
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(wrap.classList.contains("img-error")).toBe(true);
   });
 });
 
@@ -109,15 +207,13 @@ describe("sparkline container styling", () => {
   it("does not have overflow:hidden on .panel-sparkline to allow hover elements to display", () => {
     const cssPath = resolve(__dirname, "../src/popup/popup.css");
     const cssContent = readFileSync(cssPath, "utf-8");
-    
-    // Find the .panel-sparkline rule blocks
+
     const panelSparklineMatch = cssContent.match(/\.panel-sparkline\s*\{[^}]*\}/gs);
-    
-    // Verify that none of the .panel-sparkline blocks contain overflow:hidden
-    const hasOverflowHidden = panelSparklineMatch?.some((rule) => 
+
+    const hasOverflowHidden = panelSparklineMatch?.some((rule) =>
       rule.includes("overflow:") && rule.includes("hidden")
     ) ?? false;
-    
+
     expect(hasOverflowHidden).toBe(false);
   });
 });

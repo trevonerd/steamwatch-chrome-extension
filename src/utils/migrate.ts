@@ -1,7 +1,10 @@
 import type { Game, Snapshot } from "../types/index.js";
 import { idbGetSnapshots, idbSaveSnapshot } from "./idb-storage.js";
+import { fetchAppDetails } from "./api.js";
+import { getGames, updateGameImage } from "./storage.js";
 
 const MIGRATION_SENTINEL_KEY = "sw_migration_complete";
+const IMAGE_FIXUP_SENTINEL_KEY = "sw_image_fixup_complete";
 const GAMES_KEY = "sw_games";
 const SNAP_PREFIX = "sw_snaps_";
 
@@ -100,4 +103,36 @@ export async function migrateToIndexedDB(): Promise<MigrationStats> {
   }
 
   return stats;
+}
+
+// A URL is stale if it doesn't contain a 40-char hex hash segment.
+// Newer Steam assets require a per-image hash; hashless URLs 404 for most games.
+function isStaleImageUrl(url: string | undefined): boolean {
+  if (!url) return true;
+  return !/\/[0-9a-f]{40}\//.test(url);
+}
+
+export async function migrateImageUrls(): Promise<void> {
+  const sentinel = await getLocal<boolean>(IMAGE_FIXUP_SENTINEL_KEY);
+  if (sentinel === true) return;
+
+  const games = await getGames();
+  if (!Array.isArray(games) || games.length === 0) {
+    await chrome.storage.local.set({ [IMAGE_FIXUP_SENTINEL_KEY]: true });
+    return;
+  }
+
+  for (const game of games) {
+    if (!isStaleImageUrl(game.image)) continue;
+    try {
+      const details = await fetchAppDetails(game.appid);
+      if (details?.image) {
+        await updateGameImage(game.appid, details.image);
+      }
+    } catch (err) {
+      console.error(`[migrate] Image fixup failed for appid ${game.appid}: ${JSON.stringify(err)}`);
+    }
+  }
+
+  await chrome.storage.local.set({ [IMAGE_FIXUP_SENTINEL_KEY]: true });
 }

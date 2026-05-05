@@ -96,6 +96,16 @@ export async function removeGame(appid: string): Promise<Game[]> {
   return games;
 }
 
+export async function updateGameImage(appid: string, imageUrl: string): Promise<void> {
+  const games = await getGames();
+  const updated = games.map((g) =>
+    g.appid === appid ? { ...g, image: imageUrl } : g,
+  );
+  const changed = updated.some((g, i) => g.image !== games[i]?.image);
+  if (!changed) return;
+  await set(KEYS.games, updated);
+}
+
 // ── Snapshots — lazy per-game loading ────────────────────────────────────────
 
 export async function getSnapshotsForGame(appid: string): Promise<Snapshot[]> {

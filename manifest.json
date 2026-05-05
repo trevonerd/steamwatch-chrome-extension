@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "SteamWatch",
   "short_name": "SteamWatch",
-  "version": "0.14.1",
+  "version": "0.14.3",
   "description": "Track Steam games with live player counts, local trend history, Twitch viewers, and alerts.",
   "author": "trevonerd / TREVISOFT",
   "permissions": [
@@ -16,7 +16,10 @@
     "https://store.steampowered.com/*",
     "https://steamspy.com/*",
     "https://steamcharts.com/*",
-    "https://gql.twitch.tv/*"
+    "https://gql.twitch.tv/*",
+    "https://cdn.akamai.steamstatic.com/*",
+    "https://shared.akamai.steamstatic.com/*",
+    "https://shared.fastly.steamstatic.com/*"
   ],
   "background": {
     "service_worker": "src/background/index.ts",

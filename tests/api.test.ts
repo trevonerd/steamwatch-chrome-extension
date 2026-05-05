@@ -203,7 +203,7 @@ describe("searchGames", () => {
 describe("STEAM_CAPSULE_URL", () => {
   it("generates correct CDN URL", () => {
     expect(STEAM_CAPSULE_URL("1245620")).toBe(
-      "https://cdn.akamai.steamstatic.com/steam/apps/1245620/capsule_sm_120.jpg"
+      "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1245620/header.jpg"
     );
   });
 });
