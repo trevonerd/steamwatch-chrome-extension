@@ -17,7 +17,7 @@ import {
   setLastFetchTime,
 } from "../utils/storage.js";
 import { idbBulkSaveSnapshots, idbSaveSnapshot, idbGetSnapshots, idbGetCooldown, idbSetCooldown } from "../utils/idb-storage.js";
-import { migrateToIndexedDB, migrateImageUrls } from "../utils/migrate.js";
+import { migrateToIndexedDB } from "../utils/migrate.js";
 import { computeTrend, fmtNumber, fmtBadge } from "../utils/trend.js";
 import { isQuietNow } from "../utils/quietHours.js";
 import { buildCachedData, mergeCycleCache } from "./fetchCycle.js";
@@ -48,7 +48,6 @@ chrome.runtime.onStartup.addListener(() => void bootstrap());
 
 async function bootstrap(): Promise<void> {
   void migrateToIndexedDB(); // fire-and-forget — don't block extension startup
-  void migrateImageUrls();   // fire-and-forget — fix stale image URLs in storage
   await resetAlarm();
   await resetCompactionAlarm();
   await fetchAll();

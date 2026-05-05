@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.14.4] - 2026-05-05
+
+### Changed
+- Removed one-time image URL migration (no longer needed)
+
+---
+
 ## [0.14.3] - 2026-05-05
 
 ### Fixed
