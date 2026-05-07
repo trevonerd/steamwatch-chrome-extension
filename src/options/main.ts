@@ -160,6 +160,7 @@ function buildGameRow(game: Game, gs: GameSettings): HTMLLIElement {
       try {
         await removeGame(game.appid);
         await renderGames();
+        window.dispatchEvent(new CustomEvent("steamwatch:games-changed", { detail: { appid: game.appid } }));
       } catch (err) {
         alert(`Error removing game: ${String(err)}`);
       }
@@ -286,6 +287,7 @@ async function runSearch(query: string): Promise<void> {
       try {
         await addGame({ appid: result.appid, name: result.name, image: result.image });
         await renderGames();
+        window.dispatchEvent(new CustomEvent("steamwatch:games-changed", { detail: { appid: result.appid } }));
         // Trigger a background fetch for the new game immediately
         chrome.runtime.sendMessage<MessageRequest, MessageResponse>({ type: "FETCH_NOW" }).catch(() => {
           // Background may not be awake yet — non-critical
@@ -519,16 +521,29 @@ async function initHistory(): Promise<void> {
   const hTwitch       = document.getElementById("history-twitch")       as HTMLDivElement    | null;
   if (!selectEl || !tabsEl || !chartEl || !emptyEl || !noGameEl || !statsEl) return;
 
+  const historyGameSelect = selectEl;
   const settings = await getSettings();
-  const games    = await getGames();
+  let games = await getGames();
 
-  // Populate game selector
-  games.forEach((game) => {
-    const opt = document.createElement("option");
-    opt.value = game.appid;
-    opt.textContent = game.name;
-    selectEl.appendChild(opt);
-  });
+  async function refreshHistoryGameSelect(selectedAppid?: string): Promise<void> {
+    games = await getGames();
+    historyGameSelect.replaceChildren();
+
+    games.forEach((game) => {
+      const opt = document.createElement("option");
+      opt.value = game.appid;
+      opt.textContent = game.name;
+      historyGameSelect.appendChild(opt);
+    });
+
+    if (selectedAppid && games.some((game) => game.appid === selectedAppid)) {
+      historyGameSelect.value = selectedAppid;
+    }
+
+    if (games.length === 0) {
+      await renderHistory("");
+    }
+  }
 
   // Build window tabs
   const windows = buildAvailableGraphWindows(settings.purgeAfterDays);
@@ -799,7 +814,19 @@ async function initHistory(): Promise<void> {
     }
   }
 
-  selectEl.addEventListener("change", () => void renderHistory(selectEl.value));
+  historyGameSelect.addEventListener("change", () => void renderHistory(historyGameSelect.value));
+  window.addEventListener("steamwatch:games-changed", (event) => {
+    const detail = event instanceof CustomEvent ? (event as CustomEvent<{ appid?: unknown }>).detail : undefined;
+    const selectedAppid = typeof detail?.appid === "string" ? detail.appid : undefined;
+    void refreshHistoryGameSelect(selectedAppid)
+      .then(() => renderHistory(historyGameSelect.value))
+      .catch((err: unknown) => {
+        console.error(`history game selector refresh failed: ${String(err)}`);
+      });
+  });
+
+  await refreshHistoryGameSelect();
+  await renderHistory(historyGameSelect.value);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
