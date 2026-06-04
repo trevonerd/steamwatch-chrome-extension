@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.14.7] - 2026-06-04
+
+### Changed
+- Refreshed the SteamWatch extension icons with a more polished eye mark across all packaged Chrome icon sizes
+
+---
+
 ## [0.14.6] - 2026-06-04
 
 ### Fixed
