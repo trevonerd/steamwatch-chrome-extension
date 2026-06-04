@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.14.6] - 2026-06-04
+
+### Fixed
+- Retention stats now use the available local history inside the retention window instead of showing `—` until the full window is covered
+- Retention stat labels now reflect the actual covered period, such as `5d average` for games with less than 60 days of data
+- Popup graph hover tooltip now has proper vertical padding
+
+### Changed
+- Cleaned up extension internals and removed stale utility/test code after the player-only simplification
+
+---
+
 ## [0.14.5] - 2026-05-05
 
 ### Fixed

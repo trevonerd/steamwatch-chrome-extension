@@ -1,6 +1,6 @@
 {
   "name": "steamwatch",
-  "version": "0.14.5",
+  "version": "0.14.6",
   "description": "Chrome extension for tracking Steam games with live player counts, local trend history, Twitch viewers, and alerts.",
   "author": "trevonerd / TREVISOFT",
   "license": "MIT",
