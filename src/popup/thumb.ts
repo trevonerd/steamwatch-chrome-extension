@@ -1,5 +1,5 @@
-import { fetchAppDetails } from "../utils/api.js";
 import { updateGameImage } from "../utils/storage.js";
+import { formatError } from "../utils/log.js";
 
 export function thumbColor(appid: string): string {
   const PALETTE = [
@@ -28,8 +28,8 @@ export function wireThumbFallback(
         await updateGameImage(appid, details.image);
         return;
       }
-    } catch {
-      /* empty */
+    } catch (err) {
+      console.warn(`[SteamWatch] Thumbnail fallback failed for appid ${appid}: ${formatError(err)}`);
     }
 
     wrapEl.classList.add("img-error");

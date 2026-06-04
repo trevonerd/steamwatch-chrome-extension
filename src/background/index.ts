@@ -15,11 +15,14 @@ import {
   setCache,
   getCache,
   setLastFetchTime,
+  FETCH_INTERVAL_MINUTES,
+  TRACKING_RETENTION_DAYS,
 } from "../utils/storage.js";
 import { idbBulkSaveSnapshots, idbSaveSnapshot, idbGetSnapshots, idbGetCooldown, idbSetCooldown } from "../utils/idb-storage.js";
 import { migrateToIndexedDB } from "../utils/migrate.js";
 import { computeTrend, fmtNumber, fmtBadge } from "../utils/trend.js";
 import { isQuietNow } from "../utils/quietHours.js";
+import { formatError } from "../utils/log.js";
 import { buildCachedData, mergeCycleCache } from "./fetchCycle.js";
 
 import type {
@@ -54,9 +57,8 @@ async function bootstrap(): Promise<void> {
 }
 
 async function resetAlarm(): Promise<void> {
-  const { fetchIntervalMinutes } = await getSettings();
   await chrome.alarms.clear(ALARM_NAME);
-  chrome.alarms.create(ALARM_NAME, { periodInMinutes: fetchIntervalMinutes });
+  chrome.alarms.create(ALARM_NAME, { periodInMinutes: FETCH_INTERVAL_MINUTES });
 }
 
 async function resetCompactionAlarm(): Promise<void> {
@@ -71,9 +73,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 
 async function runCompaction(): Promise<void> {
   const games = await getGames();
-  const settings = await getSettings();
-  const fullResolutionDays = settings.purgeAfterDays ?? 7;
-  await Promise.allSettled(games.map((game) => compactSnapshots(game.appid, fullResolutionDays)));
+  await Promise.allSettled(games.map((game) => compactSnapshots(game.appid, TRACKING_RETENTION_DAYS)));
 }
 
 // ── Message handling ──────────────────────────────────────────────────────────
@@ -163,7 +163,7 @@ async function fetchGame(
       }
     }
   } catch (err) {
-    console.warn("[SteamWatch] Bootstrap failed for", game.appid, err);
+    console.warn(`[SteamWatch] Bootstrap failed for appid ${game.appid}: ${formatError(err)}`);
   }
 
   const [currentPlayers, spyData] = await Promise.all([
@@ -172,7 +172,10 @@ async function fetchGame(
   ]);
   const [chartsData, twitchViewers] = await Promise.all([
     fetchSteamChartsData(game.appid),
-    fetchTwitchViewers(game.name).catch(() => null),
+    fetchTwitchViewers(game.name).catch((error: unknown) => {
+      console.warn(`[SteamWatch] Twitch viewer fetch failed for appid ${game.appid}: ${formatError(error)}`);
+      return null;
+    }),
   ]);
 
   const resolvedCurrent = currentPlayers ?? chartsData.current ?? null;
@@ -197,13 +200,6 @@ async function fetchGame(
   });
 
   const perGame = await getGameSettings(game.appid);
-
-  if (!settings.trendEnabled) {
-    if (settings.notificationsEnabled) {
-      await evaluateAbsoluteNotification(game, resolvedCurrent, perGame);
-    }
-    return { game, signal: "stable", cacheData };
-  }
 
   const snap: Snapshot = { ts: Date.now(), current: resolvedCurrent };
   await idbSaveSnapshot(game.appid, snap);
@@ -283,13 +279,18 @@ async function notify(game: Game, type: string, title: string, message: string):
   const key = `${game.appid}__${type}`;
   const now = Date.now();
 
-  const expiresAt = await idbGetCooldown(key).catch(() => null);
+  const expiresAt = await idbGetCooldown(key).catch((error: unknown) => {
+    console.warn(`[SteamWatch] Cooldown read failed for ${key}: ${formatError(error)}`);
+    return null;
+  });
   if (expiresAt !== null && expiresAt > now) return;
 
   const settings = await getSettings();
   if (isQuietNow(settings)) return;
 
-  await idbSetCooldown(key, now + cooldown).catch(() => undefined);
+  await idbSetCooldown(key, now + cooldown).catch((error: unknown) => {
+    console.warn(`[SteamWatch] Cooldown write failed for ${key}: ${formatError(error)}`);
+  });
   chrome.notifications.create(`sw_${key}_${now}`, {
     type:     "basic",
     iconUrl:  "/icons/logo-128.png",

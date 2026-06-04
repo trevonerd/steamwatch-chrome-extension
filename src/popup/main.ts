@@ -1,28 +1,28 @@
-// ─────────────────────────────────────────────────────────────────────────────
 // SteamWatch — src/popup/main.ts
-// ─────────────────────────────────────────────────────────────────────────────
-
 import {
   getGames,
-  getCache,
+  removeGame,
   getSettings,
   saveSettings,
+  getCache,
   getLastFetchTime,
-  removeGame,
+  TRACKING_RETENTION_DAYS,
+  MAX_GAMES,
 } from "../utils/storage.js";
 import { idbGetSnapshots, idbGetSnapshotsInRange } from "../utils/idb-storage.js";
 import { fmtNumber, fmtPct, fmtTimeAgo, computeWindowMin } from "../utils/trend.js";
 import {
-  buildSparklineSVGWithPoints,
   downsampleSnapshotsForGraph,
   findNearestPointIndex,
   sparklineColor,
+  mapToPoints,
 } from "../utils/sparkline.js";
-import { buildAllViewModels }                from "../utils/card.js";
+import { buildAllViewModels } from "../utils/card.js";
 import { buildShareText, renderShareCanvas } from "../utils/share.js";
-import { esc, mustGet, show, hide }          from "../utils/html.js";
-import { bindGlobalShareBarClose }           from "./shareBar.js";
-import { thumbColor, wireThumbFallback }     from "./thumb.js";
+import { append, clear, h, mustGet, s, show, hide } from "../utils/html.js";
+import { formatError } from "../utils/log.js";
+import { bindGlobalShareBarClose } from "./shareBar.js";
+import { thumbColor, wireThumbFallback } from "./thumb.js";
 
 import type {
   CardViewModel,
@@ -32,33 +32,30 @@ import type {
   Snapshot,
 } from "../types/index.js";
 
-// ── DOM refs ──────────────────────────────────────────────────────────────────
-
-const loadingEl     = mustGet<HTMLDivElement>("loading");
-const errorStateEl  = mustGet<HTMLDivElement>("errorState");
-const errorMsgEl    = mustGet<HTMLParagraphElement>("errorMessage");
-const gamesListEl   = mustGet<HTMLUListElement>("gamesList");
-const emptyStateEl  = mustGet<HTMLDivElement>("emptyState");
-const fetchBarEl    = mustGet<HTMLDivElement>("fetchBar");
+const loadingEl = mustGet<HTMLDivElement>("loading");
+const errorStateEl = mustGet<HTMLDivElement>("errorState");
+const errorMsgEl = mustGet<HTMLParagraphElement>("errorMessage");
+const gamesListEl = mustGet<HTMLUListElement>("gamesList");
+const emptyStateEl = mustGet<HTMLDivElement>("emptyState");
+const fetchBarEl = mustGet<HTMLDivElement>("fetchBar");
 const lastUpdatedEl = mustGet<HTMLSpanElement>("lastUpdated");
-const refreshBtn    = mustGet<HTMLButtonElement>("refreshBtn");
-const settingsBtn   = mustGet<HTMLButtonElement>("settingsBtn");
+const refreshBtn = mustGet<HTMLButtonElement>("refreshBtn");
+const settingsBtn = mustGet<HTMLButtonElement>("settingsBtn");
 const openOptionsBtn = document.getElementById("openOptionsBtn") as HTMLButtonElement | null;
-const retryBtn       = document.getElementById("retryBtn")      as HTMLButtonElement | null;
-let hasAttemptedRichDataHydration = false;
+const retryBtn = document.getElementById("retryBtn") as HTMLButtonElement | null;
 
-const WINDOW_MS: Readonly<Record<string, number>> = {
-  "24h":  86_400_000,
-  "3d":  3 * 86_400_000,
-  "7d":  7 * 86_400_000,
+const WINDOW_MS: Readonly<Record<GraphWindowKey, number>> = {
+  "24h": 86_400_000,
+  "3d": 3 * 86_400_000,
+  "7d": 7 * 86_400_000,
   "15d": 15 * 86_400_000,
-  "1m":  30 * 86_400_000,
+  "1m": 30 * 86_400_000,
+  "all": 0,
 };
-
-// ── Init ──────────────────────────────────────────────────────────────────────
 
 async function init(): Promise<void> {
   showState("loading");
+
   try {
     const [games, cache, settings, lastFetch] = await Promise.all([
       getGames(),
@@ -72,210 +69,254 @@ async function init(): Promise<void> {
       return;
     }
 
-    const vms = await buildAllViewModels(games, cache, idbGetSnapshots, settings.purgeAfterDays);
-
-    const FIVE_MINUTES = 300_000;
-    const cacheIsStale = lastFetch != null && (Date.now() - lastFetch) > FIVE_MINUTES;
-    if (!hasAttemptedRichDataHydration && (vms.some(needsRichDataHydration) || cacheIsStale)) {
-      hasAttemptedRichDataHydration = true;
+    const vms = await buildAllViewModels(games, cache, idbGetSnapshots, TRACKING_RETENTION_DAYS);
+    if (vms.some(needsRichDataHydration)) {
       try {
         await chrome.runtime.sendMessage<MessageRequest, MessageResponse>({ type: "FETCH_NOW" });
-        return await init();
+        const freshCache = await getCache();
+        vms.splice(0, vms.length, ...(await buildAllViewModels(games, freshCache, idbGetSnapshots, TRACKING_RETENTION_DAYS)));
       } catch (err) {
-        console.error("[SteamWatch] Rich data hydration failed:", err);
+        console.error(`[SteamWatch popup] Rich data hydration failed: ${formatError(err)}`);
       }
     }
 
-    if (settings.rankByPlayers) {
-      vms.sort((a, b) => (b.current ?? 0) - (a.current ?? 0));
-    }
-
-    renderGames(vms, settings.rankByPlayers, settings.badgeFavoriteAppid);
+    vms.sort((a, b) => (b.current ?? -1) - (a.current ?? -1));
+    renderGames(vms, settings.badgeFavoriteAppid);
     updateFetchBar(lastFetch);
     updateHeaderTimestamp(vms);
     showState("list");
   } catch (err) {
-    console.error("[SteamWatch popup]", err);
-    showError("Failed to load data. Please try refreshing.");
+    console.error(`[SteamWatch popup] ${formatError(err)}`);
+    showError("Failed to load SteamWatch data.");
   }
 }
 
-// ── Render ────────────────────────────────────────────────────────────────────
+function renderGames(vms: CardViewModel[], favoriteAppid?: string): void {
+  clear(gamesListEl);
 
-function renderGames(vms: CardViewModel[], rankByPlayers: boolean, favoriteAppid?: string): void {
-  gamesListEl.innerHTML = "";
-
-  vms.forEach((vm, i) => {
-    const rankEmoji = rankByPlayers && vms.length > 1
-      ? (["🥇", "🥈", "🥉"][i] ?? "")
+  vms.forEach((vm, index) => {
+    const rankEmoji = vms.length > 1
+      ? index === 0 ? "1" : index === 1 ? "2" : index === 2 ? "3" : ""
       : "";
-    const li = buildGameItem(vm, rankEmoji, i === 0 && rankByPlayers, favoriteAppid);
-    gamesListEl.appendChild(li);
-
-    if (i < vms.length - 1) {
-      const sep = document.createElement("li");
-      sep.className = "game-divider";
-      sep.setAttribute("aria-hidden", "true");
-      gamesListEl.appendChild(sep);
+    gamesListEl.appendChild(buildGameItem(vm, rankEmoji, index === 0, favoriteAppid));
+    if (index < vms.length - 1) {
+      gamesListEl.appendChild(h("li", { className: "game-divider", attrs: { "aria-hidden": "true" } }));
     }
   });
 
-  if (vms.length >= 10) {
-    const notice = document.createElement("li");
-    notice.className = "max-badge";
-    notice.setAttribute("role", "status");
-    notice.textContent = "⚠ Max 10 games — remove one to add another";
-    gamesListEl.appendChild(notice);
+  if (vms.length >= MAX_GAMES) {
+    gamesListEl.appendChild(h("li", {
+      className: "max-badge",
+      text: `Max ${MAX_GAMES} games - remove one to add another`,
+      attrs: { role: "status" },
+    }));
   }
 }
 
-// ── Card builder ──────────────────────────────────────────────────────────────
-
 function buildGameItem(vm: CardViewModel, rankEmoji: string, isTop: boolean, favoriteAppid?: string): HTMLLIElement {
-  const { game, current, peak24h, allTimePeak, trendCls, displayTrendPct, displayTrendIcon, displayTrendCls, svgStr } = vm;
-  const trendBadgeHtml = displayTrendPct != null
-    ? `<span class="trend-badge ${esc(displayTrendCls)}" aria-label="Trend ${esc(fmtPct(displayTrendPct))}">${displayTrendIcon ? `${esc(displayTrendIcon)} ` : ""}${esc(fmtPct(displayTrendPct))}</span>`
-    : "";
+  const { game, current, peak24h, allTimePeak, trendCls, displayTrendPct, displayTrendIcon, displayTrendCls } = vm;
+  const li = h("li", { className: "game-item" });
+  const card = h("div", {
+    className: `game-card ${trendCls}${isTop ? " rank-first" : ""}`,
+    dataset: { appid: game.appid },
+  });
 
-  const li = document.createElement("li");
-  li.className = "game-item";
+  const thumbWrap = h("div", { className: "thumb-wrap", attrs: { "aria-hidden": "true" } });
+  const img = h("img", {
+    className: "game-thumb",
+    attrs: {
+      src: game.image,
+      alt: "",
+      loading: "lazy",
+      width: "56",
+      height: "42",
+    },
+  });
+  append(
+    thumbWrap,
+    img,
+    h("div", {
+      className: "thumb-placeholder",
+      text: firstGameInitial(game.name),
+      attrs: {
+        "aria-hidden": "true",
+        style: `--thumb-color:${thumbColor(game.appid)}`,
+      },
+    }),
+  );
+  wireThumbFallback(img, thumbWrap, game.appid);
 
-  const card = document.createElement("div");
-  card.className = `game-card ${esc(trendCls)}${isTop ? " rank-first" : ""}`;
-  card.dataset["appid"] = game.appid;
+  const gameName = h("div", { className: "game-name", attrs: { title: game.name } });
+  if (rankEmoji) {
+    gameName.appendChild(h("span", { className: "rank-badge", text: rankEmoji, attrs: { "aria-hidden": "true" } }));
+  }
+  gameName.appendChild(h("span", { className: "game-name-text", text: game.name }));
 
-  // Initial letter for placeholder — first alphanumeric char
-  const initial = (game.name.match(/[A-Za-z0-9]/) ?? ["?"])[0]!.toUpperCase();
-  const bgColor = thumbColor(game.appid);
+  const stats = h("div", { className: "game-stats" });
+  append(
+    stats,
+    h("span", {
+      className: "stat-current",
+      text: fmtNumber(current),
+      attrs: { "aria-label": `${fmtNumber(current)} concurrent players` },
+    }),
+    h("div", {
+      className: "stat-meta",
+      children: [
+        statRow("24H PK", "24-hour peak", peak24h),
+        statRow("ATH", "all-time peak", allTimePeak),
+      ],
+    }),
+  );
+  if (displayTrendPct != null) {
+    stats.appendChild(h("span", {
+      className: `trend-badge ${displayTrendCls}`,
+      text: `${displayTrendIcon ? `${displayTrendIcon} ` : ""}${fmtPct(displayTrendPct)}`,
+      attrs: { "aria-label": `Trend ${fmtPct(displayTrendPct)}` },
+    }));
+  }
 
-  card.innerHTML = `
-    <div class="thumb-wrap" aria-hidden="true">
-      <img
-        class="game-thumb"
-        src="${esc(game.image)}"
-        alt=""
-        loading="lazy"
-        width="56" height="42"
-      >
-      <div class="thumb-placeholder" style="--thumb-color:${bgColor}" aria-hidden="true">
-        ${esc(initial)}
-      </div>
-    </div>
+  append(
+    card,
+    thumbWrap,
+    h("div", { className: "game-info", children: [gameName, stats] }),
+    buildCardControls(game.name, favoriteAppid === game.appid),
+  );
 
-    <div class="game-info">
-      <div class="game-name" title="${esc(game.name)}">
-        ${rankEmoji ? `<span class="rank-badge" aria-hidden="true">${rankEmoji}</span>` : ""}
-        <span class="game-name-text">${esc(game.name)}</span>
-      </div>
-      <div class="game-stats">
-        <span class="stat-current" aria-label="${fmtNumber(current)} concurrent players">${fmtNumber(current)}</span>
-        <div class="stat-meta">
-          <div class="stat-row">
-            <span class="stat-label" aria-hidden="true">24H PK</span>
-            <span class="stat-value" aria-label="24-hour peak">${fmtNumber(peak24h)}</span>
-          </div>
-          <div class="stat-row">
-            <span class="stat-label" aria-hidden="true">ATH</span>
-            <span class="stat-value" aria-label="all-time peak">${fmtNumber(allTimePeak)}</span>
-          </div>
-        </div>
-        ${trendBadgeHtml}
-      </div>
-    </div>
+  const cardSparkline = renderSparkline(vm.snaps, {
+    width: 160,
+    height: 36,
+    maxPoints: 48,
+    strokeColor: vm.sparklineStroke,
+  });
+  if (cardSparkline) {
+    card.appendChild(h("div", {
+      className: "card-bottom",
+      attrs: { "aria-hidden": "true" },
+      children: [h("div", { className: "sparkline", children: [cardSparkline.svg] })],
+    }));
+  }
 
-    <div class="card-controls">
-      <button class="btn-ctrl btn-share" aria-label="Share ${esc(game.name)}" title="Share">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
-          <path d="M8.59 13.51L15.42 17.49"/><path d="M15.41 6.51L8.59 10.49"/>
-        </svg>
-      </button>
-      <button class="btn-ctrl btn-star${favoriteAppid === game.appid ? " active" : ""}" aria-label="${favoriteAppid === game.appid ? "Remove from badge" : "Show on badge"}" title="Show on badge" aria-pressed="${String(favoriteAppid === game.appid)}">
-        <svg viewBox="0 0 24 24" fill="${favoriteAppid === game.appid ? "currentColor" : "none"}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-        </svg>
-      </button>
-      <button class="btn-ctrl btn-expand" aria-expanded="false" aria-label="Expand details for ${esc(game.name)}" title="Details">
-        <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
-          <polyline points="6 9 12 15 18 9"/>
-        </svg>
-      </button>
-      <button class="btn-ctrl btn-remove" aria-label="Remove ${esc(game.name)}" title="Remove">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
-    </div>
+  const panel = h("div", {
+    className: "card-panel",
+    attrs: {
+      id: `panel-${game.appid}`,
+      hidden: true,
+      "aria-hidden": "true",
+      "aria-label": `Detailed stats for ${game.name}`,
+    },
+  });
+  const shareBar = buildShareBar();
 
-    ${svgStr ? `
-    <div class="card-bottom" aria-hidden="true">
-      <div class="sparkline">${svgStr}</div>
-    </div>` : ""}
-  `;
+  append(li, card, shareBar, panel);
 
-  // Expanded panel
-  const panel = document.createElement("div");
-  panel.className = "card-panel";
-  panel.id = `panel-${game.appid}`;
-  panel.hidden = true;
-  panel.setAttribute("aria-hidden", "true");
-  panel.setAttribute("aria-label", `Detailed stats for ${game.name}`);
+  const expandBtn = card.querySelector<HTMLButtonElement>(".btn-expand");
+  const removeBtn = card.querySelector<HTMLButtonElement>(".btn-remove");
+  const shareBtn = card.querySelector<HTMLButtonElement>(".btn-share");
+  const starBtn = card.querySelector<HTMLButtonElement>(".btn-star");
 
-  // Share bar
-  const shareBar = document.createElement("div");
-  shareBar.className = "share-bar";
-  shareBar.hidden = true;
-  shareBar.setAttribute("aria-label", "Share options");
-  shareBar.innerHTML = `
-    <button class="share-opt" data-share="text" aria-label="Copy text summary to clipboard">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-        <rect x="9" y="9" width="13" height="13" rx="2"/>
-        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-      </svg>
-      Copy text
-    </button>
-    <button class="share-opt" data-share="image" aria-label="Copy card image to clipboard">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-        <rect x="3" y="3" width="18" height="18" rx="2"/>
-        <circle cx="8.5" cy="8.5" r="1.5"/>
-        <polyline points="21 15 16 10 5 21"/>
-      </svg>
-      Copy image
-    </button>
-    <span class="share-feedback" role="status" aria-live="polite"></span>
-  `;
+  expandBtn?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    togglePanel(li, panel, expandBtn, vm);
+  });
+  removeBtn?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    void handleRemove(game.appid);
+  });
+  shareBtn?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    toggleShareBar(shareBar, shareBtn);
+  });
+  starBtn?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    void handleToggleFavorite(game.appid, starBtn);
+  });
 
-  li.appendChild(card);
-  li.appendChild(shareBar);
-  li.appendChild(panel);
-
-  // ── Image error handler: CSP-safe, with retry chain ───────────────────────
-  // Chrome MV3 CSP blocks all inline event handlers (onerror="...").
-  // We attach listeners programmatically after innerHTML is set.
-  const imgEl = card.querySelector<HTMLImageElement>(".game-thumb")!;
-  const wrapEl = card.querySelector<HTMLDivElement>(".thumb-wrap")!;
-  wireThumbFallback(imgEl, wrapEl, game.appid);
-
-  // Wire events
-  const expandBtn = card.querySelector<HTMLButtonElement>(".btn-expand")!;
-  const removeBtn = card.querySelector<HTMLButtonElement>(".btn-remove")!;
-  const shareBtn  = card.querySelector<HTMLButtonElement>(".btn-share")!;
-  const starBtn   = card.querySelector<HTMLButtonElement>(".btn-star")!;
-
-  expandBtn.addEventListener("click", (e) => { e.stopPropagation(); togglePanel(li, panel, expandBtn, vm); });
-  removeBtn.addEventListener("click", (e) => { e.stopPropagation(); void handleRemove(game.appid); });
-  shareBtn.addEventListener("click",  (e) => { e.stopPropagation(); toggleShareBar(shareBar, shareBtn); });
-  starBtn.addEventListener("click",   (e) => { e.stopPropagation(); void handleToggleFavorite(game.appid, starBtn); });
-
-  shareBar.querySelector<HTMLButtonElement>("[data-share='text']")!
-    .addEventListener("click", (e) => { e.stopPropagation(); void handleShareText(shareBar, vm); });
-  shareBar.querySelector<HTMLButtonElement>("[data-share='image']")!
-    .addEventListener("click", (e) => { e.stopPropagation(); void handleShareImage(shareBar, vm); });
+  shareBar.querySelector<HTMLButtonElement>("[data-share='text']")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    void handleShareText(shareBar, vm);
+  });
+  shareBar.querySelector<HTMLButtonElement>("[data-share='image']")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    void handleShareImage(shareBar, vm);
+  });
 
   return li;
 }
 
-// ── Panel ─────────────────────────────────────────────────────────────────────
+function statRow(label: string, ariaLabel: string, value: number | null): HTMLDivElement {
+  return h("div", {
+    className: "stat-row",
+    children: [
+      h("span", { className: "stat-label", text: label, attrs: { "aria-hidden": "true" } }),
+      h("span", { className: "stat-value", text: fmtNumber(value), attrs: { "aria-label": ariaLabel } }),
+    ],
+  });
+}
+
+function buildCardControls(gameName: string, favorite: boolean): HTMLDivElement {
+  return h("div", {
+    className: "card-controls",
+    children: [
+      controlButton("btn-share", `Share ${gameName}`, "Share", shareIcon()),
+      controlButton("btn-star", favorite ? "Remove from badge" : "Show on badge", "Show on badge", starIcon(favorite), favorite),
+      controlButton("btn-expand", `Expand details for ${gameName}`, "Details", chevronIcon(), false, { "aria-expanded": "false" }),
+      controlButton("btn-remove", `Remove ${gameName}`, "Remove", removeIcon()),
+    ],
+  });
+}
+
+function controlButton(
+  cls: string,
+  ariaLabel: string,
+  title: string,
+  icon: SVGSVGElement,
+  active = false,
+  attrs: Record<string, string> = {},
+): HTMLButtonElement {
+  return h("button", {
+    className: `btn-ctrl ${cls}${active ? " active" : ""}`,
+    attrs: {
+      type: "button",
+      "aria-label": ariaLabel,
+      title,
+      "aria-pressed": cls === "btn-star" ? String(active) : undefined,
+      ...attrs,
+    },
+    children: [icon],
+  });
+}
+
+function buildShareBar(): HTMLDivElement {
+  return h("div", {
+    className: "share-bar",
+    attrs: {
+      hidden: true,
+      "aria-label": "Share options",
+    },
+    children: [
+      h("button", {
+        className: "share-opt",
+        attrs: {
+          type: "button",
+          "data-share": "text",
+          "aria-label": "Copy text summary to clipboard",
+        },
+        children: [copyIcon(), "Copy text"],
+      }),
+      h("button", {
+        className: "share-opt",
+        attrs: {
+          type: "button",
+          "data-share": "image",
+          "aria-label": "Copy card image to clipboard",
+        },
+        children: [imageIcon(), "Copy image"],
+      }),
+      h("span", { className: "share-feedback", attrs: { role: "status", "aria-live": "polite" } }),
+    ],
+  });
+}
 
 function togglePanel(li: HTMLLIElement, panel: HTMLDivElement, btn: HTMLButtonElement, vm: CardViewModel): void {
   const opening = panel.hidden;
@@ -292,122 +333,155 @@ function togglePanel(li: HTMLLIElement, panel: HTMLDivElement, btn: HTMLButtonEl
 
 function populatePanel(panel: HTMLDivElement, vm: CardViewModel): void {
   const {
-    game, current, peak24h, allTimePeak,
-    twitchViewers, avg24h, gain24h, retentionAvg, retentionGain, retentionDays,
-    availableGraphWindows, defaultGraphWindow,
+    game,
+    current,
+    peak24h,
+    allTimePeak,
+    twitchViewers,
+    avg24h,
+    gain24h,
+    retentionAvg,
+    retentionGain,
+    retentionWindowLabel,
+    availableGraphWindows,
+    defaultGraphWindow,
   } = vm;
 
-  const twitchStr = twitchViewers != null ? fmtNumber(twitchViewers) : "—";
-  const avg24hStr = avg24h != null ? fmtNumber(avg24h) : "—";
-  const gain24hStr = gain24h != null ? fmtSignedPlayers(gain24h) : "—";
-  const retentionAvgStr = retentionAvg != null ? fmtNumber(retentionAvg) : "—";
-  const retentionGainStr = retentionGain != null ? fmtSignedPlayers(retentionGain) : "—";
-  const ALL_PILL_KEYS: GraphWindowKey[] = ["24h", "3d", "7d", "15d", "1m", "all"];
-  const availableKeys = new Set(availableGraphWindows.map((w) => w.key));
-  const hasAnyData = availableKeys.size > 0;
-  const graphSelector = hasAnyData
-    ? `<div class="graph-pill-bar" role="group" aria-label="Graph time range">
-        ${ALL_PILL_KEYS.map((key) => {
-          const isActive = key === defaultGraphWindow;
-          const isDisabled = key !== "all" && !availableKeys.has(key);
-          const label = key === "all" ? "All" : key;
-          let cls = "graph-pill";
-          if (isActive) cls += " graph-pill--active";
-          if (isDisabled) cls += " graph-pill--disabled";
-          return `<button type="button" class="${esc(cls)}" data-window="${esc(key)}"${isDisabled ? ' disabled aria-disabled="true"' : ""}>${esc(label)}</button>`;
-        }).join("")}
-      </div>`
-    : "";
+  clear(panel);
+  const availableKeys = new Set(availableGraphWindows.map((window) => window.key));
+  if (availableKeys.size > 0) {
+    panel.appendChild(buildGraphPills(availableKeys, defaultGraphWindow, panel, vm));
+  }
 
-  panel.innerHTML = `
-    ${graphSelector}
-    <div class="panel-sparkline" aria-hidden="true"></div>
-    <dl class="panel-stats">
-      <div class="panel-stat">
-        <dt class="panel-stat-label">Current</dt>
-        <dd class="panel-stat-value">${fmtNumber(current)}</dd>
-      </div>
-      <div class="panel-stat">
-        <dt class="panel-stat-label">24h peak</dt>
-        <dd class="panel-stat-value">${fmtNumber(peak24h)}</dd>
-      </div>
-      <div class="panel-stat">
-        <dt class="panel-stat-label">All-time peak</dt>
-        <dd class="panel-stat-value">${fmtNumber(allTimePeak)}</dd>
-      </div>
-      <div class="panel-stat">
-        <dt class="panel-stat-label">Twitch viewers</dt>
-        <dd class="panel-stat-value">${esc(twitchStr)}</dd>
-      </div>
-      <div class="panel-stat">
-        <dt class="panel-stat-label">24h average</dt>
-        <dd class="panel-stat-value">${esc(avg24hStr)}</dd>
-      </div>
-      <div class="panel-stat">
-        <dt class="panel-stat-label">24h gain/loss</dt>
-        <dd class="panel-stat-value">${esc(gain24hStr)}</dd>
-      </div>
-      <div class="panel-stat">
-        <dt class="panel-stat-label">${esc(`${retentionDays}d average`)}</dt>
-        <dd class="panel-stat-value">${esc(retentionAvgStr)}</dd>
-      </div>
-      <div class="panel-stat">
-        <dt class="panel-stat-label">${esc(`${retentionDays}d gain/loss`)}</dt>
-        <dd class="panel-stat-value">${esc(retentionGainStr)}</dd>
-      </div>
-    </dl>
-    ${vm.allTimeLow != null ? (() => {
-      const windowLabel = defaultGraphWindow === "all" ? "All" : (defaultGraphWindow ?? "24h");
-      const windowLowStr = vm.recordLow != null ? fmtNumber(vm.recordLow.value) : "—";
-      const allTimeLowStr = fmtNumber(vm.allTimeLow.value);
-      return `<div class="panel-record-low">${esc(windowLabel)} Low: <span class="panel-record-low-val">${esc(windowLowStr)}</span> • All-time Low: <span class="panel-record-low-val">${esc(allTimeLowStr)}</span></div>`;
-    })() : `<div class="panel-record-low" hidden></div>`}
-    <div class="panel-links">
-      <a class="panel-link" href="https://store.steampowered.com/app/${esc(game.appid)}"
-         target="_blank" rel="noopener noreferrer">Steam ↗</a>
-      <a class="panel-link" href="https://steamdb.info/app/${esc(game.appid)}"
-         target="_blank" rel="noopener noreferrer">SteamDB ↗</a>
-    </div>
-  `;
+  const sparklinePanel = h("div", { className: "panel-sparkline", attrs: { "aria-hidden": "true" } });
+  const recordLowEl = h("div", { className: "panel-record-low" });
 
-  void renderPanelSparklineFromIdb(panel, vm.game.appid, defaultGraphWindow);
+  append(
+    panel,
+    sparklinePanel,
+    h("dl", {
+      className: "panel-stats",
+      children: [
+        panelStat("Current", fmtNumber(current)),
+        panelStat("24h peak", fmtNumber(peak24h)),
+        panelStat("All-time peak", fmtNumber(allTimePeak)),
+        panelStat("Twitch viewers", twitchViewers != null ? fmtNumber(twitchViewers) : "—"),
+        panelStat("24h average", avg24h != null ? fmtNumber(avg24h) : "—"),
+        panelStat("24h gain/loss", gain24h != null ? fmtSignedPlayers(gain24h) : "—"),
+        panelStat(`${retentionWindowLabel} average`, retentionAvg != null ? fmtNumber(retentionAvg) : "—"),
+        panelStat(`${retentionWindowLabel} gain/loss`, retentionGain != null ? fmtSignedPlayers(retentionGain) : "—"),
+      ],
+    }),
+    recordLowEl,
+    h("div", {
+      className: "panel-links",
+      children: [
+        panelLink(`https://store.steampowered.com/app/${game.appid}`, "Steam"),
+        panelLink(`https://steamdb.info/app/${game.appid}`, "SteamDB"),
+      ],
+    }),
+  );
 
-  panel.querySelectorAll<HTMLButtonElement>(".graph-pill:not(.graph-pill--disabled)").forEach((button) => {
-    button.addEventListener("click", () => {
-      const key = button.dataset["window"];
-      if (!isGraphWindowKey(key)) return;
-      panel.querySelectorAll<HTMLButtonElement>(".graph-pill").forEach((btn) => {
-        btn.classList.toggle("graph-pill--active", btn === button);
-      });
-      void renderPanelSparklineFromIdb(panel, vm.game.appid, key);
-      const updateRecordLow = async (windowKey: GraphWindowKey): Promise<void> => {
-        const recordLowEl = panel.querySelector<HTMLElement>(".panel-record-low");
-        if (!recordLowEl || !vm.allTimeLow) return;
-        let snaps: readonly Snapshot[];
-        if (windowKey === "all") {
-          snaps = await idbGetSnapshots(vm.game.appid);
-        } else {
-          const ms = WINDOW_MS[windowKey] ?? 86_400_000;
-          snaps = await idbGetSnapshotsInRange(vm.game.appid, Date.now() - ms, Date.now());
-        }
-        const windowMin = computeWindowMin([...snaps]);
-        const windowLabel = windowKey === "all" ? "All" : windowKey;
-        const windowLowStr = windowMin ? fmtNumber(windowMin.value) : "—";
-        const allTimeLowStr = fmtNumber(vm.allTimeLow.value);
-        recordLowEl.innerHTML = `${esc(windowLabel)} Low: <span class="panel-record-low-val">${esc(windowLowStr)}</span> • All-time Low: <span class="panel-record-low-val">${esc(allTimeLowStr)}</span>`;
-      };
-      void updateRecordLow(key);
+  updateRecordLowElement(recordLowEl, defaultGraphWindow ?? "all", vm.recordLow, vm.allTimeLow);
+  void renderPanelSparklineFromIdb(panel, game.appid, defaultGraphWindow);
+}
+
+function buildGraphPills(
+  availableKeys: Set<GraphWindowKey>,
+  defaultGraphWindow: GraphWindowKey | null,
+  panel: HTMLDivElement,
+  vm: CardViewModel,
+): HTMLDivElement {
+  const allKeys: GraphWindowKey[] = ["24h", "3d", "7d", "15d", "1m", "all"];
+  const bar = h("div", { className: "graph-pill-bar", attrs: { role: "group", "aria-label": "Graph time range" } });
+
+  allKeys.forEach((key) => {
+    const disabled = key !== "all" && !availableKeys.has(key);
+    const active = key === defaultGraphWindow;
+    const button = h("button", {
+      className: `graph-pill${active ? " graph-pill--active" : ""}${disabled ? " graph-pill--disabled" : ""}`,
+      text: key === "all" ? "All" : key,
+      attrs: {
+        type: "button",
+        disabled,
+        "aria-disabled": disabled ? "true" : undefined,
+      },
+      dataset: { window: key },
     });
+
+    if (!disabled) {
+      button.addEventListener("click", () => {
+        bar.querySelectorAll<HTMLButtonElement>(".graph-pill").forEach((pill) => {
+          pill.classList.toggle("graph-pill--active", pill === button);
+        });
+        void renderPanelSparklineFromIdb(panel, vm.game.appid, key);
+        void refreshRecordLow(panel, vm, key);
+      });
+    }
+    bar.appendChild(button);
   });
+
+  return bar;
+}
+
+function panelStat(label: string, value: string): HTMLDivElement {
+  return h("div", {
+    className: "panel-stat",
+    children: [
+      h("dt", { className: "panel-stat-label", text: label }),
+      h("dd", { className: "panel-stat-value", text: value }),
+    ],
+  });
+}
+
+function panelLink(href: string, text: string): HTMLAnchorElement {
+  return h("a", {
+    className: "panel-link",
+    text,
+    attrs: {
+      href,
+      target: "_blank",
+      rel: "noopener noreferrer",
+    },
+  });
+}
+
+async function refreshRecordLow(panel: HTMLDivElement, vm: CardViewModel, key: GraphWindowKey): Promise<void> {
+  const recordLowEl = panel.querySelector<HTMLDivElement>(".panel-record-low");
+  if (!recordLowEl || !vm.allTimeLow) return;
+
+  const snaps = key === "all"
+    ? await idbGetSnapshots(vm.game.appid)
+    : await idbGetSnapshotsInRange(vm.game.appid, Date.now() - WINDOW_MS[key], Date.now());
+  updateRecordLowElement(recordLowEl, key, computeWindowMin(snaps), vm.allTimeLow);
+}
+
+function updateRecordLowElement(
+  el: HTMLDivElement,
+  key: GraphWindowKey,
+  windowLow: { value: number; timestamp: number } | null,
+  allTimeLow: { value: number; timestamp: number } | null,
+): void {
+  if (!allTimeLow) {
+    el.hidden = true;
+    clear(el);
+    return;
+  }
+
+  el.hidden = false;
+  clear(el);
+  append(
+    el,
+    `${key === "all" ? "All" : key} Low: `,
+    h("span", { className: "panel-record-low-val", text: windowLow ? fmtNumber(windowLow.value) : "—" }),
+    " • All-time Low: ",
+    h("span", { className: "panel-record-low-val", text: fmtNumber(allTimeLow.value) }),
+  );
 }
 
 function needsRichDataHydration(vm: CardViewModel): boolean {
   if (vm.current == null) return false;
-  return (
-    vm.peak24h == null ||
-    vm.allTimePeak == null ||
-    vm.twitchViewers == null
-  );
+  return vm.peak24h == null || vm.allTimePeak == null || vm.twitchViewers == null;
 }
 
 function fmtSignedPlayers(value: number): string {
@@ -425,70 +499,57 @@ async function renderPanelSparklineFromIdb(
   const sparklineEl = panel.querySelector<HTMLDivElement>(".panel-sparkline");
   if (!sparklineEl) return;
 
-  let snaps: readonly Snapshot[];
-  if (selectedWindow === null || selectedWindow === "all") {
-    snaps = await idbGetSnapshots(appId);
-  } else {
-    const windowMs = WINDOW_MS[selectedWindow] ?? 86_400_000;
-    const endTs = Date.now();
-    const startTs = endTs - windowMs;
-    snaps = await idbGetSnapshotsInRange(appId, startTs, endTs);
-  }
+  const containerWithCleanup = sparklineEl as HTMLDivElement & { hoverCleanup?: () => void };
+  containerWithCleanup.hoverCleanup?.();
+  containerWithCleanup.hoverCleanup = undefined;
+  clear(sparklineEl);
+
+  const snaps = selectedWindow === null || selectedWindow === "all"
+    ? await idbGetSnapshots(appId)
+    : await idbGetSnapshotsInRange(appId, Date.now() - WINDOW_MS[selectedWindow], Date.now());
 
   const graphSnaps = downsampleSnapshotsForGraph([...snaps], 96);
-  const result = buildSparklineSVGWithPoints(graphSnaps, {
+  const result = renderSparkline(graphSnaps, {
     strokeColor: sparklineColor(graphSnaps),
     width: 372,
     height: 56,
     maxPoints: 96,
   });
 
-  sparklineEl.innerHTML = result?.svg ?? "";
   sparklineEl.hidden = !result;
-
   if (!result) return;
 
-  attachSparklineHover(sparklineEl, result.points, graphSnaps);
+  sparklineEl.appendChild(result.svg);
+  containerWithCleanup.hoverCleanup = attachSparklineHover(sparklineEl, result.points, graphSnaps);
 }
 
 function attachSparklineHover(
   container: HTMLDivElement,
   points: ReadonlyArray<{ x: number; y: number }>,
   snaps: readonly Snapshot[],
-): void {
-  const VIEW_W = 372;
-  const VIEW_H = 56;
+): () => void {
+  const viewW = 372;
+  const viewH = 56;
 
-  const tooltip = document.createElement("div");
-  tooltip.className = "sparkline-tooltip";
-  tooltip.hidden = true;
+  const tooltip = h("div", { className: "sparkline-tooltip", attrs: { hidden: true } });
+  const hoverLine = h("div", { className: "sparkline-hover-line", attrs: { hidden: true } });
+  const hoverDot = h("div", { className: "sparkline-hover-dot", attrs: { hidden: true } });
+  append(container, tooltip, hoverLine, hoverDot);
 
-  const hoverLine = document.createElement("div");
-  hoverLine.className = "sparkline-hover-line";
-  hoverLine.hidden = true;
-
-  const hoverDot = document.createElement("div");
-  hoverDot.className = "sparkline-hover-dot";
-  hoverDot.hidden = true;
-
-  container.appendChild(tooltip);
-  container.appendChild(hoverLine);
-  container.appendChild(hoverDot);
-
-  function onMouseMove(e: MouseEvent): void {
+  function onMouseMove(event: MouseEvent): void {
     const rect = container.getBoundingClientRect();
-    const domX = e.clientX - rect.left;
+    const domX = event.clientX - rect.left;
     const domW = rect.width;
     if (domW <= 0) return;
 
-    const svgX = (domX / domW) * VIEW_W;
-    const idx = findNearestPointIndex(svgX, points);
-    const snap = snaps[idx];
+    const svgX = (domX / domW) * viewW;
+    const index = findNearestPointIndex(svgX, points);
+    const snap = snaps[index];
     if (!snap) return;
 
-    const pt = points[idx]!;
-    const pctX = (pt.x / VIEW_W) * 100;
-    const pctY = (pt.y / VIEW_H) * 100;
+    const point = points[index]!;
+    const pctX = (point.x / viewW) * 100;
+    const pctY = (point.y / viewH) * 100;
 
     tooltip.textContent = fmtNumber(snap.current);
     tooltip.hidden = false;
@@ -496,15 +557,14 @@ function attachSparklineHover(
     hoverDot.hidden = false;
 
     hoverLine.style.left = `${pctX}%`;
-    hoverDot.style.left  = `${pctX}%`;
-    hoverDot.style.top   = `${pctY}%`;
+    hoverDot.style.left = `${pctX}%`;
+    hoverDot.style.top = `${pctY}%`;
 
     const tooltipW = tooltip.offsetWidth;
     const containerW = container.offsetWidth;
     if (containerW > 0 && tooltipW > 0) {
       const halfTooltipPct = (tooltipW / 2 / containerW) * 100;
-      const clampedLeft = Math.max(halfTooltipPct, Math.min(pctX, 100 - halfTooltipPct));
-      tooltip.style.left = `${clampedLeft}%`;
+      tooltip.style.left = `${Math.max(halfTooltipPct, Math.min(pctX, 100 - halfTooltipPct))}%`;
     } else {
       tooltip.style.left = `${pctX}%`;
     }
@@ -518,74 +578,163 @@ function attachSparklineHover(
 
   container.addEventListener("mousemove", onMouseMove);
   container.addEventListener("mouseleave", onMouseLeave);
+
+  return () => {
+    container.removeEventListener("mousemove", onMouseMove);
+    container.removeEventListener("mouseleave", onMouseLeave);
+  };
 }
 
-function isGraphWindowKey(value: string | undefined): value is GraphWindowKey {
-  return value === "24h" || value === "3d" || value === "7d" || value === "15d" || value === "1m" || value === "all";
+function renderSparkline(
+  snapshots: readonly Snapshot[],
+  opts: { width: number; height: number; maxPoints: number; strokeColor: string },
+): { svg: SVGSVGElement; points: ReadonlyArray<{ x: number; y: number }> } | null {
+  const sliced = snapshots.slice(-opts.maxPoints);
+  if (sliced.length < 2) return null;
+
+  const values = sliced.map((snapshot) => snapshot.current);
+  const points = mapToPoints(values, opts.width, opts.height);
+  const svg = s("svg", {
+    attrs: {
+      viewBox: `0 0 ${opts.width} ${opts.height}`,
+      preserveAspectRatio: "none",
+      "aria-hidden": "true",
+      role: "img",
+    },
+  });
+
+  const fillPoints = [
+    ...points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`),
+    `${points[points.length - 1]!.x.toFixed(1)},${opts.height}`,
+    `${points[0]!.x.toFixed(1)},${opts.height}`,
+  ].join(" ");
+  svg.appendChild(s("polygon", {
+    attrs: {
+      points: fillPoints,
+      fill: "rgba(0,200,255,0.08)",
+    },
+  }));
+
+  points.slice(1).forEach((point, index) => {
+    const previous = points[index]!;
+    svg.appendChild(s("line", {
+      attrs: {
+        x1: previous.x.toFixed(1),
+        y1: previous.y.toFixed(1),
+        x2: point.x.toFixed(1),
+        y2: point.y.toFixed(1),
+        stroke: segmentColor(values[index]!, values[index + 1]!),
+        "stroke-width": "1.8",
+        "stroke-linecap": "round",
+      },
+    }));
+  });
+
+  svg.appendChild(s("polyline", {
+    attrs: {
+      points: points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" "),
+      fill: "none",
+      stroke: opts.strokeColor,
+      "stroke-width": "0.01",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round",
+      opacity: "0",
+    },
+  }));
+
+  return { svg, points };
 }
 
-// ── Share handlers ────────────────────────────────────────────────────────────
+function segmentColor(prev: number, next: number): string {
+  if (prev <= 0) return "#00c8ff";
+  const pct = ((next - prev) / prev) * 100;
+  if (pct >= 8) return "#16a34a";
+  if (pct >= 2) return "#22c55e";
+  if (pct <= -8) return "#dc2626";
+  if (pct <= -2) return "#ef4444";
+  return "#00c8ff";
+}
 
 function toggleShareBar(bar: HTMLDivElement, btn: HTMLButtonElement): void {
-  if (bar.hidden) { bar.hidden = false; btn.classList.add("active"); }
-  else closeShareBar(bar, btn);
+  if (bar.hidden) {
+    bar.hidden = false;
+    btn.classList.add("active");
+    return;
+  }
+  closeShareBar(bar, btn);
 }
+
 function closeShareBar(bar: HTMLDivElement, btn: HTMLButtonElement): void {
-  bar.hidden = true; btn.classList.remove("active");
+  bar.hidden = true;
+  btn.classList.remove("active");
 }
 
 async function handleShareText(bar: HTMLDivElement, vm: CardViewModel): Promise<void> {
-  const fb = bar.querySelector<HTMLSpanElement>(".share-feedback")!;
+  const feedback = bar.querySelector<HTMLSpanElement>(".share-feedback");
+  if (!feedback) return;
+
   try {
     await navigator.clipboard.writeText(buildShareText(vm));
-    showShareFeedback(fb, "✓ Copied!", "success");
-  } catch { showShareFeedback(fb, "✗ Copy failed", "error"); }
-}
-
-async function handleShareImage(bar: HTMLDivElement, vm: CardViewModel): Promise<void> {
-  const fb     = bar.querySelector<HTMLSpanElement>(".share-feedback")!;
-  const imgBtn = bar.querySelector<HTMLButtonElement>("[data-share='image']")!;
-  imgBtn.disabled = true;
-  showShareFeedback(fb, "Rendering…", "pending");
-  try {
-    const blob = await renderShareCanvas(vm);
-    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-    showShareFeedback(fb, "✓ Image copied!", "success");
-  } catch { showShareFeedback(fb, "✗ Copy failed", "error"); }
-  finally { imgBtn.disabled = false; }
-}
-
-let feedbackTimer: ReturnType<typeof setTimeout> | null = null;
-function showShareFeedback(el: HTMLSpanElement, msg: string, kind: "success" | "error" | "pending"): void {
-  el.textContent = msg;
-  el.className   = `share-feedback share-feedback--${kind}`;
-  if (feedbackTimer) clearTimeout(feedbackTimer);
-  if (kind !== "pending") {
-    feedbackTimer = setTimeout(() => { el.textContent = ""; el.className = "share-feedback"; }, 2500);
+    showShareFeedback(feedback, "Copied!", "success");
+  } catch (err) {
+    console.error(`[SteamWatch popup] Text share failed: ${formatError(err)}`);
+    showShareFeedback(feedback, "Copy failed", "error");
   }
 }
 
-// ── Remove ────────────────────────────────────────────────────────────────────
+async function handleShareImage(bar: HTMLDivElement, vm: CardViewModel): Promise<void> {
+  const feedback = bar.querySelector<HTMLSpanElement>(".share-feedback");
+  const imgBtn = bar.querySelector<HTMLButtonElement>("[data-share='image']");
+  if (!feedback || !imgBtn) return;
 
-async function handleRemove(appid: string): Promise<void> {
-  try { await removeGame(appid); await init(); }
-  catch (err) { console.error("[SteamWatch] Remove failed:", err); }
+  imgBtn.disabled = true;
+  showShareFeedback(feedback, "Rendering...", "pending");
+  try {
+    const blob = await renderShareCanvas(vm);
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+    showShareFeedback(feedback, "Image copied!", "success");
+  } catch (err) {
+    console.error(`[SteamWatch popup] Image share failed: ${formatError(err)}`);
+    showShareFeedback(feedback, "Copy failed", "error");
+  } finally {
+    imgBtn.disabled = false;
+  }
 }
 
-// ── Badge favorite ────────────────────────────────────────────────────────────
+let feedbackTimer: ReturnType<typeof setTimeout> | null = null;
+
+function showShareFeedback(el: HTMLSpanElement, msg: string, kind: "success" | "error" | "pending"): void {
+  el.textContent = msg;
+  el.className = `share-feedback share-feedback--${kind}`;
+  if (feedbackTimer) clearTimeout(feedbackTimer);
+  if (kind !== "pending") {
+    feedbackTimer = setTimeout(() => {
+      el.textContent = "";
+      el.className = "share-feedback";
+    }, 2500);
+  }
+}
+
+async function handleRemove(appid: string): Promise<void> {
+  try {
+    await removeGame(appid);
+    await init();
+  } catch (err) {
+    console.error(`[SteamWatch] Remove failed: ${formatError(err)}`);
+  }
+}
 
 async function handleToggleFavorite(appid: string, clickedBtn: HTMLButtonElement): Promise<void> {
   try {
     const settings = await getSettings();
-    const isCurrentFav = settings.badgeFavoriteAppid === appid;
-    const newFav = isCurrentFav ? undefined : appid;
-    await saveSettings({ badgeFavoriteAppid: newFav });
+    const isCurrentFavorite = settings.badgeFavoriteAppid === appid;
+    const newFavorite = isCurrentFavorite ? undefined : appid;
+    await saveSettings({ badgeFavoriteAppid: newFavorite });
 
-    // Update all star buttons in the list to reflect the new state
     document.querySelectorAll<HTMLButtonElement>(".btn-star").forEach((btn) => {
       const card = btn.closest<HTMLDivElement>(".game-card");
       const cardAppid = card?.dataset["appid"];
-      const active = cardAppid === newFav;
+      const active = cardAppid === newFavorite;
       btn.classList.toggle("active", active);
       btn.setAttribute("aria-pressed", String(active));
       btn.setAttribute("aria-label", active ? "Remove from badge" : "Show on badge");
@@ -593,56 +742,65 @@ async function handleToggleFavorite(appid: string, clickedBtn: HTMLButtonElement
       if (polygon) polygon.setAttribute("fill", active ? "currentColor" : "none");
     });
 
-    // Ask background to refresh badge immediately
+    clickedBtn.blur();
     try {
       await chrome.runtime.sendMessage<MessageRequest, MessageResponse>({ type: "FETCH_NOW" });
-    } catch (_e) { /* badge refresh is fire-and-forget; swallowing connection errors intentionally */ }
+    } catch (err) {
+      console.warn(`[SteamWatch] Favorite badge refresh failed: ${formatError(err)}`);
+    }
   } catch (err) {
-    console.error("[SteamWatch] Toggle favorite failed:", err);
+    console.error(`[SteamWatch] Toggle favorite failed: ${formatError(err)}`);
   }
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-/**
- * Show the prominent "Updated X min ago" bar above the games list.
- * Uses the global last-fetch timestamp from the service worker, which is
- * more reliable than per-game CachedData.fetchedAt on first extension install.
- */
 function updateFetchBar(lastFetch: number): void {
   if (lastFetch <= 0) {
     hide(fetchBarEl);
     return;
   }
+
   const mins = Math.round((Date.now() - lastFetch) / 60_000);
   let label: string;
-  if (mins <= 0)    label = "Updated just now";
+  if (mins <= 0) label = "Updated just now";
   else if (mins === 1) label = "Updated 1 min ago";
-  else if (mins < 60)  label = `Updated ${mins} min ago`;
+  else if (mins < 60) label = `Updated ${mins} min ago`;
   else {
-    const h = new Date(lastFetch);
-    const hh = h.getHours().toString().padStart(2, "0");
-    const mm = h.getMinutes().toString().padStart(2, "0");
+    const date = new Date(lastFetch);
+    const hh = date.getHours().toString().padStart(2, "0");
+    const mm = date.getMinutes().toString().padStart(2, "0");
     label = `Updated at ${hh}:${mm}`;
   }
+
   fetchBarEl.textContent = label;
   show(fetchBarEl);
 }
 
-/** Keep the compact header span in sync (secondary indicator). */
 function updateHeaderTimestamp(vms: CardViewModel[]): void {
-  const ts = vms.map((vm) => vm.fetchedAt).filter((t) => t > 0);
-  if (!ts.length) return;
-  lastUpdatedEl.textContent = fmtTimeAgo(Math.max(...ts));
+  const timestamps = vms.map((vm) => vm.fetchedAt).filter((timestamp) => timestamp > 0);
+  if (!timestamps.length) return;
+  lastUpdatedEl.textContent = fmtTimeAgo(Math.max(...timestamps));
 }
 
 function showState(state: "loading" | "empty" | "list" | "error"): void {
-  hide(loadingEl); hide(errorStateEl); hide(gamesListEl); hide(emptyStateEl); hide(fetchBarEl);
+  hide(loadingEl);
+  hide(errorStateEl);
+  hide(gamesListEl);
+  hide(emptyStateEl);
+  hide(fetchBarEl);
+
   switch (state) {
-    case "loading": show(loadingEl);    break;
-    case "empty":   show(emptyStateEl); break;
-    case "list":    show(gamesListEl);  break;
-    case "error":   show(errorStateEl); break;
+    case "loading":
+      show(loadingEl);
+      break;
+    case "empty":
+      show(emptyStateEl);
+      break;
+    case "list":
+      show(gamesListEl);
+      break;
+    case "error":
+      show(errorStateEl);
+      break;
   }
 }
 
@@ -651,7 +809,80 @@ function showError(message: string): void {
   showState("error");
 }
 
-// ── Events ────────────────────────────────────────────────────────────────────
+function firstGameInitial(name: string): string {
+  return (name.match(/[A-Za-z0-9]/) ?? ["?"])[0]!.toUpperCase();
+}
+
+function svgIcon(children: SVGElement[]): SVGSVGElement {
+  const svg = s("svg", {
+    attrs: {
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": "2.2",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round",
+      "aria-hidden": "true",
+    },
+  });
+  children.forEach((child) => svg.appendChild(child));
+  return svg;
+}
+
+function shareIcon(): SVGSVGElement {
+  return svgIcon([
+    s("circle", { attrs: { cx: "18", cy: "5", r: "3" } }),
+    s("circle", { attrs: { cx: "6", cy: "12", r: "3" } }),
+    s("circle", { attrs: { cx: "18", cy: "19", r: "3" } }),
+    s("path", { attrs: { d: "M8.59 13.51L15.42 17.49" } }),
+    s("path", { attrs: { d: "M15.41 6.51L8.59 10.49" } }),
+  ]);
+}
+
+function starIcon(active: boolean): SVGSVGElement {
+  const svg = svgIcon([
+    s("polygon", {
+      attrs: {
+        points: "12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2",
+        fill: active ? "currentColor" : "none",
+      },
+    }),
+  ]);
+  svg.setAttribute("stroke-width", "2");
+  return svg;
+}
+
+function chevronIcon(): SVGSVGElement {
+  const svg = svgIcon([s("polyline", { attrs: { points: "6 9 12 15 18 9" } })]);
+  svg.classList.add("chevron");
+  svg.setAttribute("stroke-width", "2.5");
+  svg.removeAttribute("stroke-linejoin");
+  return svg;
+}
+
+function removeIcon(): SVGSVGElement {
+  const svg = svgIcon([
+    s("line", { attrs: { x1: "18", y1: "6", x2: "6", y2: "18" } }),
+    s("line", { attrs: { x1: "6", y1: "6", x2: "18", y2: "18" } }),
+  ]);
+  svg.setAttribute("stroke-width", "2.5");
+  return svg;
+}
+
+function copyIcon(): SVGSVGElement {
+  return svgIcon([
+    s("rect", { attrs: { x: "9", y: "9", width: "13", height: "13", rx: "2" } }),
+    s("path", { attrs: { d: "M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" } }),
+  ]);
+}
+
+function imageIcon(): SVGSVGElement {
+  return svgIcon([
+    s("rect", { attrs: { x: "3", y: "3", width: "18", height: "18", rx: "2" } }),
+    s("circle", { attrs: { cx: "8.5", cy: "8.5", r: "1.5" } }),
+    s("polyline", { attrs: { points: "21 15 16 10 5 21" } }),
+  ]);
+}
 
 refreshBtn.addEventListener("click", async () => {
   refreshBtn.classList.add("spinning");
@@ -659,8 +890,12 @@ refreshBtn.addEventListener("click", async () => {
   try {
     await chrome.runtime.sendMessage<MessageRequest, MessageResponse>({ type: "FETCH_NOW" });
     await init();
-  } catch (err) { console.error("[SteamWatch] Refresh failed:", err); }
-  finally { refreshBtn.classList.remove("spinning"); refreshBtn.disabled = false; }
+  } catch (err) {
+    console.error(`[SteamWatch] Refresh failed: ${formatError(err)}`);
+  } finally {
+    refreshBtn.classList.remove("spinning");
+    refreshBtn.disabled = false;
+  }
 });
 
 settingsBtn.addEventListener("click", () => chrome.runtime.openOptionsPage());

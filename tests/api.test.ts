@@ -208,59 +208,6 @@ describe("STEAM_CAPSULE_URL", () => {
   });
 });
 
-// ── fetchRecentNews ───────────────────────────────────────────────────────────
-
-import { fetchRecentNews } from "../src/utils/api.js";
-
-describe("fetchRecentNews", () => {
-  const validResponse = {
-    appnews: {
-      newsitems: [
-        { title: "Update 1.12", url: "https://store.steampowered.com/news/1", date: Math.floor(Date.now() / 1000) - 3600 },
-        { title: "Old patch",   url: "https://store.steampowered.com/news/2", date: 1000 },
-      ],
-    },
-  };
-
-  it("returns recent news items within maxAge window", async () => {
-    mockFetch(validResponse);
-    const items = await fetchRecentNews("1245620");
-    expect(items).toHaveLength(1);
-    expect(items[0]!.title).toBe("Update 1.12");
-  });
-
-  it("filters out items older than maxAge", async () => {
-    mockFetch(validResponse);
-    // maxAge = 1 second — both items are older
-    const items = await fetchRecentNews("1245620", 1);
-    expect(items).toHaveLength(0);
-  });
-
-  it("returns correct shape", async () => {
-    mockFetch(validResponse);
-    const [item] = await fetchRecentNews("1245620");
-    expect(item).toHaveProperty("title");
-    expect(item).toHaveProperty("url");
-    expect(item).toHaveProperty("date");
-  });
-
-  it("returns empty array on non-ok response", async () => {
-    mockFetch({}, false, 429);
-    expect(await fetchRecentNews("1245620")).toEqual([]);
-  });
-
-  it("returns empty array on network error", async () => {
-    mockFetchError();
-    expect(await fetchRecentNews("1245620")).toEqual([]);
-  });
-
-  it("returns empty array when newsitems is missing", async () => {
-    mockFetch({ appnews: {} });
-    // Zod default([]) handles missing field
-    expect(await fetchRecentNews("1245620")).toEqual([]);
-  });
-});
-
 describe("fetchTwitchViewers", () => {
   it("returns viewer count on valid GQL response", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => ({
@@ -359,11 +306,7 @@ describe("fetchSteamChartsBootstrap", () => {
     const result = await fetchSteamChartsBootstrap("570");
     
     expect(result).toEqual([]);
-    expect(warnSpy).toHaveBeenCalledWith(
-      '[SteamWatch] Bootstrap: failed to fetch chart-data.json for',
-      "570",
-      expect.any(Error)
-    );
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("[SteamWatch] Bootstrap chart-data.json failed for appid 570"));
     expect(errorSpy).not.toHaveBeenCalled();
   });
 

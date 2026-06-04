@@ -5,8 +5,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { z } from "zod";
-import type { SearchResult, SteamChartsData, SteamSpyData, Snapshot, SteamNewsItem } from "../types/index.js";
-import { withRetry } from "./retry.js";
+import type { SearchResult, SteamChartsData, SteamSpyData, Snapshot } from "../types/index.js";
+import { formatError } from "./log.js";
 
 export const STEAM_CAPSULE_URL = (appid: string): string =>
   `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appid}/header.jpg`;
@@ -74,7 +74,7 @@ export async function fetchCurrentPlayers(appid: string): Promise<number | null>
     const json: unknown = await res.json();
     const parsed = PlayerCountSchema.safeParse(json);
     return parsed.success ? parsed.data.response.player_count : null;
-  } catch {
+  } catch (_error) {
     return null;
   }
 }
@@ -96,7 +96,7 @@ export async function fetchSteamSpyData(appid: string): Promise<SteamSpyData> {
       peak:      parsed.data.peak_ccu,
       name:      parsed.data.name,
     };
-  } catch {
+  } catch (_error) {
     return fallback;
   }
 }
@@ -117,7 +117,7 @@ export async function fetchAppDetails(appid: string): Promise<{ name: string; im
       name: appData.data.name,
       image,
     };
-  } catch {
+  } catch (_error) {
     return null;
   }
 }
@@ -153,7 +153,7 @@ export async function fetchSteamChartsData(appid: string): Promise<SteamChartsDa
     if (!res.ok) return {};
     const html = await res.text();
     return parseSteamChartsData(html);
-  } catch {
+  } catch (_error) {
     return {};
   }
 }
@@ -167,13 +167,13 @@ export async function fetchSteamChartsBootstrap(appid: string): Promise<Snapshot
   try {
     const res = await fetch(`https://steamcharts.com/app/${encodeURIComponent(appid)}/chart-data.json`);
     if (!res.ok) {
-      console.warn('[SteamWatch] Bootstrap: chart-data.json returned', res.status, 'for', appid);
+      console.warn(`[SteamWatch] Bootstrap chart-data.json returned ${res.status} for appid ${appid}`);
       return [];
     }
     const json: unknown = await res.json();
     const parsed = ChartDataSchema.safeParse(json);
     if (!parsed.success) {
-      console.warn('[SteamWatch] Bootstrap: failed to fetch chart-data.json for', appid, parsed.error);
+      console.warn(`[SteamWatch] Bootstrap chart-data.json validation failed for appid ${appid}: ${formatError(parsed.error)}`);
       return [];
     }
     
@@ -187,7 +187,7 @@ export async function fetchSteamChartsBootstrap(appid: string): Promise<Snapshot
     
     return snapshots;
   } catch (err) {
-    console.warn('[SteamWatch] Bootstrap: failed to fetch chart-data.json for', appid, err);
+    console.warn(`[SteamWatch] Bootstrap chart-data.json failed for appid ${appid}: ${formatError(err)}`);
     return [];
   }
 }
@@ -213,7 +213,7 @@ export async function fetchTwitchViewers(gameName: string): Promise<number | nul
       if (!parsed.success) continue;
       const viewers = parsed.data[0]?.data?.game?.viewersCount;
       if (viewers != null) return viewers;
-    } catch {
+    } catch (_error) {
       // try next candidate
     }
   }
@@ -238,38 +238,7 @@ export async function searchGames(query: string): Promise<SearchResult[]> {
       name:  item.name,
       image: item.tiny_image || item.small_capsule_image || STEAM_CAPSULE_URL(String(item.id)),
     }));
-  } catch {
-    return [];
-  }
-}
-
-// ── Steam News ────────────────────────────────────────────────────────────────
-
-const SteamNewsSchema = z.object({
-  appnews: z.object({
-    newsitems: z.array(
-      z.object({ title: z.string(), url: z.string(), date: z.number() })
-    ).default([]),
-  }),
-});
-
-export async function fetchRecentNews(
-  appid: string,
-  maxAge = 48 * 3600
-): Promise<SteamNewsItem[]> {
-  try {
-    const res = await fetch(
-      `https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/?appid=${encodeURIComponent(appid)}&count=2&maxlength=0`
-    );
-    if (!res.ok) return [];
-    const json: unknown = await res.json();
-    const parsed = SteamNewsSchema.safeParse(json);
-    if (!parsed.success) return [];
-    const cutoff = Math.floor(Date.now() / 1000) - maxAge;
-    return parsed.data.appnews.newsitems
-      .filter((item) => item.date >= cutoff)
-      .map((item) => ({ title: item.title, url: item.url, date: item.date }));
-  } catch {
+  } catch (_error) {
     return [];
   }
 }

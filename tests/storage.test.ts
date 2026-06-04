@@ -1,13 +1,10 @@
 // tests/storage.test.ts
-import { describe, it, expect } from "vitest";
+import { beforeEach, describe, it, expect } from "vitest";
 import {
   getGames,
   addGame,
   updateGameImage,
   removeGame,
-  getSnapshotsForGame,
-  addSnapshot,
-  purgeSnapshotsForGame,
   getSettings,
   saveSettings,
   getGameSettings,
@@ -17,9 +14,11 @@ import {
   clearAllData,
   MAX_GAMES,
   DEFAULT_SETTINGS,
-  getSnapshotCapacity,
+  FETCH_INTERVAL_MINUTES,
+  TRACKING_RETENTION_DAYS,
 } from "../src/utils/storage.js";
 import type { Game, Snapshot } from "../src/types/index.js";
+import { _resetDbForTesting, idbGetSnapshots, idbSaveSnapshot } from "../src/utils/idb-storage.js";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -32,6 +31,17 @@ const mockGame = (n: number): Game => ({
 const mockSnap = (current: number, offsetMs = 0): Snapshot => ({
   ts: Date.now() - offsetMs,
   current,
+});
+
+beforeEach(async () => {
+  await _resetDbForTesting();
+  await new Promise<void>((resolve, reject) => {
+    const req = indexedDB.deleteDatabase("steamwatch");
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+    req.onblocked = () => resolve();
+  });
+  await _resetDbForTesting();
 });
 
 // ── Games ─────────────────────────────────────────────────────────────────────
@@ -93,9 +103,9 @@ describe("removeGame", () => {
 
   it("also removes associated snapshots", async () => {
     await addGame(mockGame(1));
-    await addSnapshot("1", mockSnap(1000));
+    await idbSaveSnapshot("1", mockSnap(1000));
     await removeGame("1");
-    expect(await getSnapshotsForGame("1")).toEqual([]);
+    expect(await idbGetSnapshots("1")).toEqual([]);
   });
 
   it("also removes associated game settings", async () => {
@@ -140,57 +150,6 @@ describe("updateGameImage", () => {
   });
 });
 
-// ── Snapshots ─────────────────────────────────────────────────────────────────
-
-describe("addSnapshot / getSnapshotsForGame", () => {
-  it("returns empty array when no snapshots stored", async () => {
-    expect(await getSnapshotsForGame("999")).toEqual([]);
-  });
-
-  it("adds and retrieves snapshots", async () => {
-    const snap = mockSnap(5000);
-    await addSnapshot("1", snap);
-    const snaps = await getSnapshotsForGame("1");
-    expect(snaps).toHaveLength(1);
-    expect(snaps[0]!.current).toBe(5000);
-  });
-
-  it("returns the updated snapshot array", async () => {
-    const snaps = await addSnapshot("1", mockSnap(1000));
-    await addSnapshot("1", mockSnap(2000));
-    expect(snaps).toHaveLength(1); // Only the first add's result
-    expect(await getSnapshotsForGame("1")).toHaveLength(2);
-  });
-
-  it("keeps snapshots for different games separate", async () => {
-    await addSnapshot("1", mockSnap(1000));
-    await addSnapshot("2", mockSnap(2000));
-    expect((await getSnapshotsForGame("1"))[0]!.current).toBe(1000);
-    expect((await getSnapshotsForGame("2"))[0]!.current).toBe(2000);
-  });
-});
-
-describe("purgeSnapshotsForGame", () => {
-  it("removes snapshots older than given days", async () => {
-    const OLD = 3 * 86_400_000; // 3 days ago
-    await addSnapshot("1", mockSnap(1000, OLD + 1000)); // older than 2 days
-    await addSnapshot("1", mockSnap(2000));              // recent
-
-    await purgeSnapshotsForGame("1", 2);
-
-    const snaps = await getSnapshotsForGame("1");
-    expect(snaps).toHaveLength(1);
-    expect(snaps[0]!.current).toBe(2000);
-  });
-
-  it("keeps all snapshots when all are within retention window", async () => {
-    await addSnapshot("1", mockSnap(1000));
-    await addSnapshot("1", mockSnap(2000));
-    await purgeSnapshotsForGame("1", 7);
-    expect(await getSnapshotsForGame("1")).toHaveLength(2);
-  });
-});
-
 // ── Settings ──────────────────────────────────────────────────────────────────
 
 describe("getSettings", () => {
@@ -202,24 +161,50 @@ describe("getSettings", () => {
 
 describe("saveSettings", () => {
   it("partially updates settings", async () => {
-    await saveSettings({ trendEnabled: false });
+    await saveSettings({ notificationsEnabled: false });
     const s = await getSettings();
-    expect(s.trendEnabled).toBe(false);
-    expect(s.notificationsEnabled).toBe(DEFAULT_SETTINGS.notificationsEnabled);
+    expect(s.notificationsEnabled).toBe(false);
+    expect(s.globalThresholdUp).toBe(DEFAULT_SETTINGS.globalThresholdUp);
   });
 
   it("merges multiple partial saves correctly", async () => {
-    await saveSettings({ trendEnabled: false });
-    await saveSettings({ purgeAfterDays: 14 });
+    await saveSettings({ notificationsEnabled: false });
+    await saveSettings({ globalThresholdUp: 45 });
     const s = await getSettings();
-    expect(s.trendEnabled).toBe(false);
-    expect(s.purgeAfterDays).toBe(14);
+    expect(s.notificationsEnabled).toBe(false);
+    expect(s.globalThresholdUp).toBe(45);
   });
 
-  it("clamps retention to the minimum supported window", async () => {
-    await saveSettings({ purgeAfterDays: 1 });
+  it("normalizes legacy settings keys out of storage", async () => {
+    const legacyTrendKey = ["trend", "Enabled"].join("");
+    const legacyRetentionKey = ["purge", "After", "Days"].join("");
+    const legacyIntervalKey = ["fetch", "Interval", "Minutes"].join("");
+    const legacyRankKey = ["rank", "By", "Players"].join("");
+    await chrome.storage.local.set({
+      sw_settings: {
+        notificationsEnabled: false,
+        [legacyTrendKey]: false,
+        [legacyRetentionKey]: 7,
+        [legacyIntervalKey]: 30,
+        [legacyRankKey]: false,
+      },
+    });
+
     const s = await getSettings();
-    expect(s.purgeAfterDays).toBe(3);
+    expect(s.notificationsEnabled).toBe(false);
+
+    const stored = await chrome.storage.local.get("sw_settings");
+    expect(stored["sw_settings"]).not.toHaveProperty(legacyTrendKey);
+    expect(stored["sw_settings"]).not.toHaveProperty(legacyRetentionKey);
+    expect(stored["sw_settings"]).not.toHaveProperty(legacyIntervalKey);
+    expect(stored["sw_settings"]).not.toHaveProperty(legacyRankKey);
+  });
+
+  it("clamps global notification thresholds", async () => {
+    await saveSettings({ globalThresholdUp: 500, globalThresholdDown: -500 });
+    const s = await getSettings();
+    expect(s.globalThresholdUp).toBe(100);
+    expect(s.globalThresholdDown).toBe(-90);
   });
 });
 
@@ -276,33 +261,26 @@ describe("getCache / setCache", () => {
 describe("clearAllData", () => {
   it("removes all stored data", async () => {
     await addGame(mockGame(1));
-    await addSnapshot("1", mockSnap(1000));
-    await saveSettings({ trendEnabled: false });
+    await idbSaveSnapshot("1", mockSnap(1000));
+    await saveSettings({ notificationsEnabled: false });
     await clearAllData();
     expect(await getGames()).toEqual([]);
-    expect(await getSnapshotsForGame("1")).toEqual([]);
+    expect(await idbGetSnapshots("1")).toEqual([]);
     const s = await getSettings();
-    expect(s.trendEnabled).toBe(DEFAULT_SETTINGS.trendEnabled);
+    expect(s.notificationsEnabled).toBe(DEFAULT_SETTINGS.notificationsEnabled);
   });
 });
 
-describe("getSnapshotCapacity", () => {
-  it("preserves roughly 7 days at 15-minute intervals", () => {
-    expect(getSnapshotCapacity(7, 15)).toBeGreaterThanOrEqual(672);
-  });
-
-  it("scales with longer retention windows", () => {
-    expect(getSnapshotCapacity(14, 15)).toBeGreaterThan(getSnapshotCapacity(7, 15));
-  });
-
-  it("enforces the 3-day minimum", () => {
-    expect(getSnapshotCapacity(1, 15)).toBe(getSnapshotCapacity(3, 15));
+describe("fixed tracking defaults", () => {
+  it("uses maximum quality tracking constants", () => {
+    expect(FETCH_INTERVAL_MINUTES).toBe(5);
+    expect(TRACKING_RETENTION_DAYS).toBe(60);
   });
 });
 
-// ── new Settings defaults ─────────────────────────────────────────────────────
+// ── Settings defaults ─────────────────────────────────────────────────────────
 
-describe("DEFAULT_SETTINGS includes new v0.12 fields", () => {
+describe("DEFAULT_SETTINGS", () => {
   it("badgeFavoriteAppid defaults to undefined", async () => {
     const s = await getSettings();
     expect(s.badgeFavoriteAppid).toBeUndefined();

@@ -138,6 +138,16 @@ export async function idbDeleteSnapshots(appId: string): Promise<void> {
   await tx.done;
 }
 
+export async function idbClearAllData(): Promise<void> {
+  const db = await getDB();
+  const tx = db.transaction(["snapshots", "cooldowns"], "readwrite", { durability: "relaxed" });
+  await Promise.all([
+    tx.objectStore("snapshots").clear(),
+    tx.objectStore("cooldowns").clear(),
+  ]);
+  await tx.done;
+}
+
 export async function _resetDbForTesting(): Promise<void> {
   if (dbPromise) {
     const db = await dbPromise;

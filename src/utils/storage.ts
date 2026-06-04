@@ -6,32 +6,27 @@
 
 import type {
   Game,
-  Snapshot,
   CachedData,
   Settings,
   GameSettings,
 } from "../types/index.js";
+import { idbClearAllData, idbDeleteSnapshots } from "./idb-storage.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 export const MAX_GAMES = 10;
-const MIN_RETENTION_DAYS = 3;
-const SNAPSHOT_BUFFER = 12;
+export const TRACKING_RETENTION_DAYS = 60;
+export const FETCH_INTERVAL_MINUTES = 5;
 
 export const DEFAULT_SETTINGS: Settings = {
-  trendEnabled: true,
-  purgeAfterDays: 30,
   notificationsEnabled: true,
   globalThresholdUp: 30,
   globalThresholdDown: -25,
-  fetchIntervalMinutes: 30,
   // Quiet hours — off by default
   quietHoursEnabled: false,
   quietStart: "23:00",
   quietEnd: "07:00",
   quietDays: 0b1111111, // all 7 days
-  // Ranking
-  rankByPlayers: true,
 };
 
 // ── Storage keys ──────────────────────────────────────────────────────────────
@@ -40,7 +35,6 @@ const KEYS = {
   games: "sw_games",
   settings: "sw_settings",
   cache: "sw_cache",
-  snapPrefix: "sw_snaps_", // per-game: sw_snaps_{appid}
   gameSettingsPrefix: "sw_gs_", // per-game: sw_gs_{appid}
   /** Unix ms timestamp of the last successful global fetch cycle. */
   lastFetchTime: "sw_last_fetch",
@@ -82,11 +76,11 @@ export async function removeGame(appid: string): Promise<Game[]> {
   const games = (await getGames()).filter((g) => g.appid !== appid);
   await set(KEYS.games, games);
 
-  // Clean up all per-game data
+  // Clean up per-game settings left in chrome.storage.local.
   await chrome.storage.local.remove([
-    `${KEYS.snapPrefix}${appid}`,
     `${KEYS.gameSettingsPrefix}${appid}`,
   ]);
+  await idbDeleteSnapshots(appid);
 
   // Remove from cache
   const cache = await getCache();
@@ -106,48 +100,55 @@ export async function updateGameImage(appid: string, imageUrl: string): Promise<
   await set(KEYS.games, updated);
 }
 
-// ── Snapshots — lazy per-game loading ────────────────────────────────────────
-
-export async function getSnapshotsForGame(appid: string): Promise<Snapshot[]> {
-  return (await get<Snapshot[]>(`${KEYS.snapPrefix}${appid}`)) ?? [];
-}
-
-export async function addSnapshot(appid: string, snap: Snapshot): Promise<Snapshot[]> {
-  const settings = await getSettings();
-  const existing = await getSnapshotsForGame(appid);
-  const updated = [...existing, snap].slice(-getSnapshotCapacity(settings.purgeAfterDays, settings.fetchIntervalMinutes));
-  await set(`${KEYS.snapPrefix}${appid}`, updated);
-  return updated;
-}
-
-export async function purgeSnapshotsForGame(
-  appid: string,
-  days: number
-): Promise<void> {
-  const cutoff = Date.now() - days * 86_400_000;
-  const snaps = await getSnapshotsForGame(appid);
-  const pruned = snaps.filter((s) => s.ts > cutoff);
-  await set(`${KEYS.snapPrefix}${appid}`, pruned);
-}
-
 // ── Settings ──────────────────────────────────────────────────────────────────
 
 export async function getSettings(): Promise<Settings> {
-  const stored = await get<Partial<Settings>>(KEYS.settings);
-  const merged = { ...DEFAULT_SETTINGS, ...stored };
-  merged.purgeAfterDays = Math.max(MIN_RETENTION_DAYS, merged.purgeAfterDays);
-  merged.fetchIntervalMinutes = Math.max(5, merged.fetchIntervalMinutes);
-  return merged;
+  const stored = await get<Record<string, unknown>>(KEYS.settings);
+  const normalized = normalizeSettings(stored);
+  if (!stored || JSON.stringify(stored) !== JSON.stringify(normalized)) {
+    await set(KEYS.settings, normalized);
+  }
+  return normalized;
 }
 
 type SettingsPatch = { [K in keyof Settings]?: Settings[K] | undefined };
 
 export async function saveSettings(partial: SettingsPatch): Promise<void> {
   const current = await getSettings();
-  const next = { ...current, ...partial };
-  next.purgeAfterDays = Math.max(MIN_RETENTION_DAYS, next.purgeAfterDays ?? MIN_RETENTION_DAYS);
-  next.fetchIntervalMinutes = Math.max(5, next.fetchIntervalMinutes ?? 5);
+  const next = normalizeSettings({ ...current, ...partial });
   await set(KEYS.settings, next);
+}
+
+function normalizeSettings(raw: Record<string, unknown> | undefined): Settings {
+  const settings: Settings = { ...DEFAULT_SETTINGS };
+  if (!raw) return settings;
+
+  if (typeof raw["notificationsEnabled"] === "boolean") {
+    settings.notificationsEnabled = raw["notificationsEnabled"];
+  }
+  if (typeof raw["globalThresholdUp"] === "number" && Number.isFinite(raw["globalThresholdUp"])) {
+    settings.globalThresholdUp = Math.max(5, Math.min(100, raw["globalThresholdUp"]));
+  }
+  if (typeof raw["globalThresholdDown"] === "number" && Number.isFinite(raw["globalThresholdDown"])) {
+    settings.globalThresholdDown = -Math.max(5, Math.min(90, Math.abs(raw["globalThresholdDown"])));
+  }
+  if (typeof raw["quietHoursEnabled"] === "boolean") {
+    settings.quietHoursEnabled = raw["quietHoursEnabled"];
+  }
+  if (typeof raw["quietStart"] === "string" && raw["quietStart"]) {
+    settings.quietStart = raw["quietStart"];
+  }
+  if (typeof raw["quietEnd"] === "string" && raw["quietEnd"]) {
+    settings.quietEnd = raw["quietEnd"];
+  }
+  if (typeof raw["quietDays"] === "number" && Number.isInteger(raw["quietDays"])) {
+    settings.quietDays = raw["quietDays"] & 0b1111111;
+  }
+  if (typeof raw["badgeFavoriteAppid"] === "string" && raw["badgeFavoriteAppid"]) {
+    settings.badgeFavoriteAppid = raw["badgeFavoriteAppid"];
+  }
+
+  return settings;
 }
 
 // ── Per-game settings ─────────────────────────────────────────────────────────
@@ -180,6 +181,7 @@ export async function setCache(cache: CacheMap): Promise<void> {
 
 export async function clearAllData(): Promise<void> {
   await chrome.storage.local.clear();
+  await idbClearAllData();
 }
 
 // ── Global last-fetch timestamp ───────────────────────────────────────────────
@@ -196,10 +198,4 @@ export async function setLastFetchTime(ts: number): Promise<void> {
 /** Read the last-fetch timestamp. Returns 0 if never set. */
 export async function getLastFetchTime(): Promise<number> {
   return (await get<number>(KEYS.lastFetchTime)) ?? 0;
-}
-
-export function getSnapshotCapacity(purgeAfterDays: number, fetchIntervalMinutes: number): number {
-  const days = Math.max(MIN_RETENTION_DAYS, purgeAfterDays);
-  const interval = Math.max(5, fetchIntervalMinutes);
-  return Math.ceil((days * 24 * 60) / interval) + SNAPSHOT_BUFFER;
 }

@@ -1,5 +1,6 @@
 import type { Game, Snapshot } from "../types/index.js";
 import { idbGetSnapshots, idbSaveSnapshot } from "./idb-storage.js";
+import { formatError } from "./log.js";
 
 const MIGRATION_SENTINEL_KEY = "sw_migration_complete";
 const GAMES_KEY = "sw_games";
@@ -69,7 +70,7 @@ export async function migrateToIndexedDB(): Promise<MigrationStats> {
         validCount += 1;
       } catch (error) {
         stats.errors += 1;
-        console.error(`[migrate] Failed to save snapshot to IndexedDB — appId: ${appId}`, error);
+        console.error(`[migrate] Failed to save snapshot to IndexedDB — appId: ${appId}: ${formatError(error)}`);
       }
     }
 
@@ -91,7 +92,7 @@ export async function migrateToIndexedDB(): Promise<MigrationStats> {
     } catch (error) {
       allVerified = false;
       stats.errors += 1;
-      console.error(`[migrate] Failed to verify snapshots after migration — appId: ${appId}`, error);
+      console.error(`[migrate] Failed to verify snapshots after migration — appId: ${appId}: ${formatError(error)}`);
     }
   }
 

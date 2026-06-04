@@ -2,48 +2,27 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Game, Settings, Snapshot } from "../src/types/index.js";
 
-type PriceResult =
-  | { kind: "free" }
-  | { kind: "error"; reason: string }
-  | {
-      kind: "priced";
-      data: {
-        priceOriginal: number;
-        priceCurrent: number;
-        discountPct: number;
-        currentFormatted: string;
-        originalFormatted: string;
-      };
-    };
-
 const mocks = vi.hoisted(() => ({
   fetchCurrentPlayers: vi.fn(),
   fetchSteamChartsBootstrap: vi.fn(),
   fetchSteamChartsData: vi.fn(),
   fetchSteamSpyData: vi.fn(),
   fetchTwitchViewers: vi.fn(),
-  fetchPriceData: vi.fn(),
   getGames: vi.fn(),
   getSettings: vi.fn(),
   getGameSettings: vi.fn(),
   setCache: vi.fn(),
   getCache: vi.fn(),
   setLastFetchTime: vi.fn(),
-  getEffectiveRegion: vi.fn(),
   idbBulkSaveSnapshots: vi.fn(),
   idbSaveSnapshot: vi.fn(),
   idbGetSnapshots: vi.fn(),
-  idbSaveItadMapping: vi.fn(),
-  idbGetItadMapping: vi.fn(),
   idbGetCooldown: vi.fn(),
   idbSetCooldown: vi.fn(),
   migrateToIndexedDB: vi.fn(),
   computeTrend: vi.fn(),
-  detectSpike: vi.fn(),
   fmtNumber: vi.fn(),
   fmtBadge: vi.fn(),
-  lookupItadGame: vi.fn(),
-  fetchHistoricalLow: vi.fn(),
 }));
 
 vi.mock("../src/utils/api.js", () => ({
@@ -52,7 +31,6 @@ vi.mock("../src/utils/api.js", () => ({
   fetchSteamChartsData: mocks.fetchSteamChartsData,
   fetchSteamSpyData: mocks.fetchSteamSpyData,
   fetchTwitchViewers: mocks.fetchTwitchViewers,
-  fetchPriceData: mocks.fetchPriceData,
 }));
 
 vi.mock("../src/utils/storage.js", () => ({
@@ -62,15 +40,12 @@ vi.mock("../src/utils/storage.js", () => ({
   setCache: mocks.setCache,
   getCache: mocks.getCache,
   setLastFetchTime: mocks.setLastFetchTime,
-  getEffectiveRegion: mocks.getEffectiveRegion,
 }));
 
 vi.mock("../src/utils/idb-storage.js", () => ({
   idbBulkSaveSnapshots: mocks.idbBulkSaveSnapshots,
   idbSaveSnapshot: mocks.idbSaveSnapshot,
   idbGetSnapshots: mocks.idbGetSnapshots,
-  idbSaveItadMapping: mocks.idbSaveItadMapping,
-  idbGetItadMapping: mocks.idbGetItadMapping,
   idbGetCooldown: mocks.idbGetCooldown,
   idbSetCooldown: mocks.idbSetCooldown,
 }));
@@ -81,14 +56,8 @@ vi.mock("../src/utils/migrate.js", () => ({
 
 vi.mock("../src/utils/trend.js", () => ({
   computeTrend: mocks.computeTrend,
-  detectSpike: mocks.detectSpike,
   fmtNumber: mocks.fmtNumber,
   fmtBadge: mocks.fmtBadge,
-}));
-
-vi.mock("../src/utils/itad-api.js", () => ({
-  lookupItadGame: mocks.lookupItadGame,
-  fetchHistoricalLow: mocks.fetchHistoricalLow,
 }));
 
 const game: Game = {
@@ -98,26 +67,17 @@ const game: Game = {
 };
 
 const settings: Settings = {
-  trendEnabled: true,
-  purgeAfterDays: 7,
   notificationsEnabled: false,
-  spikeDetection: false,
   globalThresholdUp: 30,
   globalThresholdDown: -25,
-  crashThreshold: -50,
-  fetchIntervalMinutes: 15,
   quietHoursEnabled: false,
   quietStart: "23:00",
   quietEnd: "07:00",
   quietDays: 0b1111111,
-  rankByPlayers: true,
-  priceAlertsEnabled: false,
-  priceDropMinPct: 30,
-  regionCode: "US",
 };
 
 function primeChromeMocks(): void {
-  const chromeMock = globalThis.chrome as any;
+  const chromeMock = globalThis.chrome as typeof chrome;
   chromeMock.runtime.onInstalled = { addListener: vi.fn() };
   chromeMock.runtime.onStartup = { addListener: vi.fn() };
   chromeMock.runtime.onMessage = { addListener: vi.fn() };
@@ -162,28 +122,21 @@ beforeEach(() => {
   mocks.fetchSteamChartsData.mockResolvedValue({ current: 100, peak24h: 120, allTimePeak: 250 });
   mocks.fetchSteamSpyData.mockResolvedValue({ peak: 200, name: game.name });
   mocks.fetchTwitchViewers.mockResolvedValue(null);
-  mocks.fetchPriceData.mockResolvedValue({ kind: "free" });
   mocks.getGames.mockResolvedValue([game]);
   mocks.getSettings.mockResolvedValue(settings);
   mocks.getGameSettings.mockResolvedValue({});
   mocks.setCache.mockResolvedValue(undefined);
   mocks.getCache.mockResolvedValue({});
   mocks.setLastFetchTime.mockResolvedValue(undefined);
-  mocks.getEffectiveRegion.mockReturnValue("US");
   mocks.idbBulkSaveSnapshots.mockResolvedValue(undefined);
   mocks.idbSaveSnapshot.mockResolvedValue(undefined);
   mocks.idbGetSnapshots.mockResolvedValue([{ ts: 1, current: 90 }, { ts: 2, current: 100 }]);
-  mocks.idbSaveItadMapping.mockResolvedValue(undefined);
-  mocks.idbGetItadMapping.mockResolvedValue(null);
   mocks.idbGetCooldown.mockResolvedValue(null);
   mocks.idbSetCooldown.mockResolvedValue(undefined);
   mocks.migrateToIndexedDB.mockResolvedValue(undefined);
   mocks.computeTrend.mockReturnValue(null);
-  mocks.detectSpike.mockReturnValue(null);
   mocks.fmtNumber.mockImplementation((n: number) => String(n));
   mocks.fmtBadge.mockImplementation((n: number) => String(n));
-  mocks.lookupItadGame.mockResolvedValue(null);
-  mocks.fetchHistoricalLow.mockResolvedValue(new Map());
 });
 
 describe("background bootstrap integration", () => {

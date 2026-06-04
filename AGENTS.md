@@ -1,24 +1,29 @@
-# SteamWatch Chrome Extension — Agent Instructions
+# SteamWatch Chrome Extension - Agent Instructions
 
 ## 1. Project Overview
 
-SteamWatch is a Chrome extension (Manifest V3) that tracks Steam games with live player counts, price trends, Twitch viewer data, and price alerts. Built with TypeScript 5 (strict mode), Vite 5, Zod validation, and Vitest (289+ tests). Uses pnpm as the package manager.
+SteamWatch is a Chrome extension (Manifest V3) that tracks Steam games with live player counts, local player graph history, Twitch viewer data, toolbar badges, and player-count notifications. Built with TypeScript 5 (strict mode), Vite 5, Zod validation, and Vitest. Uses pnpm as the package manager.
 
 The extension consists of three main components:
-- Service worker (background/index.ts) — handles alarms, fetch cycles, notifications, badge updates
-- Popup UI (popup/) — toolbar popup with game list and quick actions
-- Options page (options/) — settings, history graph, data management
+- Service worker (`src/background/index.ts`) - handles alarms, fetch cycles, notifications, and badge updates
+- Popup UI (`src/popup/`) - primary user experience with game cards, sparklines, expanded graphs, and sharing
+- Options page (`src/options/`) - lean settings for Games, Notifications, and About
+
+Core tracking is always active:
+- `FETCH_INTERVAL_MINUTES = 5`
+- `TRACKING_RETENTION_DAYS = 60`
+- `MAX_GAMES = 10`
 
 ## 2. Version Management (CRITICAL)
 
-**Single source of truth: manifest.json**
+**Single source of truth: `manifest.json`**
 
 The version number lives in `manifest.json` only. Never update `package.json` version directly.
 
 ### Version Sync Workflow
 
-1. Update version in `manifest.json` (e.g., `"version": "0.13.2"`)
-2. Run `pnpm version-sync` to sync to package.json
+1. Update version in `manifest.json` (for example, `"version": "0.13.2"`)
+2. Run `pnpm version-sync` to sync to `package.json`
 3. The prebuild hook runs version-sync automatically during `pnpm run build`
 
 ### Version Bumping Rules
@@ -35,66 +40,63 @@ The version number lives in `manifest.json` only. Never update `package.json` ve
 4. Commit with message: `chore: bump version to X.Y.Z`
 5. Build and test: `pnpm run build && pnpm test`
 
-Note: README.md has no version number — intentionally version-agnostic. The badge links to CHANGELOG.md.
+Note: `README.md` has no version number and is intentionally version-agnostic. The badge links to `CHANGELOG.md`.
 
 ## 3. Architecture & File Structure
 
-```
+```text
 src/
 ├── background/
 │   ├── index.ts              Service worker entry point, alarm handlers
-│   └── fetchCycle.ts         Price data fetch loop, alert logic
+│   └── fetchCycle.ts         Player data fetch cycle, local snapshots, notification logic
 ├── popup/
 │   ├── index.html
-│   ├── main.ts               Popup initialization and event handlers
-│   └── popup.css
+│   ├── main.ts               Popup initialization, card rendering, graph rendering, quick actions
+│   ├── popup.css
+│   ├── shareBar.ts           Share controls
+│   └── thumb.ts              Thumbnail fallback handling
 ├── options/
 │   ├── index.html
-│   ├── main.ts               Options page initialization, history graph
+│   ├── main.ts               Games, Notifications, About settings
 │   └── options.css
 ├── types/
-│   └── index.ts              All shared TypeScript types, Zod schemas
+│   └── index.ts              Shared TypeScript types and Zod schemas
 ├── utils/
-│   ├── api.ts                Steam/SteamSpy/price HTTP fetchers (Zod-validated)
+│   ├── api.ts                Steam, SteamSpy, SteamCharts, Twitch fetchers (Zod-validated)
 │   ├── card.ts               CardViewModel factory
-│   ├── exporter.ts           CSV/JSON export logic
 │   ├── html.ts               XSS-safe DOM helpers
-│   ├── idb-storage.ts        IndexedDB wrapper (price snapshots)
-│   ├── migrate.ts            chrome.storage.local → IDB migration
+│   ├── idb-storage.ts        IndexedDB wrapper for player snapshots and notification cooldowns
+│   ├── log.ts                Typed error formatting helpers
+│   ├── migrate.ts            chrome.storage.local -> IndexedDB migration
 │   ├── quietHours.ts         Quiet hours bitmask logic
 │   ├── share.ts              Share text, canvas image builder
-│   ├── sparkline.ts          SVG sparkline generator
-│   ├── storage.ts            chrome.storage.local abstraction
-│   └── trend.ts              Trend, spike, forecast, badge formatting
-tests/
-├── background/
-├── popup/
-├── options/
-├── types/
-└── utils/                    Mirror src/ structure, Vitest unit tests
+│   ├── sparkline.ts          Graph window, point mapping, downsampling helpers
+│   ├── storage.ts            chrome.storage.local abstraction and tracking constants
+│   └── trend.ts              Trend and badge formatting
+tests/                        Mirror src/ structure with Vitest unit tests
 scripts/
-└── sync-version.ts           Version sync (manifest.json → package.json)
+└── sync-version.ts           Version sync (manifest.json -> package.json)
 ```
 
 ## 4. Code Conventions (MANDATORY)
 
 ### TypeScript
 
-- Strict mode enforced — no `any`, no `@ts-ignore`, no `@ts-expect-error`
-- All types defined in `src/types/index.ts`
+- Strict mode enforced - no `any`, no `@ts-ignore`, no `@ts-expect-error`
+- All shared domain types live in `src/types/index.ts`
 - Infer types from Zod schemas where possible
 
 ### API Validation
 
-- All HTTP responses validated with Zod schemas
-- Schemas defined in `src/types/index.ts`
-- Validation happens at the API boundary (src/utils/api.ts)
+- All HTTP responses are validated with Zod schemas
+- Schemas live in `src/types/index.ts`
+- Validation happens at the API boundary (`src/utils/api.ts`)
 - Invalid responses throw typed errors
 
 ### DOM Manipulation
 
-- Use `src/utils/html.ts` helpers for all DOM operations
-- Helpers provide XSS-safe element creation and text insertion
+- Use `src/utils/html.ts` helpers for DOM operations
+- Helpers provide XSS-safe element creation, text insertion, class handling, attributes, and SVG creation
 - Never use `innerHTML` directly
 - Never concatenate user input into HTML strings
 
@@ -102,7 +104,7 @@ scripts/
 
 - Popup and options pages use vanilla TypeScript
 - No React, Vue, or other frameworks
-- DOM manipulation via helpers in src/utils/html.ts
+- DOM manipulation goes through helpers in `src/utils/html.ts`
 
 ### String Handling
 
@@ -112,20 +114,21 @@ scripts/
 
 ### Console Logging
 
-- Always use template literals, never pass objects directly
-- Chrome extension logs render objects as `[object Object]`
-- Correct: `` console.error(`error: ${JSON.stringify(err)}`) ``
-- Wrong: `console.error("error:", err)`
+- Always log a single template-literal string
+- Never pass objects directly to `console.log`, `console.warn`, or `console.error`
+- Use `formatError` from `src/utils/log.ts` for unknown caught errors
+- Correct: `` console.error(`operation failed: ${formatError(error)}`) ``
+- Wrong: `console.error("operation failed:", error)`
 
 ### Error Handling
 
 - Always catch errors with typed error handlers
 - Never use empty catch blocks
-- Log errors with context: `` console.error(`operation failed: ${JSON.stringify(err)}`) ``
+- Log errors with context: `` console.error(`operation failed: ${formatError(error)}`) ``
 
 ### Imports
 
-- Use relative paths only (no path aliases)
+- Use relative paths only, no path aliases
 - Example: `import { getGames } from "../utils/storage.js"`
 
 ## 5. Testing
@@ -133,21 +136,21 @@ scripts/
 ### Framework & Environment
 
 - Vitest with happy-dom environment
-- IndexedDB tests use `fake-indexeddb` package
-- Test files mirror `src/` structure in `tests/` directory
+- IndexedDB tests use `fake-indexeddb`
+- Test files mirror `src/` structure in `tests/`
 
 ### Running Tests
 
-- `pnpm test` — single run
-- `pnpm test:watch` — watch mode
-- `pnpm test:coverage` — coverage report
+- `pnpm test` - single run
+- `pnpm test:watch` - watch mode
+- `pnpm test:coverage` - coverage report
 
 ### Test Requirements
 
 - Every new utility function must have corresponding tests
 - Every bugfix must include a regression test
-- Tests should cover happy path and error cases
-- Mock external APIs (Steam, SteamSpy, price APIs)
+- Tests should cover happy paths and error cases
+- Mock external APIs: Steam, SteamSpy, SteamCharts, and Twitch
 
 ### Test Structure
 
@@ -197,7 +200,7 @@ Runs all Vitest tests. Check coverage with `pnpm test:coverage`.
 
 1. Open Chrome
 2. Navigate to `chrome://extensions`
-3. Enable Developer mode (top right)
+3. Enable Developer mode
 4. Click "Load unpacked"
 5. Select the `dist/` folder
 
@@ -209,60 +212,69 @@ Runs all Vitest tests. Check coverage with `pnpm test:coverage`.
 
 ### chrome.storage.local
 
-- Settings, game list, trend data
+- Settings, game list, trend metadata, and local summary data
 - Accessed via `src/utils/storage.ts`
-- Synchronous API (returns values directly)
-- Limited to ~10MB per extension
+- Limited to about 10 MB per extension
+- `sw_settings` must be normalized so removed keys are not written back
 
 ### IndexedDB
 
-- Price snapshots, high-capacity data
+- Player snapshots and notification cooldowns
 - Accessed via `src/utils/idb-storage.ts`
-- Uses `idb` library for simplified API
-- Unlimited storage (browser quota)
+- Uses `idb` for simplified API access
+- Used for higher-volume local tracking data
 
 ### Migration
 
-- One-time migration from chrome.storage.local to IndexedDB
+- One-time migration from `chrome.storage.local` to IndexedDB
 - Handled by `src/utils/migrate.ts`
 - Migration sentinel key: `sw_migration_complete`
 - Set once migration is verified complete
 
 ### Migration Count Verification
 
-- IDB may have MORE snapshots than expected (bootstrap writes concurrently)
-- Use `<` not `!==` for count checks
-- Example: `if (idbCount < expectedCount) { /* retry */ }`
+- IDB may have more snapshots than expected because bootstrap writes can happen concurrently
+- Use `<` rather than `!==` for count checks
+
+```typescript
+if (idbCount < expectedCount) {
+  // retry migration verification
+}
+```
 
 ## 8. Common Pitfalls
 
 ### Console Logging Objects
 
-Chrome extension logs render objects as `[object Object]`. Always stringify:
+Chrome extension logs can render objects poorly. Always format unknown errors first:
 
 ```typescript
 // Wrong
-console.error("error:", err);
+console.error("operation failed:", error);
 
 // Correct
-console.error(`error: ${JSON.stringify(err)}`);
+console.error(`operation failed: ${formatError(error)}`);
 ```
 
 ### Migration Count Verification
 
-IDB may have more snapshots than expected due to concurrent bootstrap writes. Use `<` not `!==`:
+IDB may have more snapshots than expected due to concurrent bootstrap writes:
 
 ```typescript
 // Wrong
-if (idbCount !== expectedCount) { /* fail */ }
+if (idbCount !== expectedCount) {
+  // fail
+}
 
 // Correct
-if (idbCount < expectedCount) { /* retry */ }
+if (idbCount < expectedCount) {
+  // retry
+}
 ```
 
 ### Vite Base Path
 
-Must be `""` (empty string), not `"/"`. Absolute paths break chrome-extension:// protocol:
+Must be `""` (empty string), not `"/"`. Absolute paths break `chrome-extension://` URLs:
 
 ```typescript
 // Wrong
@@ -278,13 +290,15 @@ export default defineConfig({
 
 ### Chrome Extension CORS
 
-`host_permissions` in manifest.json must cover all API domains:
+`host_permissions` in `manifest.json` must cover all API domains:
 
 ```json
 "host_permissions": [
   "https://api.steampowered.com/*",
   "https://steamspy.com/*",
-  "https://price-api.example.com/*"
+  "https://steamcharts.com/*",
+  "https://gql.twitch.tv/*",
+  "https://store.steampowered.com/*"
 ]
 ```
 
@@ -292,11 +306,11 @@ export default defineConfig({
 
 Before marking any task complete, verify:
 
-1. Code compiles — run `pnpm run build` or check LSP diagnostics
-2. Tests pass — run `pnpm test`
-3. No type errors — TypeScript strict mode, no suppressions
-4. Version updated if releasing — update manifest.json, run version-sync
-5. CHANGELOG.md updated if version bumped
+1. Code compiles - run `pnpm run build` or check LSP diagnostics
+2. Tests pass - run `pnpm test`
+3. No type errors - TypeScript strict mode, no suppressions
+4. Version updated only if releasing - update `manifest.json`, then run `pnpm version-sync`
+5. `CHANGELOG.md` updated only if version bumped or release notes are requested
 6. New functions have tests
 7. Bugfixes have regression tests
 
@@ -304,8 +318,8 @@ Before marking any task complete, verify:
 
 ### Runtime
 
-- `idb` — IndexedDB wrapper
-- `zod` — schema validation
+- `idb` - IndexedDB wrapper
+- `zod` - schema validation
 
 ### Development
 
@@ -320,15 +334,15 @@ Before marking any task complete, verify:
 ### Package Manager
 
 - pnpm (NEVER use npm or yarn)
-- Add new dependencies sparingly — prefer built-in APIs
+- Add new dependencies sparingly - prefer built-in APIs
 
 ## 11. Git & Release
 
-### Commit Messages9. Generate a zip file containing the files from the dist folder, without including the dist directory itself. Name the file streamwatch.vx.x.x.zip. Exclude system files like .DS_Store.
+### Commit Messages
 
 Use Conventional Commits format:
 
-- `feat: add price alert notifications`
+- `feat: add player-count notifications`
 - `fix: correct sparkline rendering on mobile`
 - `chore: update dependencies`
 - `test: add regression test for migration`
@@ -336,22 +350,22 @@ Use Conventional Commits format:
 
 ### Files to Never Commit
 
-- `.env` — environment variables
-- `dist/` — build output
-- `node_modules/` — dependencies
-- `.sisyphus/` — internal agent state
+- `.env` - environment variables
+- `dist/` - build output
+- `node_modules/` - dependencies
+- `.sisyphus/` - internal agent state
 
-.gitignore is already configured for all of the above.
+`.gitignore` is already configured for all of the above.
 
 ### Release Process
 
-1. Update manifest.json version
+1. Update `manifest.json` version
 2. Run `pnpm version-sync`
-3. Update CHANGELOG.md
+3. Update `CHANGELOG.md`
 4. Commit: `chore: bump version to X.Y.Z`
 5. Build: `pnpm run build`
 6. Test: `pnpm test`
 7. Tag: `git tag vX.Y.Z`
 8. Push: `git push origin main --tags`
-9. Generate Zip file with the content of the dist file, no dist dir only files. Name should be streamwatch.vx.x.x.zip. it should not contain system file like .DSStore.
+9. Generate a zip file containing the files from `dist/`, without including the `dist` directory itself. Name it `streamwatch.vx.x.x.zip`. Exclude system files such as `.DS_Store`.
 10. Publish the zip file to the GitHub release

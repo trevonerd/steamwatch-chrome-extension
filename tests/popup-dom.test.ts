@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 import {
@@ -15,12 +15,12 @@ const mockFetchAppDetails = vi.fn();
 const mockUpdateGameImage = vi.fn();
 
 vi.mock("../src/utils/api.js", () => ({
-  fetchAppDetails: (...args: any[]) => mockFetchAppDetails(...args),
+  fetchAppDetails: (appid: string) => mockFetchAppDetails(appid),
   STEAM_CAPSULE_URL: (appid: string) => `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appid}/header.jpg`,
 }));
 
 vi.mock("../src/utils/storage.js", () => ({
-  updateGameImage: (...args: any[]) => mockUpdateGameImage(...args),
+  updateGameImage: (appid: string, imageUrl: string) => mockUpdateGameImage(appid, imageUrl),
 }));
 
 describe("thumbColor", () => {
@@ -34,14 +34,11 @@ describe("wireThumbFallback", () => {
   beforeEach(() => {
     mockFetchAppDetails.mockClear();
     mockUpdateGameImage.mockClear();
-    (globalThis as any).chrome = {
-      storage: {
-        local: {
-          get: vi.fn().mockResolvedValue({ games: [] }),
-          set: vi.fn().mockResolvedValue(undefined),
-        },
-      },
-    };
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("does not rely on inline event handlers", () => {
@@ -168,7 +165,7 @@ describe("wireThumbFallback", () => {
 
 describe("share bar helpers", () => {
   beforeEach(() => {
-    document.body.innerHTML = "";
+    document.body.replaceChildren();
     resetGlobalShareBarCloseBindingForTests();
   });
 
@@ -179,11 +176,11 @@ describe("share bar helpers", () => {
   });
 
   it("closes open share bars and deactivates buttons", () => {
-    document.body.innerHTML = `
-      <div class="share-bar"></div>
-      <button class="btn-share active"></button>
-    `;
-    const bar = document.querySelector<HTMLDivElement>(".share-bar")!;
+    const bar = document.createElement("div");
+    bar.className = "share-bar";
+    const button = document.createElement("button");
+    button.className = "btn-share active";
+    document.body.append(bar, button);
     bar.hidden = false;
 
     closeOpenShareBars(document);
@@ -216,160 +213,14 @@ describe("sparkline container styling", () => {
 
     expect(hasOverflowHidden).toBe(false);
   });
-});
 
-describe("Popup — Price Fallback (Steam price without ITAD)", () => {
-  beforeEach(() => {
-    document.body.innerHTML = "";
-  });
+  it("sets a nonzero line-height on .sparkline-tooltip", () => {
+    const cssPath = resolve(__dirname, "../src/popup/popup.css");
+    const cssContent = readFileSync(cssPath, "utf-8");
 
-  it("renders price info when game card has priceFormatted but no itadUuid", () => {
-    const cardEl = document.createElement("div");
-    cardEl.className = "card";
-    cardEl.innerHTML = `
-      <div class="card-price-section">
-        <p class="price-label">Price</p>
-        <div class="card-price">$19.99</div>
-      </div>
-    `;
-    document.body.appendChild(cardEl);
+    const tooltipMatch = cssContent.match(/\.sparkline-tooltip\s*\{[^}]*\}/s);
+    const lineHeightMatch = tooltipMatch?.[0].match(/line-height:\s*([^;]+);/);
 
-    const priceEl = cardEl.querySelector(".card-price");
-    expect(priceEl).not.toBeNull();
-    expect(priceEl?.textContent).toBe("$19.99");
-  });
-
-  it("shows discount badge when discountPct exists on popup card", () => {
-    const cardEl = document.createElement("div");
-    cardEl.className = "card";
-    cardEl.innerHTML = `
-      <div class="card-price-section">
-        <div class="card-price">$14.99</div>
-        <div class="card-discount-badge">-25%</div>
-      </div>
-    `;
-    document.body.appendChild(cardEl);
-
-    const discountEl = cardEl.querySelector(".card-discount-badge");
-    expect(discountEl).not.toBeNull();
-    expect(discountEl?.textContent).toBe("-25%");
-  });
-
-  it("displays both current and original price when on sale", () => {
-    const cardEl = document.createElement("div");
-    cardEl.className = "card";
-    cardEl.innerHTML = `
-      <div class="card-price-section">
-        <div class="card-price-current">$14.99</div>
-        <div class="card-price-original">$19.99</div>
-      </div>
-    `;
-    document.body.appendChild(cardEl);
-
-    const currentEl = cardEl.querySelector(".card-price-current");
-    const originalEl = cardEl.querySelector(".card-price-original");
-    expect(currentEl?.textContent).toBe("$14.99");
-    expect(originalEl?.textContent).toBe("$19.99");
-  });
-
-  it("hides price section when both priceFormatted and itadUuid are missing", () => {
-    const cardEl = document.createElement("div");
-    cardEl.className = "card";
-    cardEl.innerHTML = `
-      <div class="card-price-section" hidden>
-        <p>No price available</p>
-      </div>
-    `;
-    document.body.appendChild(cardEl);
-
-    const priceSection = cardEl.querySelector(".card-price-section");
-    expect(priceSection?.hasAttribute("hidden")).toBe(true);
-  });
-});
-
-describe("Panel price states", () => {
-  beforeEach(() => {
-    document.body.innerHTML = "";
-  });
-
-  it("priceState 'available' shows formatted price and panel is not hidden", () => {
-    document.body.innerHTML = `<div class="panel-price-section">
-      <div class="panel-steam-price">
-        <span class="panel-steam-price-current">€59.99</span>
-      </div>
-    </div>`;
-    const el = document.querySelector(".panel-steam-price-current");
-    expect(el).not.toBeNull();
-    expect(el?.textContent).toBe("€59.99");
-    expect(document.querySelector(".panel-price-section")?.hasAttribute("hidden")).toBe(false);
-  });
-
-  it("priceState 'free' shows 'Free to Play' label", () => {
-    document.body.innerHTML = `<div class="panel-price-section">
-      <span class="panel-price-free">Free to Play</span>
-    </div>`;
-    const el = document.querySelector(".panel-price-free");
-    expect(el).not.toBeNull();
-    expect(el?.textContent).toBe("Free to Play");
-  });
-
-  it("priceState 'unavailable' shows 'Price unavailable' label", () => {
-    document.body.innerHTML = `<div class="panel-price-section">
-      <span class="panel-price-unavail">Price unavailable</span>
-    </div>`;
-    const el = document.querySelector(".panel-price-unavail");
-    expect(el).not.toBeNull();
-    expect(el?.textContent).toBe("Price unavailable");
-  });
-
-  it("priceState 'loading' shows loading text", () => {
-    document.body.innerHTML = `<div class="panel-price-section">
-      <span class="panel-price-loading">Loading...</span>
-    </div>`;
-    const el = document.querySelector(".panel-price-loading");
-    expect(el).not.toBeNull();
-    expect(el?.textContent).toBe("Loading...");
-  });
-
-  it("panel-price-section is never given a hidden attribute", () => {
-    document.body.innerHTML = `<div class="panel-price-section">
-      <span class="panel-price-free">Free to Play</span>
-    </div>`;
-    expect(document.querySelector(".panel-price-section")?.hasAttribute("hidden")).toBe(false);
-  });
-});
-
-describe("Panel sale badge", () => {
-  beforeEach(() => {
-    document.body.innerHTML = "";
-  });
-
-  it("does NOT show badge when discountPct is 0 (bug fix: was discountPct != null)", () => {
-    const discountPct = 0;
-    const showBadge = discountPct != null && discountPct > 0;
-    document.body.innerHTML = showBadge
-      ? `<div class="panel-sale-badge"><span class="sale-pct">ON SALE −${discountPct}%</span></div>`
-      : "";
-    expect(document.querySelector(".panel-sale-badge")).toBeNull();
-  });
-
-  it("does NOT show badge when discountPct is null", () => {
-    const discountPct: number | null = null;
-    const showBadge = discountPct != null && discountPct > 0;
-    document.body.innerHTML = showBadge
-      ? `<div class="panel-sale-badge"><span class="sale-pct">ON SALE −${discountPct}%</span></div>`
-      : "";
-    expect(document.querySelector(".panel-sale-badge")).toBeNull();
-  });
-
-  it("DOES show badge with correct text when discountPct is 50", () => {
-    const discountPct = 50;
-    const showBadge = discountPct != null && discountPct > 0;
-    document.body.innerHTML = showBadge
-      ? `<div class="panel-sale-badge"><span class="sale-pct">ON SALE −${discountPct}%</span></div>`
-      : "";
-    const badge = document.querySelector(".panel-sale-badge");
-    expect(badge).not.toBeNull();
-    expect(badge?.querySelector(".sale-pct")?.textContent).toBe("ON SALE −50%");
+    expect(lineHeightMatch?.[1]?.trim()).toBe("1.2");
   });
 });

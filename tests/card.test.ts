@@ -1,5 +1,5 @@
 // tests/card.test.ts
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { buildCardViewModel, buildAllViewModels } from "../src/utils/card.js";
 import type { Game, CachedData, Snapshot } from "../src/types/index.js";
 
@@ -158,17 +158,6 @@ describe("buildCardViewModel", () => {
     expect(vm.latestChangePct).toBeNull();
   });
 
-  it("svgStr is non-null for 2+ snapshots", () => {
-    const vm = buildCardViewModel(game, cache, snaps12, 7);
-    expect(vm.svgStr).not.toBeNull();
-    expect(vm.svgStr).toContain("<svg");
-  });
-
-  it("svgStr is null for empty snapshots", () => {
-    const vm = buildCardViewModel(game, cache, emptySnaps, 7);
-    expect(vm.svgStr).toBeNull();
-  });
-
   it("sparklineStroke is a valid hex colour string", () => {
     const vm = buildCardViewModel(game, cache, snaps12, 7);
     expect(vm.sparklineStroke).toMatch(/^#[0-9a-f]{6}$/i);
@@ -193,6 +182,7 @@ describe("buildCardViewModel", () => {
     const vm = buildCardViewModel(game, cache, snaps12, 7);
     expect(vm.twitchViewers).toBe(12_345);
     expect(vm.retentionDays).toBe(7);
+    expect(vm.retentionWindowLabel).toBe("3h");
     expect(vm.availableGraphWindows).toEqual([
       { key: "all", label: "all", windowMs: 0 },
     ]);
@@ -211,6 +201,7 @@ describe("buildCardViewModel", () => {
     const vmRetention = buildCardViewModel(game, cache, retentionSnaps, 3);
     expect(vmRetention.retentionAvg).toBeDefined();
     expect(vmRetention.retentionGain).toBeDefined();
+    expect(vmRetention.retentionWindowLabel).toBe("3d");
   });
 
   it("exposes available graph windows and picks 24h as default when possible", () => {
@@ -256,9 +247,9 @@ describe("buildCardViewModel", () => {
   });
 });
 
-// ── record lows and ITAD data ─────────────────────────────────────────────────
+// ── record lows ────────────────────────────────────────────────────────────────
 
-describe("buildCardViewModel — record lows and ITAD data", () => {
+describe("buildCardViewModel — record lows", () => {
   it("computes recordLow for active window from filtered snapshots", () => {
     const thirtyDaySnaps: Snapshot[] = [
       { ts: Date.now() - 29.9 * 86_400_000, current: 30_000 },
@@ -364,13 +355,19 @@ describe("buildAllViewModels", () => {
   });
 
   it("does not throw when loadSnaps rejects — returns model with empty snaps", async () => {
-    const vms = await buildAllViewModels(
-      [game], cache,
-      async () => { throw new Error("storage unavailable"); },
-      7,
-    );
-    expect(vms).toHaveLength(1);
-    expect(vms[0]!.snaps).toHaveLength(0);
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const vms = await buildAllViewModels(
+        [game], cache,
+        async () => { throw new Error("storage unavailable"); },
+        7,
+      );
+      expect(vms).toHaveLength(1);
+      expect(vms[0]!.snaps).toHaveLength(0);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("[SteamWatch] Failed to load snapshots"));
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 
   it("returns empty array for empty games list", async () => {

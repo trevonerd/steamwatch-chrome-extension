@@ -116,7 +116,7 @@ export async function renderShareCanvas(vm: CardViewModel): Promise<Blob> {
     ctx.clip();
     ctx.drawImage(img, THUMB_X, THUMB_Y, THUMB_W, THUMB_H);
     ctx.restore();
-  } catch {
+  } catch (_error) {
     // Draw placeholder rectangle
     ctx.fillStyle = "#131f35";
     roundRect(ctx, THUMB_X, THUMB_Y, THUMB_W, THUMB_H, 4);

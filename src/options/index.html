@@ -9,8 +9,6 @@
 <body>
 
 <div class="layout">
-
-  <!-- ── Sidebar ────────────────────────────────────────────── -->
   <aside class="sidebar" aria-label="Navigation">
     <div class="sidebar-logo">
       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -31,13 +29,6 @@
         <span class="nav-label">Games</span>
       </button>
 
-      <button class="nav-item" data-section="tracking">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
-        </svg>
-        <span class="nav-label">Historical Tracking</span>
-      </button>
-
       <button class="nav-item" data-section="notifications">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
           <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
@@ -46,22 +37,6 @@
         <span class="nav-label">Notifications</span>
       </button>
 
-      <button class="nav-item" data-section="history">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
-          <circle cx="12" cy="12" r="10" stroke-width="1.4" opacity=".35"/>
-        </svg>
-        <span class="nav-label">History</span>
-      </button>
-
-      <button class="nav-item" data-section="export">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-          <polyline points="7 10 12 15 17 10"/>
-          <line x1="12" y1="15" x2="12" y2="3"/>
-        </svg>
-        <span class="nav-label">Export</span>
-      </button>
       <button class="nav-item" data-section="about">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
           <circle cx="12" cy="12" r="10"/>
@@ -77,18 +52,15 @@
     </div>
   </aside>
 
-  <!-- ── Main content ───────────────────────────────────────── -->
   <main class="main" id="main-content">
-
-    <!-- ══ GAMES ══ -->
     <section class="section active" id="sec-games" aria-labelledby="games-heading">
       <h1 class="section-title" id="games-heading">Games</h1>
-      <p class="section-sub">Track up to 5 games. Expand each row to configure per-game notification thresholds.</p>
+      <p class="section-sub">Track up to 10 games. Each game can override notification thresholds.</p>
 
       <div class="card">
         <div class="card-title">
           Add a game
-          <span class="badge" id="gameCountBadge" aria-live="polite">0 / 5</span>
+          <span class="badge" id="gameCountBadge" aria-live="polite">0 / 10</span>
         </div>
         <div class="search-wrap" role="combobox" aria-expanded="false" aria-haspopup="listbox">
           <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
@@ -98,23 +70,14 @@
             type="text"
             class="search-input"
             id="gameSearch"
-            placeholder="Search by game name… (e.g. Elden Ring)"
+            placeholder="Search by game name..."
             autocomplete="off"
             aria-label="Search for a game"
             aria-autocomplete="list"
             aria-controls="autocompleteList"
           >
-          <ul
-            class="autocomplete-list"
-            id="autocompleteList"
-            role="listbox"
-            aria-label="Search results"
-            hidden
-          ></ul>
+          <ul class="autocomplete-list" id="autocompleteList" role="listbox" aria-label="Search results" hidden></ul>
         </div>
-        <p class="setting-hint" style="margin-top:8px;">
-          Powered by Steam Store Search API. Results appear as you type (min. 2 characters).
-        </p>
       </div>
 
       <div class="card">
@@ -124,120 +87,24 @@
         </ul>
       </div>
 
-      <div class="card" style="margin-top:20px;">
-        <div class="card-title">Display</div>
-        <div class="toggle-row" style="border:none;padding-bottom:0;">
-          <div class="toggle-info">
-            <div class="toggle-title">Sort by player count</div>
-            <div class="toggle-desc">Automatically rank popup cards by current concurrent players — highest on top. Updated on every fetch.</div>
-          </div>
-          <label class="toggle" aria-label="Sort games by player count">
-            <input type="checkbox" id="rankByPlayers" checked>
-            <span class="toggle-slider"></span>
-          </label>
-        </div>
-      </div>
-
-      <div class="form-actions" id="gamesDisplayActions" style="margin-top:0;">
-        <button class="btn-save" id="saveGamesDisplay">Save</button>
-        <span class="saved-toast" id="savedGamesDisplay" aria-live="polite">✓ Saved</span>
-      </div>
-
-    </section>
-
-    <!-- ══ TRACKING ══ -->
-    <section class="section" id="sec-tracking" aria-labelledby="tracking-heading" hidden>
-      <h1 class="section-title" id="tracking-heading">Historical Tracking</h1>
-      <p class="section-sub">Configure how SteamWatch collects and stores local snapshot history for charts, 24h metrics, dynamic Xd metrics, and alert signals.</p>
-
-      <div class="card">
-        <div class="card-title">Data Collection</div>
-
-        <div class="toggle-row">
-          <div class="toggle-info">
-            <div class="toggle-title">Enable trend tracking</div>
-            <div class="toggle-desc">Saves player-count snapshots at each fetch interval. The graph, latest change, 24h stats, dynamic Xd stats, and trend alerts rely on this history.</div>
-          </div>
-          <label class="toggle" aria-label="Enable trend tracking">
-            <input type="checkbox" id="trendEnabled">
-            <span class="toggle-slider"></span>
-          </label>
-        </div>
-
-        <div class="slider-row">
-          <div class="slider-info">
-            <div class="slider-title">Fetch interval</div>
-            <div class="slider-desc">How often data is refreshed in the background.</div>
-          </div>
-          <div class="slider-control">
-            <span class="slider-val" id="intervalVal" aria-live="polite">15 min</span>
-            <input type="range" id="fetchInterval" min="5" max="60" step="5" value="15" aria-label="Fetch interval in minutes">
-          </div>
-        </div>
-
-        <div class="slider-row">
-          <div class="slider-info">
-            <div class="slider-title">Data retention</div>
-             <div class="slider-desc">Full-resolution data window. Snapshots within this period are kept at original detail; older data is preserved as daily and weekly summaries. The popup's long-range stats (e.g. 10d average, 10d gain/loss) use this window.</div>
-          </div>
-          <div class="slider-control">
-            <span class="slider-val" id="purgeVal" aria-live="polite">30 days</span>
-            <input type="range" id="purgeAfterDays" min="3" max="60" step="1" value="30" aria-label="Data retention in days">
-          </div>
-        </div>
-      </div>
-
-      <!-- Trend level reference table -->
-      <div class="card">
-        <div class="card-title">Trend Level Reference</div>
-        <p style="font-size:13px;color:var(--text-2);line-height:1.7;margin-bottom:14px;">
-          Trends compare the smoothed average of the last 3 snapshots to the previous 3.
-          This gives a stable, spike-resistant alert signal. It is separate from the popup's 24h and dynamic Xd summary tiles.
-        </p>
-        <table class="trend-table" aria-label="Trend levels">
-          <thead>
-            <tr>
-              <th scope="col">Level</th>
-              <th scope="col">Range</th>
-              <th scope="col">Interpretation</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr><td class="level-up">🚀🚀 Explosion</td> <td>&gt; +50%</td><td>Viral moment / major launch</td></tr>
-            <tr><td class="level-up">🚀 Strong Rise</td> <td>+20% → +50%</td><td>Big patch, content drop</td></tr>
-            <tr><td class="level-up">📈 Rising</td>       <td>+5% → +20%</td><td>Healthy organic growth</td></tr>
-            <tr><td class="level-stable">➡️ Stable</td>   <td>-5% → +5%</td><td>Normal daily fluctuation</td></tr>
-            <tr><td class="level-down">📉 Declining</td>  <td>-20% → -5%</td><td>Losing momentum</td></tr>
-            <tr><td class="level-down">⬇️ Strong Drop</td><td>-50% → -20%</td><td>Significant player loss</td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="form-actions">
-        <button class="btn-save" id="saveTracking">Save Changes</button>
-        <span class="saved-toast" id="savedTracking" aria-live="polite">✓ Saved</span>
-      </div>
-
       <div class="card danger-card">
         <div class="card-title">Data Management</div>
-        <div class="toggle-row" style="border:none;padding-bottom:0;">
+        <div class="toggle-row no-border">
           <div class="toggle-info">
             <div class="toggle-title">Reset all SteamWatch data</div>
-            <div class="toggle-desc">Deletes all tracked games, snapshots, and settings. This cannot be undone.</div>
+            <div class="toggle-desc">Deletes tracked games, snapshots, cache, cooldowns, and settings. This cannot be undone.</div>
           </div>
           <button class="btn-danger" id="clearDataBtn">Clear All Data</button>
         </div>
       </div>
     </section>
 
-    <!-- ══ NOTIFICATIONS ══ -->
     <section class="section" id="sec-notifications" aria-labelledby="notif-heading" hidden>
       <h1 class="section-title" id="notif-heading">Notifications</h1>
       <p class="section-sub">Global defaults apply to all games unless overridden individually in the Games section.</p>
 
       <div class="card">
-        <div class="card-title">Global Switches</div>
-
+        <div class="card-title">Global Switch</div>
         <div class="toggle-row">
           <div class="toggle-info">
             <div class="toggle-title">Enable notifications</div>
@@ -248,15 +115,13 @@
             <span class="toggle-slider"></span>
           </label>
         </div>
-
       </div>
 
       <div class="card">
         <div class="card-title">Default Thresholds</div>
-
         <div class="slider-row">
           <div class="slider-info">
-            <div class="slider-title">📈 Rise alert</div>
+            <div class="slider-title">Rise alert</div>
             <div class="slider-desc">Notify when the smoothed trend exceeds this positive percentage.</div>
           </div>
           <div class="slider-control">
@@ -267,7 +132,7 @@
 
         <div class="slider-row">
           <div class="slider-info">
-            <div class="slider-title">📉 Drop alert</div>
+            <div class="slider-title">Drop alert</div>
             <div class="slider-desc">Notify when the trend falls below this negative percentage.</div>
           </div>
           <div class="slider-control">
@@ -275,14 +140,12 @@
             <input type="range" id="globalThresholdDown" min="5" max="90" step="5" value="25" aria-label="Drop alert threshold">
           </div>
         </div>
-
       </div>
-
 
       <div class="card">
         <div class="card-title">Quiet Hours</div>
-        <p style="font-size:13px;color:var(--text-2);line-height:1.6;margin-bottom:16px;">
-          Suppress all notifications during a defined time window. The cooldown timer is <strong>not</strong> consumed during quiet hours, so the first eligible alert after the window ends will still fire normally.
+        <p class="card-note">
+          Suppress all notifications during a defined local time window. The cooldown timer is not consumed during quiet hours.
         </p>
 
         <div class="toggle-row">
@@ -301,169 +164,26 @@
             <label class="setting-label" for="quietStart">From</label>
             <input type="time" class="input-sm time-input" id="quietStart" value="23:00" aria-label="Quiet hours start time">
           </div>
-          <div class="time-sep" aria-hidden="true">→</div>
+          <div class="time-sep" aria-hidden="true">-></div>
           <div class="time-group">
             <label class="setting-label" for="quietEnd">Until</label>
             <input type="time" class="input-sm time-input" id="quietEnd" value="07:00" aria-label="Quiet hours end time">
           </div>
-          <div class="time-note setting-hint">Overnight windows (e.g. 23:00 → 07:00) are supported.</div>
+          <div class="time-note setting-hint">Overnight windows are supported.</div>
         </div>
 
         <div class="days-row" role="group" aria-label="Active days">
-          <span class="setting-label" style="margin-bottom:8px;display:block;">Active days</span>
-          <div class="days-grid" id="quietDaysGrid">
-            <!-- Injected by main.ts -->
-          </div>
+          <span class="setting-label days-label">Active days</span>
+          <div class="days-grid" id="quietDaysGrid"></div>
         </div>
       </div>
 
       <div class="form-actions">
         <button class="btn-save" id="saveNotifs">Save Changes</button>
-        <span class="saved-toast" id="savedNotifs" aria-live="polite">✓ Saved</span>
+        <span class="saved-toast" id="savedNotifs" aria-live="polite">Saved</span>
       </div>
     </section>
 
-    <!-- ══ HISTORY ══ -->
-    <section class="section" id="sec-history" aria-labelledby="history-heading" hidden>
-      <h1 class="section-title" id="history-heading">Player History</h1>
-      <p class="section-sub">Visualize locally stored player-count snapshots for any tracked game.</p>
-
-      <div class="card">
-        <div class="history-controls">
-          <div class="history-select-wrap">
-            <label class="setting-label" for="historyGameSelect">Game</label>
-            <select class="input-sm history-select" id="historyGameSelect" aria-label="Select game to view history">
-              <option value="">— select a game —</option>
-            </select>
-          </div>
-          <div class="graph-tabs" id="historyWindowTabs" role="tablist" aria-label="Time window"></div>
-        </div>
-
-        <div class="history-chart-wrap">
-          <svg id="historyChart" class="history-chart-svg" viewBox="0 0 600 160" preserveAspectRatio="none" aria-hidden="true"></svg>
-          <p class="history-empty" id="historyEmpty" hidden>No snapshots recorded yet for this game. Data is collected at each fetch interval.</p>
-          <p class="history-no-game" id="historyNoGame">Select a game above to view its history.</p>
-        </div>
-
-        <div class="history-info-header" id="historyInfoHeader" hidden>
-          <div class="history-thumbnail-wrapper">
-            <img id="history-thumbnail" class="history-thumbnail" src="" alt="" loading="lazy">
-            <div class="history-placeholder"></div>
-          </div>
-          <div class="history-info-links">
-            <a id="history-steam-link" class="history-link" href="" target="_blank" rel="noopener noreferrer">Steam Store ↗</a>
-            <a id="history-steamdb-link" class="history-link" href="" target="_blank" rel="noopener noreferrer">SteamDB ↗</a>
-          </div>
-        </div>
-
-        <div class="history-stats" id="historyStats" hidden>
-          <div class="history-stat">
-            <div class="history-stat-label">Current</div>
-            <div class="history-stat-value" id="hStatCurrent">—</div>
-          </div>
-          <div class="history-stat">
-            <div class="history-stat-label">24h Avg</div>
-            <div class="history-stat-value" id="hStat24hAvg">—</div>
-          </div>
-          <div class="history-stat">
-            <div class="history-stat-label">Period Avg</div>
-            <div class="history-stat-value" id="hStatPeriodAvg">—</div>
-          </div>
-          <div class="history-stat">
-            <div class="history-stat-label">Recorded Peak</div>
-            <div class="history-stat-value" id="hStatPeak">—</div>
-          </div>
-          <div class="history-stat">
-            <div class="history-stat-label">Record Low</div>
-            <div class="history-stat-value" id="hStatRecordLow">—</div>
-          </div>
-          <div class="history-stat">
-            <div class="history-stat-label">All-time Low</div>
-            <div class="history-stat-value" id="hStatAllTimeLow">—</div>
-          </div>
-          <div class="history-stat">
-            <div class="history-stat-label">24h Peak</div>
-            <div class="history-stat-value" id="history-peak24h">—</div>
-          </div>
-          <div class="history-stat">
-            <div class="history-stat-label">All-time Peak</div>
-            <div class="history-stat-value" id="history-alltime-peak">—</div>
-          </div>
-          <div class="history-stat">
-            <div class="history-stat-label">24h Gain/Loss</div>
-            <div class="history-stat-value" id="history-24h-gain">—</div>
-          </div>
-          <div class="history-stat">
-            <div class="history-stat-label">Period Gain/Loss</div>
-            <div class="history-stat-value" id="history-period-gain">—</div>
-          </div>
-          <div class="history-stat">
-            <div class="history-stat-label">Trend</div>
-            <div class="history-stat-value" id="history-trend">—</div>
-          </div>
-          <div class="history-stat">
-            <div class="history-stat-label">Latest Change</div>
-            <div class="history-stat-value" id="history-latest-change">—</div>
-          </div>
-          <div class="history-stat">
-            <div class="history-stat-label">Twitch Viewers</div>
-            <div class="history-stat-value" id="history-twitch">—</div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ══ EXPORT ══ -->
-    <section class="section" id="sec-export" aria-labelledby="export-heading" hidden>
-      <h1 class="section-title" id="export-heading">Export Data</h1>
-      <p class="section-sub">Download all your tracked player-count history as a file. Useful for external analysis, backups, or sharing.</p>
-
-      <div class="card">
-        <div class="card-title">Snapshot History</div>
-        <p style="font-size:13px;color:var(--text-2);line-height:1.6;margin-bottom:20px;">
-          Exports every player-count snapshot saved for all tracked games. Each row includes the game name, appid, timestamp and concurrent player count. Only data stored locally in your browser is included — nothing is fetched from the internet during export.
-        </p>
-
-        <div class="export-grid">
-          <div class="export-card">
-            <div class="export-format-icon">{ }</div>
-            <div class="export-format-title">JSON</div>
-            <div class="export-format-desc">Structured array. Best for developers, scripts, or importing into other tools.</div>
-            <button class="btn-save" id="exportJsonBtn">Download JSON</button>
-          </div>
-          <div class="export-card">
-            <div class="export-format-icon">CSV</div>
-            <div class="export-format-title">CSV</div>
-            <div class="export-format-desc">Flat spreadsheet format. Open directly in Excel, Google Sheets, or Grafana.</div>
-            <button class="btn-save" id="exportCsvBtn">Download CSV</button>
-          </div>
-        </div>
-
-        <div class="export-meta" id="exportMeta" aria-live="polite"></div>
-      </div>
-
-      <div class="card">
-        <div class="card-title">What gets exported</div>
-        <table class="trend-table" aria-label="Export fields">
-          <thead>
-            <tr>
-              <th scope="col">Field</th>
-              <th scope="col">Type</th>
-              <th scope="col">Description</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr><td><code>appid</code></td>   <td>string</td> <td>Steam application ID</td></tr>
-            <tr><td><code>name</code></td>    <td>string</td> <td>Game name at time of tracking</td></tr>
-            <tr><td><code>date</code></td>    <td>string</td> <td>ISO 8601 timestamp (UTC)</td></tr>
-            <tr><td><code>current</code></td> <td>number</td> <td>Concurrent players at sample time</td></tr>
-            <tr><td><code>ts</code></td>      <td>number</td> <td>Unix timestamp in milliseconds</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <!-- ══ ABOUT ══ -->
     <section class="section" id="sec-about" aria-labelledby="about-heading" hidden>
       <h1 class="section-title" id="about-heading">About</h1>
 
@@ -486,22 +206,19 @@
 
       <div class="disclaimer-box" role="note">
         <strong>Independent project</strong>
-        SteamWatch is an independent open-source extension created by Marco Trevisani.
-        It is not affiliated with Valve or Steam. All tracked data is stored locally in your browser.
+        SteamWatch is an independent open-source extension. It is not affiliated with Valve or Steam.
+        All tracked data is stored locally in your browser.
       </div>
 
       <div class="credits-grid">
         <div class="credit-card">
           <div class="credit-label">Author</div>
-          <div class="credit-value"><a href="https://www.marcotrevisani.com" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;">Marco Trevisani</a></div>
-          <div class="credit-sub">
-            GitHub:
-            <a href="https://github.com/trevonerd" target="_blank" rel="noopener">TREVONERD</a>
-          </div>
+          <div class="credit-value"><a href="https://www.marcotrevisani.com" target="_blank" rel="noopener">Marco Trevisani</a></div>
+          <div class="credit-sub">GitHub: <a href="https://github.com/trevonerd" target="_blank" rel="noopener">TREVONERD</a></div>
         </div>
         <div class="credit-card">
           <div class="credit-label">Company</div>
-          <div class="credit-value"><a href="https://trevisoft.dev" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;">TREVISOFT</a></div>
+          <div class="credit-value"><a href="https://trevisoft.dev" target="_blank" rel="noopener">TREVISOFT</a></div>
           <div class="credit-sub">Independent software studio</div>
         </div>
         <div class="credit-card">
@@ -518,35 +235,29 @@
 
       <div class="card">
         <div class="card-title">Data Sources</div>
-        <p style="font-size:13px;color:var(--text-2);line-height:1.6;margin-bottom:12px;">
-          SteamWatch uses public data sources for player counts, peaks, search, artwork, and Twitch viewer information.
-        </p>
+        <p class="card-note">SteamWatch uses public data sources for player counts, peaks, search, artwork, and Twitch viewer information.</p>
         <div class="data-sources">
-          <span class="ds-badge">Steam Web API — current players</span>
-          <span class="ds-badge">SteamCharts — 24h peak</span>
-          <span class="ds-badge">SteamSpy — all-time peak</span>
-          <span class="ds-badge">Steam Store Search — autocomplete</span>
-          <span class="ds-badge">Steam CDN — game artwork</span>
-          <span class="ds-badge">Twitch — live viewers</span>
+          <span class="ds-badge">Steam Web API - current players</span>
+          <span class="ds-badge">SteamCharts - 24h peak and bootstrap history</span>
+          <span class="ds-badge">SteamSpy - all-time peak</span>
+          <span class="ds-badge">Steam Store Search - autocomplete</span>
+          <span class="ds-badge">Steam CDN - game artwork</span>
+          <span class="ds-badge">Twitch - live viewers</span>
         </div>
       </div>
 
-      
-
       <div class="card">
         <div class="card-title">Support &amp; Feedback</div>
-        <p style="font-size:13px;color:var(--text-2);line-height:1.7;">
-          If you find a bug, want to suggest an improvement, or want to follow updates,
-          the best place is the GitHub issues page.
+        <p class="card-note">
+          If you find a bug or want to suggest an improvement, the best place is the GitHub issues page.
         </p>
-        <p style="margin-top:10px;">
-          <a href="https://github.com/trevonerd/steamwatch-chrome-extension/issues" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;font-family:var(--ff-mono);font-size:12px;">
-            github.com/trevonerd/steamwatch-chrome-extension/issues →
+        <p class="support-link-wrap">
+          <a href="https://github.com/trevonerd/steamwatch-chrome-extension/issues" target="_blank" rel="noopener">
+            github.com/trevonerd/steamwatch-chrome-extension/issues
           </a>
         </p>
       </div>
     </section>
-
   </main>
 </div>
 

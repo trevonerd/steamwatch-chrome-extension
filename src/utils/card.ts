@@ -16,6 +16,7 @@ import {
   compute24hGain,
   computeRetentionAvg,
   computeRetentionGain,
+  computeRetentionWindowLabel,
   computeTrend,
   computeLatestChangePct,
   computeLocalPeak,
@@ -23,12 +24,12 @@ import {
 } from "./trend.js";
 import {
   buildAvailableGraphWindows,
-  buildSparklineSVG,
   hasEnoughGraphHistory,
   sparklineColor,
   filterSnapshotsByWindow,
   GRAPH_WINDOW_MS,
 } from "./sparkline.js";
+import { formatError } from "./log.js";
 
 /**
  * Build the complete view model for a single game card.
@@ -58,6 +59,7 @@ export function buildCardViewModel(
   const gain24h    = compute24hGain(snaps);
   const retentionAvg = computeRetentionAvg(snaps, retentionDays);
   const retentionGain = computeRetentionGain(snaps, retentionDays);
+  const retentionWindowLabel = computeRetentionWindowLabel(snaps, retentionDays);
   const availableGraphWindows = buildAvailableGraphWindows(retentionDays)
     .filter((window) => hasEnoughGraphHistory(snaps, window.windowMs));
   const defaultGraphWindow = availableGraphWindows.find((w) => w.key !== "all")?.key ?? null;
@@ -66,7 +68,6 @@ export function buildCardViewModel(
   const latestChangePct = computeLatestChangePct(snaps);
   const display = computeDisplayTrend(trend, latestChangePct);
   const stroke     = sparklineColor(snaps);
-  const svgStr     = buildSparklineSVG(snaps);
 
   const activeWindowKey = defaultGraphWindow ?? "all";
   const activeWindowMs = GRAPH_WINDOW_MS[activeWindowKey];
@@ -88,6 +89,7 @@ export function buildCardViewModel(
     ...(retentionAvg != null ? { retentionAvg } : {}),
     ...(retentionGain != null ? { retentionGain } : {}),
     retentionDays,
+    retentionWindowLabel,
     availableGraphWindows,
     defaultGraphWindow,
     trend,
@@ -95,7 +97,6 @@ export function buildCardViewModel(
     latestChangePct,
     snaps,
     sparklineStroke: stroke,
-    svgStr,
     fetchedAt: data?.fetchedAt ?? 0,
     ...(data?.twitchViewers != null ? { twitchViewers: data.twitchViewers } : {}),
     recordLow,
@@ -144,8 +145,9 @@ export async function buildAllViewModels(
       let snaps: Snapshot[] = [];
       try {
         snaps = await loadSnaps(game.appid);
-      } catch {
-        /* non-critical — render card without trend/sparkline */
+      } catch (error) {
+        console.warn(`[SteamWatch] Failed to load snapshots for appid ${game.appid}: ${formatError(error)}`);
+        snaps = [];
       }
       return buildCardViewModel(game, cache, snaps, retentionDays);
     }),

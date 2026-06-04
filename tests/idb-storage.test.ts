@@ -4,6 +4,7 @@ import type { Snapshot } from "../src/types/index.js";
 import {
   _resetDbForTesting,
   idbBulkSaveSnapshots,
+  idbClearAllData,
   idbDeleteSnapshots,
   idbGetCooldown,
   idbGetSnapshots,
@@ -72,7 +73,7 @@ describe("idb-storage", () => {
 
   describe("cooldowns", () => {
     it("sets and retrieves a cooldown", async () => {
-      const key = "730__spike";
+      const key = "730__trend_up";
       const expiresAt = Date.now() + 60000;
 
       await idbSetCooldown(key, expiresAt);
@@ -87,7 +88,7 @@ describe("idb-storage", () => {
     });
 
     it("returns null for expired cooldown", async () => {
-      const key = "730__spike";
+      const key = "730__trend_down";
       const expiresAt = Date.now() - 1000; // expired 1s ago
 
       await idbSetCooldown(key, expiresAt);
@@ -97,7 +98,7 @@ describe("idb-storage", () => {
     });
 
     it("returns expiresAt for non-expired cooldown", async () => {
-      const key = "730__spike";
+      const key = "730__absolute";
       const expiresAt = Date.now() + 60000;
 
       await idbSetCooldown(key, expiresAt);
@@ -107,7 +108,7 @@ describe("idb-storage", () => {
     });
 
     it("updates existing cooldown", async () => {
-      const key = "730__spike";
+      const key = "730__trend_up";
       const firstExpiry = Date.now() + 30000;
       const secondExpiry = Date.now() + 90000;
 
@@ -120,7 +121,7 @@ describe("idb-storage", () => {
 
     it("purges all expired cooldowns", async () => {
       const now = Date.now();
-      const expiredKey = "730__spike";
+      const expiredKey = "730__trend_up";
       const validKey = "570__trend";
 
       await idbSetCooldown(expiredKey, now - 1000); // expired
@@ -137,7 +138,7 @@ describe("idb-storage", () => {
 
     it("purges cooldowns with expiresAt exactly at current time", async () => {
       const now = Date.now();
-      const key = "730__spike";
+      const key = "730__trend_down";
 
       await idbSetCooldown(key, now);
       await idbPurgeCooldowns();
@@ -148,9 +149,9 @@ describe("idb-storage", () => {
 
      it("keeps non-expired cooldowns after purge", async () => {
        const now = Date.now();
-       const key1 = "730__spike";
+       const key1 = "730__trend_up";
        const key2 = "570__trend";
-       const key3 = "440__price";
+       const key3 = "440__absolute";
 
        await idbSetCooldown(key1, now + 10000);
        await idbSetCooldown(key2, now + 20000);
@@ -161,6 +162,18 @@ describe("idb-storage", () => {
        expect(await idbGetCooldown(key1)).toBe(now + 10000);
        expect(await idbGetCooldown(key2)).toBe(now + 20000);
        expect(await idbGetCooldown(key3)).toBe(now + 30000);
+     });
+   });
+
+   describe("idbClearAllData", () => {
+     it("clears snapshots and cooldowns", async () => {
+       await idbSaveSnapshot("100", { ts: 1000, current: 10 });
+       await idbSetCooldown("100__trend_up", Date.now() + 60_000);
+
+       await idbClearAllData();
+
+       expect(await idbGetSnapshots("100")).toEqual([]);
+       expect(await idbGetCooldown("100__trend_up")).toBeNull();
      });
    });
 

@@ -7,7 +7,6 @@ import type {
   Snapshot,
   TrendLevel,
   TrendResult,
-  ForecastResult,
 } from "../types/index.js";
 
 // ── Trend level table (order matters: highest first) ──────────────────────────
@@ -96,7 +95,7 @@ export function computeRetentionAvg(
   snapshots: readonly Snapshot[],
   retentionDays: number,
 ): number | null {
-  const recent = getReliableWindowSnapshots(snapshots, retentionDays * 86_400_000);
+  const recent = getRetentionWindowSnapshots(snapshots, retentionDays * 86_400_000);
   if (!recent) return null;
   return Math.round(average(recent.map((s) => s.current)));
 }
@@ -105,12 +104,33 @@ export function computeRetentionGain(
   snapshots: readonly Snapshot[],
   retentionDays: number,
 ): number | null {
-  const recent = getReliableWindowSnapshots(snapshots, retentionDays * 86_400_000);
+  const recent = getRetentionWindowSnapshots(snapshots, retentionDays * 86_400_000);
   if (!recent) return null;
   const first = recent[0];
   const last = recent.at(-1);
   if (!first || !last) return null;
   return last.current - first.current;
+}
+
+export function computeRetentionWindowLabel(
+  snapshots: readonly Snapshot[],
+  retentionDays: number,
+): string {
+  const recent = getRetentionWindowSnapshots(snapshots, retentionDays * 86_400_000);
+  if (!recent) return `${retentionDays}d`;
+
+  const first = recent[0];
+  const last = recent.at(-1);
+  if (!first || !last) return `${retentionDays}d`;
+
+  const spanMs = Math.max(0, last.ts - first.ts);
+  if (spanMs < 86_400_000) {
+    const hours = Math.max(1, Math.round(spanMs / 3_600_000));
+    return `${hours}h`;
+  }
+
+  const days = Math.min(retentionDays, Math.max(1, Math.round(spanMs / 86_400_000)));
+  return `${days}d`;
 }
 
 export function computeLocalPeak(snapshots: readonly Snapshot[]): number | null {
@@ -192,6 +212,16 @@ function getReliableWindowSnapshots(
   return recent;
 }
 
+function getRetentionWindowSnapshots(
+  snapshots: readonly Snapshot[],
+  windowMs: number,
+): Snapshot[] | null {
+  const cutoff = Date.now() - windowMs;
+  const recent = snapshots.filter((s) => s.ts > cutoff);
+  if (recent.length < 6) return null;
+  return recent;
+}
+
 function round1(n: number): number {
   return Math.round(n * 10) / 10;
 }
@@ -202,113 +232,4 @@ export function computeLatestChangePct(snapshots: readonly Snapshot[]): number |
   const last = snapshots[snapshots.length - 1]!;
   if (prev.current === 0) return null;
   return round1(((last.current - prev.current) / prev.current) * 100);
-}
-
-// ── Forecast ──────────────────────────────────────────────────────────────────
-
-/**
- * Project the player count `hoursAhead` hours into the future using OLS
- * linear regression over the available snapshots.
- *
- * ### Why naïve extrapolation produces garbage
- * Linear regression on a short window (e.g. 1.5h) and then projecting 6h
- * ahead is a 4× extrapolation — statistically unsound. For a game that
- * gained 10k players in 1.5h, the model predicts +40k more: physically
- * impossible. We guard against this with two mechanisms:
- *
- * 1. **Minimum data span**: at least 1 hour of history required.
- * 2. **Extrapolation cap**: the projected change is bounded by the
- *    extrapolation ratio — the more we're projecting beyond the data window,
- *    the smaller the allowed swing. At 4× extrapolation the cap is ±25% of
- *    current; at 1× it is ±100%.
- * 3. **Hard ceiling / floor**: projected value never exceeds
- *    `historicalPeak × 2` (games don't 2× peak overnight) and never < 0.
- *
- * `reliable` is true only when data is ≥ 3h, R² ≥ 0.5, and we have ≥ 12
- * snapshots — meaning the extension has been running for at least 3 hours.
- *
- * @param snapshots   Historical snapshots in chronological order
- * @param hoursAhead  How many hours ahead to project (default: 6)
- */
-export function computeForecast(
-  snapshots: readonly Snapshot[],
-  hoursAhead = 6
-): ForecastResult | null {
-  if (snapshots.length < 6) return null;
-
-  // ── Minimum span guard ────────────────────────────────────────────────────
-  // Refuse to forecast if the data window is less than 1 hour.
-  const spanHours = (snapshots.at(-1)!.ts - snapshots[0]!.ts) / 3_600_000;
-  if (spanHours < 1) return null;
-
-  // ── OLS linear regression ─────────────────────────────────────────────────
-  const t0 = snapshots[0]!.ts;
-  const xs  = snapshots.map((s) => (s.ts - t0) / 3_600_000);   // hours
-  const ys  = snapshots.map((s) => s.current);
-  const n   = xs.length;
-
-  const sumX  = xs.reduce((a, b) => a + b, 0);
-  const sumY  = ys.reduce((a, b) => a + b, 0);
-  const sumXY = xs.reduce((a, x, i) => a + x * ys[i]!, 0);
-  const sumX2 = xs.reduce((a, x) => a + x * x, 0);
-
-  const denom = n * sumX2 - sumX * sumX;
-  if (denom === 0) return null;
-
-  const slope     = (n * sumXY - sumX * sumY) / denom;
-  const intercept = (sumY - slope * sumX) / n;
-
-  // ── Raw projection ────────────────────────────────────────────────────────
-  const lastX     = xs.at(-1)!;
-  const targetX   = lastX + hoursAhead;
-  const rawProjected = intercept + slope * targetX;
-
-  // ── Extrapolation-ratio cap ───────────────────────────────────────────────
-  // extrapolationRatio = hoursAhead / spanHours
-  //   ratio = 1 → projecting as far as we have data → cap ±80%
-  //   ratio = 2 → projecting 2× data window → cap ±50%
-  //   ratio = 4 → projecting 4× data window → cap ±25%
-  // Formula: maxChangeFraction = 0.8 / ratio  (never > 0.8)
-  const extrapolationRatio = hoursAhead / spanHours;
-  const maxChangeFraction  = Math.min(0.8, 0.8 / extrapolationRatio);
-
-  const current       = snapshots.at(-1)!.current;
-  const histPeak      = Math.max(...ys);                 // peak observed so far
-  const maxProjected  = Math.max(current, histPeak) * 2; // hard ceiling
-  const minProjected  = 0;                               // hard floor
-
-  // Apply the extrapolation cap around current value
-  const capped = Math.min(
-    Math.max(
-      rawProjected,
-      current * (1 - maxChangeFraction),      // lower bound
-    ),
-    current * (1 + maxChangeFraction),         // upper bound
-  );
-
-  const projected = Math.round(
-    Math.max(minProjected, Math.min(maxProjected, capped))
-  );
-
-  // ── R² goodness-of-fit ────────────────────────────────────────────────────
-  const meanY = sumY / n;
-  const ssTot = ys.reduce((a, y) => a + (y - meanY) ** 2, 0);
-  const ssRes = ys.reduce((a, y, i) => a + (y - (intercept + slope * xs[i]!)) ** 2, 0);
-  const r2    = ssTot === 0 ? 1 : Math.max(0, 1 - ssRes / ssTot);
-
-  const changePct = current === 0
-    ? 0
-    : round1(((projected - current) / current) * 100);
-
-  // Reliable: need ≥ 3h of data, ≥ 12 snapshots, R² ≥ 0.5
-  // (i.e. the extension has been running for at least 3h)
-  const reliable = spanHours >= 3 && n >= 12 && r2 >= 0.5;
-
-  return {
-    projected,
-    changePct,
-    hoursAhead,
-    r2: Math.round(r2 * 100) / 100,
-    reliable,
-  };
 }

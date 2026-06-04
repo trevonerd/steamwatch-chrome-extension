@@ -4,7 +4,7 @@
 
 import "fake-indexeddb/auto";
 
-import { vi, beforeAll } from "vitest";
+import { vi } from "vitest";
 
 // ── In-memory storage ─────────────────────────────────────────────────────────
 
@@ -59,33 +59,6 @@ Object.defineProperty(globalThis, "chrome", {
   },
   writable: true,
 });
-
-// ── DOM fixtures for happy-dom test environment ───────────────────────────────
-
-if (typeof document !== "undefined") {
-  beforeAll(() => {
-    const domFixtures: Array<{ id: string; tag: "div" | "img" | "a" }> = [
-      { id: "history-peak24h",      tag: "div" },
-      { id: "history-alltime-peak", tag: "div" },
-      { id: "history-24h-gain",     tag: "div" },
-      { id: "history-period-gain",  tag: "div" },
-      { id: "history-trend",        tag: "div" },
-      { id: "history-latest-change",tag: "div" },
-      { id: "history-twitch",       tag: "div" },
-      { id: "history-thumbnail",    tag: "img" },
-      { id: "history-steam-link",   tag: "a"   },
-      { id: "history-steamdb-link", tag: "a"   },
-      { id: "history-sale-badge",   tag: "div" },
-    ];
-    domFixtures.forEach(({ id, tag }) => {
-      if (!document.getElementById(id)) {
-        const el = document.createElement(tag);
-        el.id = id;
-        document.documentElement.appendChild(el);
-      }
-    });
-  });
-}
 
 // ── Reset storage between tests ───────────────────────────────────────────────
 

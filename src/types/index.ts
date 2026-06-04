@@ -31,19 +31,14 @@ export interface CachedData {
 // ── Settings ─────────────────────────────────────────────────────────────────
 
 export interface Settings {
-  trendEnabled: boolean;
-  purgeAfterDays: number;
   notificationsEnabled: boolean;
   globalThresholdUp: number;    // positive %, e.g. 30
   globalThresholdDown: number;  // negative %, e.g. -25
-  fetchIntervalMinutes: number;
   // Quiet hours
   quietHoursEnabled: boolean;
   quietStart: string;           // "HH:MM" 24h local time, e.g. "23:00"
   quietEnd: string;             // "HH:MM" 24h local time, e.g. "07:00"
   quietDays: QuietDaysMask;     // bitmask; 0b1111111 = every day
-  // Dynamic ranking
-  rankByPlayers: boolean;       // sort popup cards by current player count
   // Badge favorite
   badgeFavoriteAppid?: string;  // appid of the game whose count shows on the badge
 }
@@ -112,36 +107,6 @@ export interface SteamChartsData {
   readonly allTimePeakLabel?: string;
 }
 
-/** A single Steam news item for a game. */
-export interface SteamNewsItem {
-  readonly title: string;
-  readonly url: string;
-  readonly date: number; // Unix timestamp (seconds)
-}
-
-// ── Export ────────────────────────────────────────────────────────────────────
-
-export type ExportFormat = "json" | "csv";
-
-export interface ExportRow {
-  appid: string;
-  name: string;
-  ts: number;
-  date: string;
-  current: number;
-}
-
-// ── Forecast ──────────────────────────────────────────────────────────────────
-
-/** Linear regression forecast for a future time horizon. */
-export interface ForecastResult {
-  readonly projected: number;
-  readonly changePct: number;
-  readonly hoursAhead: number;
-  readonly r2: number;
-  readonly reliable: boolean;
-}
-
 // ── Quiet hours ───────────────────────────────────────────────────────────────
 
 /**
@@ -188,6 +153,7 @@ export interface CardViewModel {
   readonly retentionAvg?: number;
   readonly retentionGain?: number;
   readonly retentionDays: number;
+  readonly retentionWindowLabel: string;
   readonly availableGraphWindows: readonly GraphWindowOption[];
   readonly defaultGraphWindow: GraphWindowKey | null;
   readonly trend: TrendResult | null;
@@ -195,7 +161,6 @@ export interface CardViewModel {
   readonly latestChangePct: number | null;
   readonly snaps: readonly Snapshot[];
   readonly sparklineStroke: string;
-  readonly svgStr: string | null;
   /** Timestamp of the last successful fetch (0 if never). */
   readonly fetchedAt: number;
   readonly twitchViewers?: number;

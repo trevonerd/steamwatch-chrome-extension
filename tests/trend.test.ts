@@ -6,6 +6,7 @@ import {
   compute24hGain,
   computeRetentionAvg,
   computeRetentionGain,
+  computeRetentionWindowLabel,
   computeLocalPeak,
   computeWindowMin,
   fmtNumber,
@@ -49,7 +50,7 @@ describe("computeTrend", () => {
     expect(computeTrend(snaps)).toBeNull();
   });
 
-  it("detects EXPLOSION: sudden spike from stable base (30 → 50 000)", () => {
+  it("detects EXPLOSION: sudden surge from stable base (30 → 50 000)", () => {
     // Game stable at ~30, then explodes to 50 000 in recent half
     const snaps = makeSnapsOverHours([30, 28, 32, 30, 49000, 50000, 51000], 6);
     const result = computeTrend(snaps);
@@ -246,7 +247,7 @@ describe("compute24hGain", () => {
 });
 
 describe("computeRetentionAvg", () => {
-  it("returns null without reliable full-window coverage", () => {
+  it("returns null with fewer than 6 snapshots", () => {
     const now = Date.now();
     const snaps: Snapshot[] = [
       { ts: now - 40 * 60_000, current: 1000 },
@@ -254,9 +255,21 @@ describe("computeRetentionAvg", () => {
       { ts: now - 5 * 60_000, current: 1200 },
       { ts: now - 4 * 60_000, current: 1300 },
       { ts: now - 3 * 60_000, current: 1400 },
-      { ts: now - 2 * 60_000, current: 1500 },
     ];
     expect(computeRetentionAvg(snaps, 3)).toBeNull();
+  });
+
+  it("computes an average from partial retention history", () => {
+    const now = Date.now();
+    const snaps: Snapshot[] = [
+      { ts: now - 5 * 86_400_000, current: 1000 },
+      { ts: now - 4 * 86_400_000, current: 1200 },
+      { ts: now - 3 * 86_400_000, current: 1400 },
+      { ts: now - 2 * 86_400_000, current: 1600 },
+      { ts: now - 1 * 86_400_000, current: 1800 },
+      { ts: now - 10 * 60_000, current: 2000 },
+    ];
+    expect(computeRetentionAvg(snaps, 60)).toBe(1500);
   });
 
   it("computes an average across the configured retention window", () => {
@@ -274,6 +287,31 @@ describe("computeRetentionAvg", () => {
 });
 
 describe("computeRetentionGain", () => {
+  it("returns null with fewer than 6 snapshots", () => {
+    const now = Date.now();
+    const snaps: Snapshot[] = [
+      { ts: now - 40 * 60_000, current: 1000 },
+      { ts: now - 20 * 60_000, current: 1100 },
+      { ts: now - 5 * 60_000, current: 1200 },
+      { ts: now - 4 * 60_000, current: 1300 },
+      { ts: now - 3 * 60_000, current: 1400 },
+    ];
+    expect(computeRetentionGain(snaps, 3)).toBeNull();
+  });
+
+  it("returns the delta from partial retention history", () => {
+    const now = Date.now();
+    const snaps: Snapshot[] = [
+      { ts: now - 5 * 86_400_000, current: 500 },
+      { ts: now - 4 * 86_400_000, current: 700 },
+      { ts: now - 3 * 86_400_000, current: 900 },
+      { ts: now - 2 * 86_400_000, current: 1100 },
+      { ts: now - 1 * 86_400_000, current: 1300 },
+      { ts: now - 10 * 60_000, current: 1500 },
+    ];
+    expect(computeRetentionGain(snaps, 60)).toBe(1000);
+  });
+
   it("returns the delta across the configured retention window", () => {
     const now = Date.now();
     const snaps: Snapshot[] = [
@@ -285,6 +323,46 @@ describe("computeRetentionGain", () => {
       { ts: now - 10 * 60_000, current: 1500 },
     ];
     expect(computeRetentionGain(snaps, 7)).toBe(1000);
+  });
+});
+
+describe("computeRetentionWindowLabel", () => {
+  it("falls back to the configured retention window with fewer than 6 snapshots", () => {
+    const now = Date.now();
+    const snaps: Snapshot[] = [
+      { ts: now - 40 * 60_000, current: 1000 },
+      { ts: now - 20 * 60_000, current: 1100 },
+      { ts: now - 5 * 60_000, current: 1200 },
+      { ts: now - 4 * 60_000, current: 1300 },
+      { ts: now - 3 * 60_000, current: 1400 },
+    ];
+    expect(computeRetentionWindowLabel(snaps, 60)).toBe("60d");
+  });
+
+  it("uses days from partial retention history", () => {
+    const now = Date.now();
+    const snaps: Snapshot[] = [
+      { ts: now - 5 * 86_400_000, current: 1000 },
+      { ts: now - 4 * 86_400_000, current: 1200 },
+      { ts: now - 3 * 86_400_000, current: 1400 },
+      { ts: now - 2 * 86_400_000, current: 1600 },
+      { ts: now - 1 * 86_400_000, current: 1800 },
+      { ts: now - 10 * 60_000, current: 2000 },
+    ];
+    expect(computeRetentionWindowLabel(snaps, 60)).toBe("5d");
+  });
+
+  it("uses hours when partial retention history is under one day", () => {
+    const now = Date.now();
+    const snaps: Snapshot[] = [
+      { ts: now - 6 * 3_600_000, current: 1000 },
+      { ts: now - 5 * 3_600_000, current: 1200 },
+      { ts: now - 4 * 3_600_000, current: 1400 },
+      { ts: now - 3 * 3_600_000, current: 1600 },
+      { ts: now - 2 * 3_600_000, current: 1800 },
+      { ts: now, current: 2000 },
+    ];
+    expect(computeRetentionWindowLabel(snaps, 60)).toBe("6h");
   });
 });
 

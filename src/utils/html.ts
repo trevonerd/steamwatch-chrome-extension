@@ -13,11 +13,96 @@ export function esc(str: string): string {
     .replace(/'/g, "&#x27;");
 }
 
+type Child = Node | string | number | null | undefined | false;
+
+interface HtmlOptions {
+  className?: string;
+  text?: string | number;
+  attrs?: Record<string, string | number | boolean | null | undefined>;
+  dataset?: Record<string, string | number | boolean | null | undefined>;
+  children?: readonly Child[];
+}
+
+interface SvgOptions {
+  className?: string;
+  text?: string | number;
+  attrs?: Record<string, string | number | boolean | null | undefined>;
+  children?: readonly Child[];
+}
+
 /** Get a typed element by id. Throws if missing — catches config errors early. */
 export function mustGet<T extends HTMLElement>(id: string): T {
   const el = document.getElementById(id);
   if (!el) throw new Error(`[SteamWatch] Element #${id} not found in DOM.`);
   return el as T;
+}
+
+export function clear(el: Element): void {
+  el.replaceChildren();
+}
+
+export function h<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  options: HtmlOptions = {},
+): HTMLElementTagNameMap[K] {
+  const node = document.createElement(tag);
+  applyHtmlOptions(node, options);
+  return node;
+}
+
+export function s<K extends keyof SVGElementTagNameMap>(
+  tag: K,
+  options: SvgOptions = {},
+): SVGElementTagNameMap[K] {
+  const node = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  applySvgOptions(node, options);
+  return node;
+}
+
+export function append(parent: Node, ...children: readonly Child[]): void {
+  for (const child of children) {
+    if (child === null || child === undefined || child === false) continue;
+    parent.appendChild(
+      child instanceof Node
+        ? child
+        : document.createTextNode(String(child)),
+    );
+  }
+}
+
+function applyHtmlOptions(node: HTMLElement, options: HtmlOptions): void {
+  if (options.className) node.className = options.className;
+  if (options.text !== undefined) node.textContent = String(options.text);
+  applyAttributes(node, options.attrs);
+  if (options.dataset) {
+    for (const [key, value] of Object.entries(options.dataset)) {
+      if (value === null || value === undefined) continue;
+      node.dataset[key] = String(value);
+    }
+  }
+  if (options.children) append(node, ...options.children);
+}
+
+function applySvgOptions(node: SVGElement, options: SvgOptions): void {
+  if (options.className) node.setAttribute("class", options.className);
+  if (options.text !== undefined) node.textContent = String(options.text);
+  applyAttributes(node, options.attrs);
+  if (options.children) append(node, ...options.children);
+}
+
+function applyAttributes(
+  node: Element,
+  attrs: Record<string, string | number | boolean | null | undefined> | undefined,
+): void {
+  if (!attrs) return;
+  for (const [key, value] of Object.entries(attrs)) {
+    if (value === null || value === undefined || value === false) continue;
+    if (value === true) {
+      node.setAttribute(key, "");
+      continue;
+    }
+    node.setAttribute(key, String(value));
+  }
 }
 
 /**

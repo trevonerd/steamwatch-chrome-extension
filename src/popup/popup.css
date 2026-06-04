@@ -52,7 +52,7 @@ body {
   width: 400px;
   /* No max-height / overflow — popup expands to fit its content.
      Chrome clips popup height at ~600px anyway; we don't need to scroll.
-     Users with 5 games + expanded panels will see the natural limit. */
+     Users with 10 games + expanded panels will see the natural limit. */
   overflow-x: hidden;
   background: var(--bg);
   color: var(--text);
@@ -440,7 +440,8 @@ body {
   font-size:      11px;
   font-weight:    600;
   letter-spacing: .5px;
-  padding:        3px 8px;
+  line-height:    1.2;
+  padding:        5px 8px;
   pointer-events: none;
   white-space:    nowrap;
   z-index:        10;
