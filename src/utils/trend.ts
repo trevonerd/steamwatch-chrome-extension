@@ -117,7 +117,7 @@ function gain(values: readonly number[] | null): number | null {
 }
 
 function isComparableExtrema(snapshot: Snapshot): boolean {
-  return (snapshot.source === "steam" || snapshot.source === "steamcharts")
+  return (snapshot.source === "steam" || snapshot.source === "steamcharts" || snapshot.source === "games-popularity")
     && snapshot.granularity !== "unknown" && snapshot.granularity !== "monthly-peak";
 }
 

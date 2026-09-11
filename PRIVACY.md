@@ -1,6 +1,6 @@
 # SteamWatch Privacy Policy
 
-Last updated: June 4, 2026
+Last updated: September 11, 2026
 
 SteamWatch does not collect, sell, or share personal user data.
 
@@ -23,6 +23,7 @@ SteamWatch sends network requests to public third-party services only to fetch d
 
 - Steam and Steam Store, for game metadata and player counts
 - SteamSpy and SteamCharts, for public player-count and peak data
+- Games Popularity, for hourly player history when SteamCharts history is unavailable or fails
 - Twitch GraphQL, for public Twitch viewer counts
 - Steam image CDN domains, for game thumbnails and artwork
 

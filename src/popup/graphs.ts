@@ -30,7 +30,7 @@ export function populatePanel(panel: HTMLDivElement, vm: CardViewModel): void {
     panel.appendChild(h("p", {
       className: "history-notice",
       text: vm.historyLoading ? "Loading available history…" : vm.historyStatus?.state === "unavailable"
-        ? "SteamCharts supplies no history for this game. Only available local observations can be shown."
+        ? "No history is available from the connected providers. Only available local observations can be shown."
         : vm.historyStatus?.state === "retry"
           ? "History download failed. Refresh retries the download; periods need enough coverage."
           : "Some periods lack enough observations. Legacy data and monthly peaks are excluded from player-count graphs.",
@@ -179,8 +179,9 @@ function renderPanelGraph(panel: HTMLDivElement, vm: CardViewModel, key: GraphWi
   const caption = panel.querySelector<HTMLDivElement>(".panel-record-low");
   if (caption) {
     caption.hidden = false;
+    const fallbackCredit = selected.some((point) => point.source === "games-popularity") ? " · Games Popularity" : "";
     caption.textContent = result
-      ? `${new Date(result.startTs).toLocaleString()} – ${new Date(result.endTs).toLocaleString()} · ${Math.round(result.coverage * 100)}% hourly coverage`
+      ? `${new Date(result.startTs).toLocaleString()} – ${new Date(result.endTs).toLocaleString()} · ${Math.round(result.coverage * 100)}% hourly coverage${fallbackCredit}`
       : "Waiting for qualified player observations.";
   }
 }

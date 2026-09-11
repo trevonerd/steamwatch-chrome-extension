@@ -78,6 +78,13 @@ beforeEach(() => {
 });
 
 describe("background lifecycle", () => {
+  it("retries unavailable history on extension update", async () => {
+    await loadListeners();
+    const installed = mocks.addInstalledListener.mock.calls[0]?.[0];
+    installed?.({ reason: "update" as chrome.runtime.OnInstalledReason, previousVersion: "2.0.1.7" });
+    await vi.waitFor(() => expect(mocks.refresh).toHaveBeenCalledWith(true));
+  });
+
   it("routes FETCH_NOW through the shared refresh coordinator", async () => {
     const { message } = await loadListeners();
     const response = await new Promise<MessageResponse>((resolve) => {

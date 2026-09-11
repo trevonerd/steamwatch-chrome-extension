@@ -12,14 +12,14 @@ const ALARM_NAME = "sw_fetch";
 const COMPACTION_ALARM_NAME = "steamwatch-compaction";
 const refreshCoordinator = createRefreshCoordinator();
 
-chrome.runtime.onInstalled.addListener(() => void bootstrap().catch((error: unknown) => console.warn(`[SteamWatch] Install bootstrap failed: ${formatError(error)}`)));
+chrome.runtime.onInstalled.addListener(() => void bootstrap(true).catch((error: unknown) => console.warn(`[SteamWatch] Install bootstrap failed: ${formatError(error)}`)));
 chrome.runtime.onStartup.addListener(() => void bootstrap().catch((error: unknown) => console.warn(`[SteamWatch] Startup bootstrap failed: ${formatError(error)}`)));
 
-async function bootstrap(): Promise<void> {
+async function bootstrap(retryHistory = false): Promise<void> {
   await migrateToIndexedDB();
   await resetAlarm();
   await resetCompactionAlarm();
-  await refreshCoordinator.refresh();
+  await refreshCoordinator.refresh(retryHistory);
 }
 
 async function resetAlarm(): Promise<void> {

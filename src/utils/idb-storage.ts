@@ -134,8 +134,9 @@ function toSnapshotRow(appId: string, snap: Snapshot): SnapshotRow {
 }
 
 function sourcePriority(source: SnapshotSource): number {
-  if (source === "steam") return 3;
-  if (source === "steamcharts") return 2;
+  if (source === "steam") return 4;
+  if (source === "steamcharts") return 3;
+  if (source === "games-popularity") return 2;
   return 1;
 }
 

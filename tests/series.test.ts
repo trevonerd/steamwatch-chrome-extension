@@ -27,3 +27,12 @@ describe("normalizeHourly", () => {
     expect(points).toEqual([{ hour, value: 10, observedAt: hour, source: "steamcharts" }]);
   });
 });
+
+
+describe("fallback historical observations", () => {
+  it("qualifies hourly fallback history and keeps its provenance", () => {
+    const ts = Date.UTC(2026, 8, 11, 9);
+    expect(normalizeHourly([{ ts, current: 2269, source: "games-popularity", granularity: "hourly" }]))
+      .toEqual([{ hour: ts, value: 2269, observedAt: ts, source: "games-popularity" }]);
+  });
+});

@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## [2.0.0-beta.8] - 2026-09-11
+
+### Fixed
+- Import hourly history from Games Popularity when SteamCharts is unavailable or fails, including Black Flag Resynced
+- Qualify fallback observations for graph periods, averages, observed extrema and seasonal trends while preserving source identity
+- Retry unavailable historical imports when the extension updates
+
+### Added
+- Bounded two-page historical API requests, UTC date validation, and source attribution in graph details
+- Recorded Resynced API regression covering persistent import, all six periods and seasonal analysis
+
+### Changed
+- Visible version is `2.0.0-beta.8`; Chrome upgrade version is `2.0.1.8`
+- Added Games Popularity host permission and privacy disclosure; no account or API key required
+
 ## [2.0.0-beta.7] - 2026-09-11
 
 ### Fixed

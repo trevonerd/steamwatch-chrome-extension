@@ -7,7 +7,8 @@ afterEach(async () => { vi.unstubAllGlobals(); await _resetDbForTesting(); });
 
 describe("Resynced unavailable provider history", () => {
   it("records a successful empty history response as unavailable rather than a failed download", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => Response.json([])));
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => url.includes("games-popularity.com")
+      ? Response.json({ steamId: "3751950", history: [], nextCursor: null }) : Response.json([])));
     await refreshHistory("3751950");
     expect((await idbGetBootstrapStatus("3751950"))?.state).toBe("unavailable");
     expect((await chrome.storage.local.get("sw_history_revision"))["sw_history_revision"]).toBeGreaterThan(0);

@@ -22,7 +22,7 @@ export interface Game {
 }
 
 /** Origin of a persisted player-count value. */
-export type SnapshotSource = "steam" | "steamcharts" | "legacy";
+export type SnapshotSource = "steam" | "steamcharts" | "games-popularity" | "legacy";
 
 /** Resolution of a persisted player-count value. */
 export type SnapshotGranularity =
@@ -33,7 +33,13 @@ export type SnapshotGranularity =
   | "weekly"
   | "unknown";
 
-export const SnapshotSourceSchema = z.enum(["steam", "steamcharts", "legacy"]);
+export const SnapshotSourceSchema = z.enum(["steam", "steamcharts", "games-popularity", "legacy"]);
+
+export const GamesPopularityHistorySchema = z.object({
+  steamId: z.string(),
+  history: z.array(z.object({ players: z.number().finite().nonnegative(), added: z.string() })).max(1000),
+  nextCursor: z.string().nullable().optional(),
+});
 export const SnapshotGranularitySchema = z.enum([
   "instant",
   "hourly",

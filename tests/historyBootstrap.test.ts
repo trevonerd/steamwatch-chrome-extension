@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   storageSet: vi.fn(),
 }));
 
-vi.mock("../src/utils/api.js", () => ({ fetchSteamChartsHistoryResult: mocks.fetchBootstrap }));
+vi.mock("../src/utils/api.js", () => ({ fetchPlayerHistoryResult: mocks.fetchBootstrap }));
 vi.mock("../src/utils/idb-storage.js", () => ({
   idbAcquireBootstrapLease: mocks.acquireLease,
   idbCompleteBootstrapImport: mocks.completeImport,

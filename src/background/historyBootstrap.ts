@@ -1,4 +1,4 @@
-import { fetchSteamChartsHistoryResult } from "../utils/api.js";
+import { fetchPlayerHistoryResult } from "../utils/api.js";
 import {
   idbAcquireBootstrapLease,
   idbCompleteBootstrapImport,
@@ -12,7 +12,7 @@ export async function refreshHistory(appId: string, retryFailed = false): Promis
   if (!lease) return false;
 
   try {
-    const result = await fetchSteamChartsHistoryResult(appId);
+    const result = await fetchPlayerHistoryResult(appId);
     if (result.status === "unavailable") {
       await idbFailBootstrapLease(lease, Date.now() + 6 * 3_600_000, "unavailable");
       await chrome.storage.local.set({ sw_history_revision: Date.now() });

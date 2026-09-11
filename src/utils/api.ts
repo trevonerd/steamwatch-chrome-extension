@@ -7,6 +7,7 @@
 import {
   AppDetailsSchema,
   ChartDataSchema,
+  GamesPopularityHistorySchema,
   PlayerCountSchema,
   SteamSpySchema,
   StoreSearchSchema,
@@ -169,6 +170,85 @@ export async function fetchSteamChartsHistoryResult(appid: string): Promise<Prov
     };
   });
   return snapshots.length > 0 ? { status: "ok", value: snapshots } : { status: "error", error: "No valid historical observations" };
+}
+
+const HISTORY_RETENTION_MS = 60 * 86_400_000;
+const GAMES_POPULARITY_MAX_PAGES = 2;
+
+/**
+ * Fetch recent hourly history from Games Popularity for games SteamCharts lacks.
+ * The provider serves newest-first pages, so retain only the local 60-day window.
+ */
+export async function fetchGamesPopularityHistoryResult(appid: string): Promise<ProviderResult<Snapshot[]>> {
+  const now = Date.now();
+  const cutoff = now - HISTORY_RETENTION_MS;
+  const rows: { readonly ts: number; readonly current: number }[] = [];
+  const seenCursors = new Set<string>();
+  let oldestValidTimestamp: number | undefined;
+  let cursor: string | undefined;
+
+  for (let page = 0; page < GAMES_POPULARITY_MAX_PAGES; page += 1) {
+    if (cursor !== undefined && (cursor.length === 0 || seenCursors.has(cursor))) {
+      return { status: "error", error: "GamesPopularity history cursor repeated" };
+    }
+    if (cursor !== undefined) seenCursors.add(cursor);
+    const result = await requestWithPolicy({
+      url: `https://games-popularity.com/swagger/api/game/players/${encodeURIComponent(appid)}${cursor === undefined ? "" : `?cursor=${encodeURIComponent(cursor)}`}`,
+      timeoutMs: 15_000,
+      read: (response) => response.json(),
+    });
+    if (result.kind === "http-error") {
+      return result.status === 404 && page === 0
+        ? { status: "unavailable" }
+        : { status: "error", error: `GamesPopularity HTTP ${result.status}` };
+    }
+    if (result.kind === "error") return { status: "error", error: result.error };
+    const parsed = GamesPopularityHistorySchema.safeParse(result.value);
+    if (!parsed.success) return { status: "error", error: "Invalid GamesPopularity history" };
+    if (parsed.data.steamId !== appid) return { status: "error", error: "GamesPopularity Steam ID mismatch" };
+
+    for (const record of parsed.data.history) {
+      const ts = parseGamesPopularityTimestamp(record.added);
+      if (ts === null || ts > now || !Number.isFinite(record.players) || record.players < 0) continue;
+      oldestValidTimestamp = oldestValidTimestamp === undefined || ts < oldestValidTimestamp ? ts : oldestValidTimestamp;
+      if (ts < cutoff) continue;
+      rows.push({ ts, current: Math.round(record.players) });
+    }
+
+    if (parsed.data.history.length > 0 && rows.length === 0) {
+      return { status: "error", error: "No valid GamesPopularity observations" };
+    }
+    const nextCursor = parsed.data.nextCursor ?? undefined;
+    if (cursor !== undefined && nextCursor === cursor) {
+      return { status: "error", error: "GamesPopularity history cursor repeated" };
+    }
+    const needsAnotherPage = oldestValidTimestamp === undefined || oldestValidTimestamp > cutoff;
+    if (!needsAnotherPage || nextCursor === undefined || page === GAMES_POPULARITY_MAX_PAGES - 1) break;
+    cursor = nextCursor;
+  }
+
+  const snapshots = [...new Map(rows.map((row) => [row.ts, row.current])).entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([ts, current]): Snapshot => ({ ts, current, source: "games-popularity", granularity: "hourly" }));
+  return snapshots.length > 0
+    ? { status: "ok", value: snapshots }
+    : { status: "unavailable" };
+}
+
+/** Prefer SteamCharts where available and use Games Popularity only as history fallback. */
+export async function fetchPlayerHistoryResult(appid: string): Promise<ProviderResult<Snapshot[]>> {
+  const primary = await fetchSteamChartsHistoryResult(appid);
+  if (primary.status === "ok") return primary;
+  const fallback = await fetchGamesPopularityHistoryResult(appid);
+  if (fallback.status === "ok") return fallback;
+  if (fallback.status === "error") return fallback;
+  return primary.status === "error" ? primary : { status: "unavailable" };
+}
+
+function parseGamesPopularityTimestamp(value: string): number | null {
+  const withZone = /(?:Z|[+-]\d{2}:\d{2})$/i.test(value) ? value : `${value}Z`;
+  const timestamp = Date.parse(withZone);
+  return Number.isSafeInteger(timestamp) && timestamp > 0 ? timestamp : null;
 }
 
 export async function fetchTwitchViewers(gameName: string): Promise<number | null> {
