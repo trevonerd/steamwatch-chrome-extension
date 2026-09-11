@@ -1,0 +1,91 @@
+{
+  "file_hashes": {
+    ".agents/skills/bugfix-workflow.md": "c61089a5028af9b88062a4f3f337ddb8e2c808907f4b3f2e075bcc671248a797",
+    ".agents/skills/feature-workflow.md": "14e445f27918f94eb1583a5b4303088980927067f073557cd6656e9a08ffaaba",
+    ".agents/skills/migration-debugging.md": "a1a71eb81974bcf8373c1df034aaa1a516a28c75376c09a54247b8f582771d19",
+    ".agents/skills/release-checklist.md": "57bfb99732ef7d1f9b5ccba4e98d89761ee0f0f5484a767812c68afa3cb6d947",
+    ".claude/CLAUDE.md": "9c0defe80825d9c30f61f82387d64e7eae37db3dc8d37697b2d4de64ade937d3",
+    ".claude/hooks/vexp-hint.sh": "cc9af5148a59285ec534809e3c8543122e4ae076bb8cc2fc4e62f7851bbc0e1f",
+    ".claude/hooks/vexp-restore.sh": "7475e98c4fbbde76704bfdc4cb99f18d80eff0fb92d3567356ec4ea814f34f4b",
+    ".codex/vexp-hint.sh": "cc9af5148a59285ec534809e3c8543122e4ae076bb8cc2fc4e62f7851bbc0e1f",
+    ".github/copilot-instructions.md": "a50b2d242d0d3babb01d1dd445aa6506b041ec9cc5a76b786a10852c5056a57e",
+    ".opencode/plugin/vexp-compress.js": "7620415ed436aecb6ad6cfade557021d306552eab2768256d615f45386ba677f",
+    ".opencode/plugin/vexp-hint.js": "b997fedc1c6b9efa0d718f193f871ff4dd4662ec42e7aaa1a851fc7f09477d7c",
+    "AGENTS.md": "09457e1f9383f39de3be13b827c3af495f3ecf19dbbb1e50a0429aed019a6f53",
+    "CHANGELOG.md": "cf6856cb846780f18e657194e4b68a82a04c519645d741639eeb9d8d585ee638",
+    "PRIVACY.md": "abfb3447e80c8029097c7aa9abf85be44f2d38f16ad205de3f12b9f8229bdbcf",
+    "README.md": "72964820e10e5365e8039a56276b2b8b611d949791ea03a57b2fd67fa30f80ed",
+    "manifest.json": "b9fc4bc9af704bdfa37fe3020c6feeb16129e1c6037e617efdfc558f50d07614",
+    "scripts/sync-version.ts": "3a6258429d81de5c247b9deabea95c743978b804c4c7e885ef91013e01945658",
+    "src/background/fetchCycle.ts": "152fe797b29802b3a25bafd0e37f2429f34bc57856fc463fb43cca579dc58603",
+    "src/background/index.ts": "21ea944e03279639957849e2b90fa40959d6c175b5c286ac803c2159d4220d48",
+    "src/options/main.ts": "c039886d3269d120309536821b458d05ff0b543b75ccff5e579976cb330d5c79",
+    "src/options/options.css": "ee3d4d932728990b960fd724573eadcc9b4c65a753aff1fb098dccfc781278ca",
+    "src/popup/main.ts": "2d83a3904b0d058605ee9bcede428d03857007d62af07f1b52b16492881e0733",
+    "src/popup/popup.css": "7d11de4698da6304133513e7dbfabd53a9d5fabf39e8cce8d457eb6b58ee5ea3",
+    "src/popup/shareBar.ts": "41c929e7e1489e142eb61cc6a3ee9a3b46a0a492d231381d16dbf95442053a32",
+    "src/popup/thumb.ts": "1d65a1dbd4bdbf03671aa8ae6c5480c0465a703cefc4ff64b33ec79f87e3a1da",
+    "src/types/index.ts": "c579b1860becbc267dbf9dfe68852e1f9b6d1f2afc774bf84c3fbcfe20f2318f",
+    "src/utils/api.ts": "3a39c35f19060e6b4a6ef4c801bbc8aa6fbb270562baad3f3afaa0f8944ed3fa",
+    "src/utils/card.ts": "d17a30702a63282fdcfc5d7b0f593f7e273a61c9859710d14e3ade93383abae9",
+    "src/utils/compaction.ts": "06ef61d6ff22559764645a667d4dcc2a5fef9c7c4f0018886f6a4d05ed33ff45",
+    "src/utils/html.ts": "4dfaf2f73553350a00c91bc0570c8e4f44f8aee82de8fd01ef5d25cb8aca3e46",
+    "src/utils/idb-storage.ts": "247c3e62518e282b1972f4b45945277124f645f59703931da442618022b8ea28",
+    "src/utils/log.ts": "c8c0ec8239d26f4f6078c0579f9437a1992269bbbdab2b166c4fed06db449384",
+    "src/utils/migrate.ts": "813ce85ffce795ac3125bc5780921eaa8844d698d48c92cdef6968ff43933915",
+    "src/utils/quietHours.ts": "ee529ccf50926c75b96c39d9a9d78879953eb2df1b1123639510f310694f805c",
+    "src/utils/share.ts": "7412c84cfb0720214be1d3784a394151b251ead0562002daffef1f95ecdcfbc9",
+    "src/utils/sparkline.ts": "fbbea144da3be8caa12f9c7e4fb3994977c06ea7782b77b957cfe5db1686cc56",
+    "src/utils/storage.ts": "589f101b036f21913d4a4b41c7efa9665e62de410036e76bab0ee83085e013d1",
+    "src/utils/trend.ts": "3cafa9f3772cf5c766c35ae3b80acfad52aea3b18978e905cdc3c0284a88796b",
+    "src/vite-env.d.ts": "fd6c840bf07a4dce42da019703a45bbca84eae49ec5859b513c0a135fa664beb",
+    "tests/api.test.ts": "018c33deae996d6414cb7a920d419e29bea42e1a82577d53a22cc967fc2c8d2b",
+    "tests/background-bootstrap.test.ts": "830027927264dbffeb4e1ba714563799aa473cdb80deaec540339c971fc9b76c",
+    "tests/card.test.ts": "3ce589fd936706d1f666bb8b0239ce7c5ae164c1d437a226eceebabad9a5fa5a",
+    "tests/compaction.test.ts": "d2de9a911452112a7f0220cd1b3bb472cd497ceb59eb069014d0c6f48ef42073",
+    "tests/fetchCycle.test.ts": "c29ffae4ffe0a30767d828432bcbf530cf0ea143cf956c9c2160a3470ad554e5",
+    "tests/graph-windows.test.ts": "a38b5743550d614a3ee509d4c0fe06ace375d591be3e65f411c67b8a3b52ca78",
+    "tests/idb-storage.test.ts": "e0358d5b054b987a6b07b799de4b13dd844fa36a950669c1069272bfc797a28e",
+    "tests/mapToPoints.test.ts": "8c55950668b41e8c04a4f588979ce321ba0f7693169b9237e26c520d9e3314ab",
+    "tests/migrate.test.ts": "3fdeb2bebe18a1ada6bc4a7810012f96559653717de7c018081542761d9ff90f",
+    "tests/popup-dom.test.ts": "99b29ddbdfc22fe20dba819f6080961f5575e29c2b01dadd9168b5c7369b7c16",
+    "tests/quietHours.test.ts": "b874b7f7a012e0375700cead2babecaeb6bb1b8ef435bc5e22505ec5cd0e5f74",
+    "tests/setup.ts": "65922a6cdd8cc59deab91bf17a27392c0e100049499ae75b705161dbf6bdf94e",
+    "tests/share.test.ts": "e301747ce25ab66a29d4e4cac1f23af95ba1fc67c8497538cbe05476fb729435",
+    "tests/storage.test.ts": "202258277413f9b6f2ecbf231d7209f58c9fe91a4a490cc1e3d31f81a2e58548",
+    "tests/trend.test.ts": "c1711687834f2475d5442397264bb6d90924618ebfab8d22a85020e5414c1323",
+    "vite.config.ts": "13b1f057377caf9c3288811426260a9bdf4ea37e94372e0fbfb97bbf62ebae30",
+    "vitest.config.ts": "3d6c2c7d14ba83cc5d0caba3ffc604c386abed7052992aa876f89bda48cc48a7"
+  },
+  "indexed_at_commit": "b4ec76978a1c556cd239aa8153e10b961119c268",
+  "indexed_at_timestamp": "2026-09-11T07:23:51.674139+00:00",
+  "languages": {
+    "css": {
+      "calls": 0,
+      "nodes": 315
+    },
+    "javascript": {
+      "calls": 2,
+      "nodes": 4
+    },
+    "json_manifest": {
+      "calls": 0,
+      "nodes": 25
+    },
+    "markdown": {
+      "calls": 0,
+      "nodes": 147
+    },
+    "typescript": {
+      "calls": 624,
+      "nodes": 234
+    }
+  },
+  "schema_version": 3,
+  "stats": {
+    "total_edges": 1002,
+    "total_files": 56,
+    "total_nodes": 725
+  },
+  "vexp_version": "3.1.3"
+}

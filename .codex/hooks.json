@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"/Users/m.trevisani/repos/trevonerd/steamwatch/.codex/vexp-hint.sh\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
