@@ -12,13 +12,14 @@ Chrome extension for tracking Steam games with live player counts, local graph h
 ## Features
 
 - Live Steam player counts from the Steam Web API
-- 24h peak and all-time peak context
+- Provider-reported 24h and all-time peaks, distinct from observed maxima
 - Current Twitch viewers
 - Local player tracking every 5 minutes
 - 60-day local graph retention
 - Popup sparklines and expanded player graphs
-- 24h average and gain/loss metrics
-- 60-day average and gain/loss metrics
+- Period averages, changes and extrema with explicit historical coverage
+- Weekly activity: last seven days versus the preceding seven, matching hours and weekdays
+- Preliminary daily activity for limited history, with absolute changes for tiny baselines
 - Player-count notifications with per-game overrides and quiet hours
 - Toolbar badge for rising or alerting games
 - Favorite game badge for showing one live count on the toolbar icon
@@ -102,11 +103,24 @@ public/icons/             Extension icons
 | Data | Source |
 |---|---|
 | Current players | `api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1` |
-| All-time peak | `steamspy.com/api.php?request=appdetails` plus local accumulation |
+| All-time peak | SteamCharts, when available; observed maxima are labeled separately |
 | 24h peak | `steamcharts.com/app/{id}` |
+| Hourly history | SteamCharts, with Games Popularity fallback |
 | Twitch viewers | `gql.twitch.tv` |
 | Game search | `store.steampowered.com/api/storesearch` |
 | Game thumbnail | `cdn.akamai.steamstatic.com/steam/apps/{id}/capsule_sm_120.jpg` |
+
+---
+
+## Freshness and interpretation
+
+The popup shows cache immediately, refreshes counts older than 60 seconds and polls while open. Background tracking runs every five minutes while Chrome and the device are available. This is periodic polling, not a streaming feed. Offline periods and sleeping devices can leave gaps; historical imports fill only what providers actually offer.
+
+Graph periods become available when observations meet their coverage requirements. `All` means available retained history, up to 60 days, not the entire lifetime of a game. Missing values remain unavailable rather than becoming zero.
+
+The weekly percentage compares mean concurrent players over two matched weeks. It does not measure unique users lost or establish why activity changed. Trend alerts require sufficient coverage and agreement on at least five days. Before sufficient weekly history exists, daily comparisons are labeled preliminary and never trigger trend alerts; absolute player thresholds remain available.
+
+See [privacy](PRIVACY.md), [final validation](docs/final-beta-validation.md), and [lifecycle checks](docs/lifecycle-validation.md) for operational details and release limits.
 
 ---
 

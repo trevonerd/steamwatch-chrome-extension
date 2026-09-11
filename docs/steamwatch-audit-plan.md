@@ -1,5 +1,7 @@
 # SteamWatch: analisi e piano d’azione
 
+Chiusura delle implementazioni, beta 11: le fasi 1–7 e i successivi interventi su storico, trend settimanale e avvio con pochi dati sono implementati. Il [rapporto finale](final-beta-validation.md) è il riferimento per le verifiche attuali, il pacchetto e i limiti residui. Le proposte e i risultati iniziali sotto restano documentazione storica dell’audit; non descrivono l’algoritmo attuale.
+
 Data: 11 settembre 2026. Versione esaminata: 0.14.7. Codice applicativo invariato rispetto a `b4ec769`; configurazione vexp pubblicata con `79540c4`, artefatti Sisyphus esclusi dal versionamento con `e211c77`.
 
 Stato: audit tecnico e proposta dettagliata. La fase 1 è stata autorizzata e implementata; vedere [risultati e verifiche](phase-1-results.md). La fase 2 è stata autorizzata dopo il feedback sui grafici e implementata nella beta 2; vedere [risultati e verifica delle fonti](phase-2-results.md). La fase 3 è stata autorizzata e implementata nella beta 3; vedere [risultati e verifiche](phase-3-results.md). Le implementazioni delle fasi 4–7 proseguono nella beta 5; vedere [risultati e limiti](phase-4-7-results.md). Le scelte di prodotto sono in discussione tramite grill-with-docs; nessuna proposta numerica qui sotto è una decisione già approvata. Le sezioni di audit descrivono la versione prima delle correzioni.

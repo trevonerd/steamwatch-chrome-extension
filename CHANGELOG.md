@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## [2.0.0-beta.11] - 2026-09-11
+
+### Added
+- Reproducible isolated-Chrome lifecycle check for worker restart, offline recovery, native notification API delivery and favorite badge
+- Final beta validation and package acceptance documentation
+
+### Fixed
+- Correct README peak sources and trend semantics, and disclose interface font requests and provider request metadata in the privacy policy
+
+### Changed
+- Visible version is `2.0.0-beta.11`; Chrome numeric version is `2.0.1.11`
+
 ## [2.0.0-beta.10] - 2026-09-11
 
 ### Added
