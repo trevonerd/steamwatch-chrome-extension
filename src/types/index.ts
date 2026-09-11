@@ -345,6 +345,7 @@ export interface CardViewModel {
   readonly historyStatus?: BootstrapStatus;
   readonly historyLoading?: boolean;
   readonly seasonalAnalysis?: SeasonalTrendAnalysis;
+  readonly earlyActivity?: EarlyActivity;
   readonly observedPeak?: number;
   readonly evaluatedAt?: number;
   /** Minimum within the active graph window: { value, timestamp } or null. */
@@ -388,6 +389,24 @@ export interface WeeklyComparison {
   readonly matchedHours: number;
   readonly risingDays: number;
   readonly fallingDays: number;
+}
+
+export interface EarlyActivity {
+  readonly status: "collecting" | "preliminary" | "stale";
+  readonly observations: number;
+  readonly spanHours: number;
+  readonly minimum: number | null;
+  readonly maximum: number | null;
+  readonly reason: string;
+  readonly comparison?: {
+    readonly startTs: number;
+    readonly endTs: number;
+    readonly recentMean: number;
+    readonly baselineMean: number;
+    readonly matchedHours: number;
+    readonly pct: number | null;
+    readonly delta: number;
+  };
 }
 
 export type SeasonalTrendAnalysis =

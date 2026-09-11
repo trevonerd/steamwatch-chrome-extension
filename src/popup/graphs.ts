@@ -80,6 +80,18 @@ export function populatePanel(panel: HTMLDivElement, vm: CardViewModel): void {
       ],
     });
     recordLowEl.after(summary);
+  } else if (vm.earlyActivity) {
+    const early = vm.earlyActivity;
+    const comparison = early.comparison;
+    recordLowEl.after(h("section", {
+      className: "weekly-comparison early-activity", attrs: { "aria-label": "Limited history activity" },
+      children: [
+        h("strong", { text: comparison ? `24h vs previous 24h: ${comparison.pct === null ? `${comparison.delta > 0 ? "+" : ""}${comparison.delta} avg players` : fmtPct(comparison.pct)} · preliminary` : early.status === "stale" ? "History needs refreshing" : "Building an activity baseline" }),
+        h("p", { text: comparison ? `${comparison.recentMean.toLocaleString("en-US", { maximumFractionDigits: 1 })} average players vs ${comparison.baselineMean.toLocaleString("en-US", { maximumFractionDigits: 1 })} · ${comparison.matchedHours}/24 matched hours` : `${early.observations} observations · ${early.spanHours.toFixed(1)}h span${early.minimum === null ? "" : ` · observed range ${fmtNumber(early.minimum)}–${fmtNumber(early.maximum)}`}` }),
+        h("p", { text: early.reason }),
+        ...(comparison ? [h("p", { text: `${new Date(comparison.startTs).toISOString().slice(0, 16).replace("T", " ")} → ${new Date(comparison.endTs).toISOString().slice(0, 16).replace("T", " ")} UTC` })] : []),
+      ],
+    }));
   }
 }
 

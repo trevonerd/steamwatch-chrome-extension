@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "SteamWatch",
   "short_name": "SteamWatch",
-  "version": "2.0.1.9",
-  "version_name": "2.0.0-beta.9",
+  "version": "2.0.1.10",
+  "version_name": "2.0.0-beta.10",
   "description": "Track Steam games with live player counts, local trend history, Twitch viewers, and alerts.",
   "author": "trevonerd / TREVISOFT",
   "permissions": [

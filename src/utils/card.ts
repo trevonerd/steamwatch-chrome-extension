@@ -11,6 +11,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { Game, CachedData, Snapshot, CardViewModel, BootstrapStatus } from "../types/index.js";
+import { buildEarlyActivity } from "./earlyActivity.js";
 import {
   compute24hAvgFromHourly,
   compute24hGainFromHourly,
@@ -85,6 +86,7 @@ export function buildCardViewModel(
     ...(allTimePeak !== null && data?.allTimePeakLabel ? { allTimePeakLabel: data.allTimePeakLabel } : {}),
     ...(observedPeak !== null ? { observedPeak } : {}),
     seasonalAnalysis,
+    ...(seasonalAnalysis.status !== "ready" ? { earlyActivity: buildEarlyActivity(observations, hourly, now) } : {}),
     displayTrendPct: trend?.pct ?? null,
     displayTrendIcon: trend?.level.icon ?? null,
     displayTrendCls: trend?.level.cls ?? "stable",

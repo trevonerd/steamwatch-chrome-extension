@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## [2.0.0-beta.10] - 2026-09-11
+
+### Added
+- Useful limited-history context: observation count, elapsed span and observed range before a daily comparison is possible
+- Preliminary matched-hour 24h-vs-previous-24h activity for games with two sufficiently covered days; low baselines use absolute changes instead of misleading percentages
+
+### Fixed
+- Keep launch activity, missing history and mature weekly trends distinct in popup and sharing; preliminary changes never trigger structural trend alerts
+
+### Changed
+- Visible version is `2.0.0-beta.10`; Chrome numeric version is `2.0.1.10`
+
 ## [2.0.0-beta.9] - 2026-09-11
 
 ### Fixed

@@ -55,6 +55,13 @@ export function buildShareText(vm: CardViewModel): string {
     parts.push(`${trend.level.icon} 7d vs previous 7d: ${fmtPct(trend.pct)} (${trend.level.label})`);
   } else if (seasonalAnalysis) {
     parts.push(`↔ Trend unavailable: ${seasonalAnalysis.reason}`);
+    const early = vm.earlyActivity;
+    if (early) {
+      const comparison = early.comparison;
+      parts.push(comparison
+        ? `Preliminary 24h vs previous 24h: ${comparison.pct === null ? `${comparison.delta > 0 ? "+" : ""}${comparison.delta} average players` : fmtPct(comparison.pct)}. ${early.reason}`
+        : `${early.observations} observations across ${early.spanHours.toFixed(1)}h; observed range ${fmtNumber(early.minimum)}–${fmtNumber(early.maximum)}. ${early.reason}`);
+    }
   }
 
   if (latestChangePct != null) {
@@ -192,7 +199,10 @@ export async function renderShareCanvas(vm: CardViewModel): Promise<Blob> {
   if (!trend) {
     ctx.font = "11px system-ui";
     ctx.fillStyle = "#7a90aa";
-    ctx.fillText("No seasonal trend", CANVAS_W - 120, 55);
+    const early = vm.earlyActivity;
+    const pct = early?.comparison?.pct;
+    const label = early?.status === "preliminary" ? pct != null ? `~${fmtPct(pct)} 24h (early)` : "24h activity (early)" : early?.status === "stale" ? "History stale" : "Building history";
+    ctx.fillText(label, CANVAS_W - ctx.measureText(label).width - 12, 55);
   }
 
   // ── Sparkline ──────────────────────────────────────────────────────────────

@@ -7,6 +7,14 @@ const now = Date.UTC(2026, 8, 11, 12);
 const options = { width: 372, height: 56, maxPoints: 200, strokeColor: "#00c8ff", now };
 
 describe("popup graphs", () => {
+  it("labels a short-history comparison as preliminary and exposes its limits", () => {
+    const snaps = Array.from({ length: 48 }, (_, index) => ({ ts: now - (48 - index) * 3_600_000,
+      current: index < 24 ? 100 : 80, source: "steamcharts" as const, granularity: "hourly" as const }));
+    const panel = document.createElement("div");
+    populatePanel(panel, buildCardViewModel({ appid: "1", name: "Game", image: "" }, {}, snaps, 60, now));
+    expect(panel.querySelector(".early-activity")?.textContent).toContain("24h vs previous 24h: -20% · preliminary");
+    expect(panel.querySelector(".early-activity")?.textContent).toContain("does not trigger trend alerts");
+  });
   it("shows matched averages and the fixed weekly comparison independently of the selected graph period", () => {
     const snaps = Array.from({ length: 14 * 24 }, (_, index) => ({ ts: now - (14 * 24 - index) * 3_600_000,
       current: index >= 7 * 24 ? 80 : 100, source: "steamcharts" as const, granularity: "hourly" as const }));

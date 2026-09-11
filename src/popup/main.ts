@@ -195,7 +195,12 @@ function buildGameItem(vm: CardViewModel, rankEmoji: string, isTop: boolean, fav
       attrs: { "aria-label": `${fmtPct(displayTrendPct)} average players: last 7 days vs previous 7 days`, title: `${vm.trend?.level.label ?? "Weekly activity"}. ${vm.seasonalAnalysis?.reason ?? "Last 7 days vs previous 7 days."}` },
     }));
   } else {
-    stats.appendChild(h("span", { className: "trend-badge stable", text: "No trend", attrs: { title: vm.seasonalAnalysis?.reason ?? "Not enough comparable history" } }));
+    const early = vm.earlyActivity;
+    const pct = early?.comparison?.pct;
+    stats.appendChild(h("span", { className: "trend-badge stable",
+      text: early?.status === "preliminary" ? pct != null ? `~${fmtPct(pct)} 24h` : "24h activity" : early?.status === "stale" ? "History stale" : "Building history",
+      attrs: { title: early?.reason ?? vm.seasonalAnalysis?.reason ?? "Not enough comparable history" },
+    }));
   }
 
   append(
