@@ -1,5 +1,5 @@
 // tests/storage.test.ts
-import { beforeEach, describe, it, expect } from "vitest";
+import { beforeEach, describe, it, expect, vi, type MockInstance } from "vitest";
 import {
   getGames,
   addGame,
@@ -10,6 +10,10 @@ import {
   getGameSettings,
   saveGameSettings,
   getCache,
+  getLastFetchAttemptTime,
+  setLastFetchAttemptTime,
+  getLastFetchTime,
+  setLastFetchTime,
   setCache,
   clearAllData,
   MAX_GAMES,
@@ -17,8 +21,45 @@ import {
   FETCH_INTERVAL_MINUTES,
   TRACKING_RETENTION_DAYS,
 } from "../src/utils/storage.js";
-import type { Game, Snapshot } from "../src/types/index.js";
-import { _resetDbForTesting, idbGetSnapshots, idbSaveSnapshot } from "../src/utils/idb-storage.js";
+import {
+  AppDetailsSchema,
+  MessageResponseSchema,
+  type Game,
+  type Snapshot,
+} from "../src/types/index.js";
+import {
+  _resetDbForTesting,
+  idbGetSnapshots,
+  idbSaveSnapshot,
+} from "../src/utils/idb-storage.js";
+
+describe("refresh freshness persistence", () => {
+  it("keeps failed-attempt time separate from the last successful update", async () => {
+    await setLastFetchTime(100);
+    await setLastFetchAttemptTime(200);
+    expect(await getLastFetchTime()).toBe(100);
+    expect(await getLastFetchAttemptTime()).toBe(200);
+  });
+
+  it("preserves valid counts when their freshness metadata is malformed", async () => {
+    await chrome.storage.local.set({ sw_cache: {
+      "570": { current: 123, fetchedAt: 100, freshness: { current: { status: "invented" } } },
+    } });
+    expect((await getCache())["570"]).toMatchObject({ current: 123, fetchedAt: 100, freshness: {} });
+  });
+
+  it("preserves the acquisition time of failed cached fields", async () => {
+    const freshness = { current: { status: "error" as const, source: "steam" as const, acquiredAt: 100, attemptedAt: 200 } };
+    await setCache({ "570": { current: 123, fetchedAt: 100, freshness } });
+    expect((await getCache())["570"]?.freshness).toEqual(freshness);
+  });
+
+  it("handles missing and malformed last-attempt values", async () => {
+    expect(await getLastFetchAttemptTime()).toBe(0);
+    await chrome.storage.local.set({ sw_last_fetch_attempt: "invalid" });
+    expect(await getLastFetchAttemptTime()).toBe(0);
+  });
+});
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -49,6 +90,33 @@ beforeEach(async () => {
 describe("getGames", () => {
   it("returns empty array when no games stored", async () => {
     expect(await getGames()).toEqual([]);
+  });
+
+  it("recovers valid games when persisted siblings are malformed", async () => {
+    // Given
+    const valid = mockGame(1);
+    await chrome.storage.local.set({
+      sw_games: [valid, { appid: 2, name: "Invalid appid" }, null],
+    });
+
+    // When
+    const games = await getGames();
+
+    // Then
+    expect(games).toEqual([valid]);
+    expect((await chrome.storage.local.get("sw_games"))["sw_games"]).toEqual([valid]);
+  });
+
+  it.each([null, "not an array", { appid: "1" }])("recovers from an invalid top-level games container: %p", async (raw) => {
+    // Given
+    await chrome.storage.local.set({ sw_games: raw });
+
+    // When
+    const games = await getGames();
+
+    // Then
+    expect(games).toEqual([]);
+    expect((await chrome.storage.local.get("sw_games"))["sw_games"]).toEqual([]);
   });
 });
 
@@ -122,6 +190,56 @@ describe("removeGame", () => {
     const cache = await getCache();
     expect(cache["1"]).toBeUndefined();
   });
+
+  it("removes legacy data and clears a removed game's favorite", async () => {
+    await addGame(mockGame(1));
+    await chrome.storage.local.set({
+      sw_snaps_1: [{ ts: 1, current: 100 }],
+      sw_settings: { ...DEFAULT_SETTINGS, badgeFavoriteAppid: "1" },
+    });
+
+    await removeGame("1");
+
+    const stored = await chrome.storage.local.get(["sw_snaps_1", "sw_settings"]);
+    expect(stored.sw_snaps_1).toBeUndefined();
+    expect((stored.sw_settings as Record<string, unknown>)["badgeFavoriteAppid"]).toBeUndefined();
+  });
+
+  it("keeps cleanup durable after a failed deletion and reconciles it on the next read", async () => {
+    await addGame(mockGame(1));
+    await idbSaveSnapshot("1", mockSnap(100));
+    const deleteSpy = vi.spyOn(await import("../src/utils/idb-storage.js"), "idbDeleteGameData")
+      .mockRejectedValueOnce(new Error("database unavailable"));
+
+    await expect(removeGame("1")).rejects.toThrow("database unavailable");
+    expect((await chrome.storage.local.get("sw_pending_game_cleanups")).sw_pending_game_cleanups).toEqual(["1"]);
+
+    deleteSpy.mockRestore();
+    await expect(getGames()).resolves.toEqual([]);
+    expect((await chrome.storage.local.get("sw_pending_game_cleanups")).sw_pending_game_cleanups).toBeUndefined();
+    await expect(idbGetSnapshots("1")).resolves.toEqual([]);
+  });
+
+  it("removes a zombie game during reconciliation when the initial games write failed", async () => {
+    await addGame(mockGame(1));
+    const storageSet = chrome.storage.local.set as unknown as MockInstance<
+      [items: Record<string, unknown>],
+      Promise<void>
+    >;
+    const originalSet = storageSet.getMockImplementation();
+    if (!originalSet) throw new Error("storage mock must expose its implementation");
+    storageSet.mockImplementation(async (items) => {
+      if ("sw_games" in items) throw new Error("storage unavailable");
+      await originalSet(items);
+    });
+
+    await expect(removeGame("1")).rejects.toThrow("storage unavailable");
+    expect((await chrome.storage.local.get("sw_pending_game_cleanups")).sw_pending_game_cleanups).toEqual(["1"]);
+
+    storageSet.mockRestore();
+    await expect(getGames()).resolves.toEqual([]);
+    expect((await chrome.storage.local.get("sw_pending_game_cleanups")).sw_pending_game_cleanups).toBeUndefined();
+  });
 });
 
 describe("updateGameImage", () => {
@@ -156,6 +274,45 @@ describe("getSettings", () => {
   it("returns defaults when nothing is stored", async () => {
     const s = await getSettings();
     expect(s).toEqual(DEFAULT_SETTINGS);
+  });
+
+  it("keeps valid settings while restoring malformed quiet-hour values", async () => {
+    // Given
+    await chrome.storage.local.set({
+      sw_settings: {
+        notificationsEnabled: false,
+        globalThresholdUp: 40,
+        quietHoursEnabled: true,
+        quietStart: "7:30",
+        quietEnd: "24:00",
+        quietDays: 0b0001010,
+      },
+    });
+
+    // When
+    const settings = await getSettings();
+
+    // Then
+    expect(settings.notificationsEnabled).toBe(false);
+    expect(settings.globalThresholdUp).toBe(40);
+    expect(settings.quietHoursEnabled).toBe(true);
+    expect(settings.quietStart).toBe(DEFAULT_SETTINGS.quietStart);
+    expect(settings.quietEnd).toBe(DEFAULT_SETTINGS.quietEnd);
+    expect(settings.quietDays).toBe(0b0001010);
+  });
+
+  it("retains strictly valid 24-hour quiet-hour values", async () => {
+    // Given
+    await chrome.storage.local.set({
+      sw_settings: { quietStart: "00:00", quietEnd: "23:59" },
+    });
+
+    // When
+    const settings = await getSettings();
+
+    // Then
+    expect(settings.quietStart).toBe("00:00");
+    expect(settings.quietEnd).toBe("23:59");
   });
 });
 
@@ -229,6 +386,57 @@ describe("getGameSettings / saveGameSettings", () => {
     expect(gs.thresholdUp).toBe(25);
     expect(gs.thresholdDown).toBe(-15);
   });
+
+  it("recovers valid per-game settings while dropping malformed fields", async () => {
+    // Given
+    await chrome.storage.local.set({
+      sw_gs_1: {
+        thresholdUp: 25,
+        thresholdDown: 15,
+        notifyThresholdPlayers: 1000,
+        notificationsEnabled: false,
+      },
+    });
+
+    // When
+    const settings = await getGameSettings("1");
+
+    // Then
+    expect(settings).toEqual({
+      thresholdUp: 25,
+      notifyThresholdPlayers: 1000,
+      notificationsEnabled: false,
+    });
+  });
+
+  it("does not persist non-finite or wrong-sign per-game thresholds", async () => {
+    // Given
+    await chrome.storage.local.set({
+      sw_gs_1: {
+        thresholdUp: Number.POSITIVE_INFINITY,
+        thresholdDown: 10,
+        notifyThresholdPlayers: -1,
+      },
+    });
+
+    // When
+    const settings = await getGameSettings("1");
+
+    // Then
+    expect(settings).toEqual({});
+  });
+
+  it.each([null, "not an object", []])("recovers from an invalid top-level per-game settings container: %p", async (raw) => {
+    // Given
+    await chrome.storage.local.set({ sw_gs_1: raw });
+
+    // When
+    const settings = await getGameSettings("1");
+
+    // Then
+    expect(settings).toEqual({});
+    expect((await chrome.storage.local.get("sw_gs_1"))["sw_gs_1"]).toEqual({});
+  });
 });
 
 // ── Cache ─────────────────────────────────────────────────────────────────────
@@ -253,6 +461,87 @@ describe("getCache / setCache", () => {
     const cache = await getCache();
     expect(cache["1"]!.current).toBe(100);
     expect(cache["2"]!.current).toBe(200);
+  });
+
+  it("recovers valid cache entries when persisted siblings are malformed", async () => {
+    // Given
+    const valid = { current: 100, fetchedAt: 1, peak: 200 };
+    await chrome.storage.local.set({
+      sw_cache: {
+        "1": valid,
+        "2": { current: "100", fetchedAt: 2 },
+      },
+    });
+
+    // When
+    const cache = await getCache();
+
+    // Then
+    expect(cache["1"]).toMatchObject(valid);
+    expect(cache["2"]).toBeUndefined();
+    expect((await chrome.storage.local.get("sw_cache"))["sw_cache"]).toEqual({ "1": valid });
+  });
+
+  it("drops a cache entry whose legacy peak is malformed", async () => {
+    // Given
+    await chrome.storage.local.set({
+      sw_cache: { "1": { current: 100, fetchedAt: 1, peak: "not a number" } },
+    });
+
+    // When
+    const cache = await getCache();
+
+    // Then
+    expect(cache["1"]).toBeUndefined();
+    expect((await chrome.storage.local.get("sw_cache"))["sw_cache"]).toEqual({});
+  });
+
+  it.each([null, "not an object", []])("recovers from an invalid top-level cache container: %p", async (raw) => {
+    // Given
+    await chrome.storage.local.set({ sw_cache: raw });
+
+    // When
+    const cache = await getCache();
+
+    // Then
+    expect(cache).toEqual({});
+    expect((await chrome.storage.local.get("sw_cache"))["sw_cache"]).toEqual({});
+  });
+
+  it("does not rewrite already normalized storage values", async () => {
+    // Given
+    const game = mockGame(1);
+    await chrome.storage.local.set({
+      sw_games: [game],
+      sw_settings: DEFAULT_SETTINGS,
+      sw_gs_1: { thresholdUp: 25 },
+      sw_cache: { "1": { current: 100, fetchedAt: 1, peak: 200 } },
+    });
+    vi.clearAllMocks();
+
+    // When
+    await Promise.all([getGames(), getSettings(), getGameSettings("1"), getCache()]);
+    await Promise.all([getGames(), getSettings(), getGameSettings("1"), getCache()]);
+
+    // Then
+    expect(chrome.storage.local.set).not.toHaveBeenCalled();
+  });
+});
+
+describe("shared response schemas", () => {
+  it("accepts the Steam app-details and runtime response contracts", () => {
+    // Given
+    const appDetails = {
+      "570": { success: true, data: { name: "Dota 2", capsule_image: "https://example.com/dota.jpg" } },
+    };
+
+    // When
+    const parsedAppDetails = AppDetailsSchema.safeParse(appDetails);
+    const parsedResponse = MessageResponseSchema.safeParse({ ok: false, error: "Fetch failed" });
+
+    // Then
+    expect(parsedAppDetails.success).toBe(true);
+    expect(parsedResponse.success).toBe(true);
   });
 });
 

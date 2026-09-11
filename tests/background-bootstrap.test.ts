@@ -1,197 +1,139 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Game, Settings, Snapshot } from "../src/types/index.js";
+import type { MessageRequest, MessageResponse } from "../src/types/index.js";
+
+type MessageListener = (
+  message: MessageRequest,
+  sender: chrome.runtime.MessageSender,
+  sendResponse: (response: MessageResponse) => void,
+) => boolean;
+
+type AlarmListener = (alarm: chrome.alarms.Alarm) => void;
 
 const mocks = vi.hoisted(() => ({
-  fetchCurrentPlayers: vi.fn(),
-  fetchSteamChartsBootstrap: vi.fn(),
-  fetchSteamChartsData: vi.fn(),
-  fetchSteamSpyData: vi.fn(),
-  fetchTwitchViewers: vi.fn(),
+  refresh: vi.fn<[], Promise<{ readonly ok: boolean; readonly error?: string }>>(),
+  migrate: vi.fn<[], Promise<void>>(),
   getGames: vi.fn(),
-  getSettings: vi.fn(),
-  getGameSettings: vi.fn(),
-  setCache: vi.fn(),
+  compactSnapshots: vi.fn(),
+  addMessageListener: vi.fn<[MessageListener], void>(),
+  addAlarmListener: vi.fn<[AlarmListener], void>(),
+  addInstalledListener: vi.fn<[(details: chrome.runtime.InstalledDetails) => void], void>(),
+  addStartupListener: vi.fn<[() => void], void>(),
+  clearAlarm: vi.fn(),
+  createAlarm: vi.fn(),
+  addStorageListener: vi.fn(),
   getCache: vi.fn(),
-  setLastFetchTime: vi.fn(),
-  idbBulkSaveSnapshots: vi.fn(),
-  idbSaveSnapshot: vi.fn(),
-  idbGetSnapshots: vi.fn(),
-  idbGetCooldown: vi.fn(),
-  idbSetCooldown: vi.fn(),
-  migrateToIndexedDB: vi.fn(),
-  computeTrend: vi.fn(),
-  fmtNumber: vi.fn(),
-  fmtBadge: vi.fn(),
+  getSettings: vi.fn(),
+  refreshBadge: vi.fn(),
 }));
 
-vi.mock("../src/utils/api.js", () => ({
-  fetchCurrentPlayers: mocks.fetchCurrentPlayers,
-  fetchSteamChartsBootstrap: mocks.fetchSteamChartsBootstrap,
-  fetchSteamChartsData: mocks.fetchSteamChartsData,
-  fetchSteamSpyData: mocks.fetchSteamSpyData,
-  fetchTwitchViewers: mocks.fetchTwitchViewers,
+vi.mock("../src/background/refreshCoordinator.js", () => ({
+  createRefreshCoordinator: () => ({ refresh: mocks.refresh }),
 }));
-
+vi.mock("../src/utils/migrate.js", () => ({ migrateToIndexedDB: mocks.migrate }));
 vi.mock("../src/utils/storage.js", () => ({
+  FETCH_INTERVAL_MINUTES: 5,
+  TRACKING_RETENTION_DAYS: 60,
   getGames: mocks.getGames,
-  getSettings: mocks.getSettings,
-  getGameSettings: mocks.getGameSettings,
-  setCache: mocks.setCache,
   getCache: mocks.getCache,
-  setLastFetchTime: mocks.setLastFetchTime,
+  getSettings: mocks.getSettings,
 }));
+vi.mock("../src/background/signals.js", () => ({ refreshBadgeFromCache: mocks.refreshBadge }));
+vi.mock("../src/utils/compaction.js", () => ({ compactSnapshots: mocks.compactSnapshots }));
 
-vi.mock("../src/utils/idb-storage.js", () => ({
-  idbBulkSaveSnapshots: mocks.idbBulkSaveSnapshots,
-  idbSaveSnapshot: mocks.idbSaveSnapshot,
-  idbGetSnapshots: mocks.idbGetSnapshots,
-  idbGetCooldown: mocks.idbGetCooldown,
-  idbSetCooldown: mocks.idbSetCooldown,
-}));
-
-vi.mock("../src/utils/migrate.js", () => ({
-  migrateToIndexedDB: mocks.migrateToIndexedDB,
-}));
-
-vi.mock("../src/utils/trend.js", () => ({
-  computeTrend: mocks.computeTrend,
-  fmtNumber: mocks.fmtNumber,
-  fmtBadge: mocks.fmtBadge,
-}));
-
-const game: Game = {
-  appid: "123",
-  name: "Half-Life",
-  image: "https://cdn.example.com/123.jpg",
-};
-
-const settings: Settings = {
-  notificationsEnabled: false,
-  globalThresholdUp: 30,
-  globalThresholdDown: -25,
-  quietHoursEnabled: false,
-  quietStart: "23:00",
-  quietEnd: "07:00",
-  quietDays: 0b1111111,
-};
-
-function primeChromeMocks(): void {
-  const chromeMock = globalThis.chrome as typeof chrome;
-  chromeMock.runtime.onInstalled = { addListener: vi.fn() };
-  chromeMock.runtime.onStartup = { addListener: vi.fn() };
-  chromeMock.runtime.onMessage = { addListener: vi.fn() };
-  chromeMock.alarms.onAlarm = { addListener: vi.fn() };
-  chromeMock.action = {
-    setBadgeText: vi.fn(),
-    setBadgeBackgroundColor: vi.fn(),
-    setBadgeTextColor: vi.fn(),
-  };
-}
-
-async function loadFetchNowListener(): Promise<(
-  message: { type: "FETCH_NOW" },
-  sender: unknown,
-  sendResponse: (response: { ok: boolean; error?: string }) => void,
-) => boolean> {
-  vi.resetModules();
-  primeChromeMocks();
-  await import("../src/background/index.js");
-  const listener = vi.mocked(chrome.runtime.onMessage.addListener).mock.calls[0]?.[0];
-  expect(listener).toBeTypeOf("function");
-  return listener as (
-    message: { type: "FETCH_NOW" },
-    sender: unknown,
-    sendResponse: (response: { ok: boolean; error?: string }) => void,
-  ) => boolean;
-}
-
-async function triggerFetchNow(): Promise<{ ok: boolean; error?: string }> {
-  const listener = await loadFetchNowListener();
-  return await new Promise<{ ok: boolean; error?: string }>((resolve) => {
-    const keepOpen = listener({ type: "FETCH_NOW" }, {}, (response) => resolve(response));
-    expect(keepOpen).toBe(true);
+function primeChrome(): void {
+  vi.stubGlobal("chrome", {
+    runtime: {
+      onInstalled: { addListener: mocks.addInstalledListener },
+      onStartup: { addListener: mocks.addStartupListener },
+      onMessage: { addListener: mocks.addMessageListener },
+    },
+    alarms: {
+      clear: mocks.clearAlarm,
+      create: mocks.createAlarm,
+      onAlarm: { addListener: mocks.addAlarmListener },
+    },
+    storage: { onChanged: { addListener: mocks.addStorageListener } },
   });
+}
+
+async function loadListeners(): Promise<{ readonly message: MessageListener; readonly alarm: AlarmListener }> {
+  vi.resetModules();
+  primeChrome();
+  await import("../src/background/index.js");
+  const message = mocks.addMessageListener.mock.calls[0]?.[0];
+  const alarm = mocks.addAlarmListener.mock.calls[0]?.[0];
+  if (!message || !alarm) throw new Error("Background listeners were not registered");
+  return { message, alarm };
 }
 
 beforeEach(() => {
-  primeChromeMocks();
-
-  mocks.fetchCurrentPlayers.mockResolvedValue(100);
-  mocks.fetchSteamChartsBootstrap.mockResolvedValue([]);
-  mocks.fetchSteamChartsData.mockResolvedValue({ current: 100, peak24h: 120, allTimePeak: 250 });
-  mocks.fetchSteamSpyData.mockResolvedValue({ peak: 200, name: game.name });
-  mocks.fetchTwitchViewers.mockResolvedValue(null);
-  mocks.getGames.mockResolvedValue([game]);
-  mocks.getSettings.mockResolvedValue(settings);
-  mocks.getGameSettings.mockResolvedValue({});
-  mocks.setCache.mockResolvedValue(undefined);
-  mocks.getCache.mockResolvedValue({});
-  mocks.setLastFetchTime.mockResolvedValue(undefined);
-  mocks.idbBulkSaveSnapshots.mockResolvedValue(undefined);
-  mocks.idbSaveSnapshot.mockResolvedValue(undefined);
-  mocks.idbGetSnapshots.mockResolvedValue([{ ts: 1, current: 90 }, { ts: 2, current: 100 }]);
-  mocks.idbGetCooldown.mockResolvedValue(null);
-  mocks.idbSetCooldown.mockResolvedValue(undefined);
-  mocks.migrateToIndexedDB.mockResolvedValue(undefined);
-  mocks.computeTrend.mockReturnValue(null);
-  mocks.fmtNumber.mockImplementation((n: number) => String(n));
-  mocks.fmtBadge.mockImplementation((n: number) => String(n));
+  vi.clearAllMocks();
+  mocks.refresh.mockResolvedValue({ ok: true });
+  mocks.migrate.mockResolvedValue(undefined);
+  mocks.getGames.mockResolvedValue([]);
+  mocks.compactSnapshots.mockResolvedValue(undefined);
+  mocks.getCache.mockResolvedValue({ "1": { current: 10, fetchedAt: 1 } });
+  mocks.getSettings.mockResolvedValue({ badgeFavoriteAppid: "1" });
 });
 
-describe("background bootstrap integration", () => {
-  it("runs bootstrap on first fetchGame call and sets sentinel before fetch", async () => {
-    const order: string[] = [];
-    const bootstrapSnaps: Snapshot[] = [{ ts: 10, current: 50 }];
-
-    mocks.idbSetCooldown.mockImplementation(async () => {
-      order.push("setCooldown");
-    });
-    mocks.fetchSteamChartsBootstrap.mockImplementation(async () => {
-      order.push("bootstrap");
-      return bootstrapSnaps;
+describe("background lifecycle", () => {
+  it("routes FETCH_NOW through the shared refresh coordinator", async () => {
+    const { message } = await loadListeners();
+    const response = await new Promise<MessageResponse>((resolve) => {
+      expect(message({ type: "FETCH_NOW" }, {}, resolve)).toBe(true);
     });
 
-    await expect(triggerFetchNow()).resolves.toEqual({ ok: true });
-
-    expect(mocks.idbGetCooldown).toHaveBeenCalledWith("bootstrap__123");
-    expect(mocks.idbSetCooldown).toHaveBeenCalledTimes(1);
-    expect(mocks.fetchSteamChartsBootstrap).toHaveBeenCalledWith("123");
-    expect(mocks.idbBulkSaveSnapshots).toHaveBeenCalledWith("123", bootstrapSnaps);
-    expect(order).toEqual(["setCooldown", "bootstrap"]);
+    expect(response).toEqual({ ok: true });
+    expect(mocks.refresh).toHaveBeenCalledTimes(1);
   });
 
-  it("skips bootstrap when cooldown already exists", async () => {
-    mocks.idbGetCooldown.mockResolvedValue(Date.now() + 60_000);
+  it("returns the coordinator failure without treating it as a successful refresh", async () => {
+    mocks.refresh.mockResolvedValue({ ok: false, error: "No current player counts were available." });
+    const { message } = await loadListeners();
+    const response = await new Promise<MessageResponse>((resolve) => {
+      message({ type: "FETCH_NOW" }, {}, resolve);
+    });
 
-    await expect(triggerFetchNow()).resolves.toEqual({ ok: true });
-
-    expect(mocks.fetchSteamChartsBootstrap).not.toHaveBeenCalled();
-    expect(mocks.idbBulkSaveSnapshots).not.toHaveBeenCalled();
-    expect(mocks.idbSetCooldown).not.toHaveBeenCalled();
+    expect(response).toEqual({ ok: false, error: "No current player counts were available." });
   });
 
-  it("does not block live snapshot save when bootstrap fails", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    mocks.fetchSteamChartsBootstrap.mockRejectedValue(new Error("boom"));
+  it("routes fetch alarms through the same coordinator", async () => {
+    const { alarm } = await loadListeners();
 
-    await expect(triggerFetchNow()).resolves.toEqual({ ok: true });
+    alarm({ name: "sw_fetch", scheduledTime: 1 } as chrome.alarms.Alarm);
+    await Promise.resolve();
 
-    expect(mocks.idbSaveSnapshot).toHaveBeenCalledTimes(1);
-    expect(mocks.idbSaveSnapshot).toHaveBeenCalledWith(
-      "123",
-      expect.objectContaining({ current: 100 }),
-    );
-
-    warn.mockRestore();
+    expect(mocks.refresh).toHaveBeenCalledTimes(1);
   });
 
-  it("does not bulk save when bootstrap returns no snapshots", async () => {
-    mocks.fetchSteamChartsBootstrap.mockResolvedValue([]);
+  it("refreshes the favorite badge from cache after local storage changes", async () => {
+    await loadListeners();
+    const listener = mocks.addStorageListener.mock.calls[0]?.[0];
+    if (!listener) throw new Error("Background did not register a storage listener");
+    listener({ sw_settings: { newValue: {} } }, "local");
+    await vi.waitFor(() => expect(mocks.refreshBadge).toHaveBeenCalledWith("1", { "1": { current: 10, fetchedAt: 1 } }));
+  });
 
-    await expect(triggerFetchNow()).resolves.toEqual({ ok: true });
+  it("refreshes for a favorite current-freshness cache change", async () => {
+    await loadListeners();
+    const listener = mocks.addStorageListener.mock.calls[0]?.[0];
+    if (!listener) throw new Error("Background did not register a storage listener");
+    listener({
+      sw_cache: {
+        oldValue: { "1": { current: 10, fetchedAt: 1 } },
+        newValue: { "1": { current: 10, fetchedAt: 1, freshness: { current: { source: "steam", status: "error", attemptedAt: 2 } } } },
+      },
+    }, "local");
+    await vi.waitFor(() => expect(mocks.refreshBadge).toHaveBeenCalledTimes(1));
+  });
 
-    expect(mocks.fetchSteamChartsBootstrap).toHaveBeenCalledWith("123");
-    expect(mocks.idbBulkSaveSnapshots).not.toHaveBeenCalled();
+  it("does not refresh the badge for an auxiliary-only cache change", async () => {
+    await loadListeners();
+    const listener = mocks.addStorageListener.mock.calls[0]?.[0];
+    if (!listener) throw new Error("Background did not register a storage listener");
+    listener({ sw_cache: { oldValue: { "1": { current: 10, fetchedAt: 1, peak24h: 20 } }, newValue: { "1": { current: 10, fetchedAt: 1, peak24h: 30 } } } }, "local");
+    await Promise.resolve();
+    expect(mocks.refreshBadge).not.toHaveBeenCalled();
   });
 });

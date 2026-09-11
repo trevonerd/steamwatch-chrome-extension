@@ -10,7 +10,7 @@ import {
 import type { GraphWindowKey, Snapshot } from "../src/types/index.js";
 
 function snaps(values: number[]): Snapshot[] {
-  return values.map((current, i) => ({ ts: Date.now() + i * 60_000, current }));
+  return values.map((current, i) => ({ ts: Date.now() - (values.length - i) * 60_000, current }));
 }
 
 // ── GraphWindowKey type expansion ────────────────────────────────────────────
@@ -131,12 +131,12 @@ describe("hasEnoughGraphHistory with windowMs = 0 (all window)", () => {
   it("returns true when exactly 6 snapshots exist for 'all' window", () => {
     const now = Date.now();
     const data: Snapshot[] = [
-      { ts: now - 100_000, current: 1 },
-      { ts: now - 80_000, current: 2 },
-      { ts: now - 60_000, current: 3 },
-      { ts: now - 40_000, current: 4 },
-      { ts: now - 20_000, current: 5 },
-      { ts: now - 1_000, current: 6 }, // span is only ~100s, but still true for 'all'
+      { ts: now - 6 * 3_600_000, current: 1, source: "steamcharts", granularity: "hourly" },
+      { ts: now - 5 * 3_600_000, current: 2, source: "steamcharts", granularity: "hourly" },
+      { ts: now - 4 * 3_600_000, current: 3, source: "steamcharts", granularity: "hourly" },
+      { ts: now - 3 * 3_600_000, current: 4, source: "steamcharts", granularity: "hourly" },
+      { ts: now - 2 * 3_600_000, current: 5, source: "steamcharts", granularity: "hourly" },
+      { ts: now - 3_600_000, current: 6, source: "steamcharts", granularity: "hourly" },
     ];
     expect(hasEnoughGraphHistory(data, 0)).toBe(true);
   });
@@ -144,12 +144,12 @@ describe("hasEnoughGraphHistory with windowMs = 0 (all window)", () => {
   it("returns true with 6+ snapshots, no span check required for 'all'", () => {
     const now = Date.now();
     const data: Snapshot[] = [
-      { ts: now - 300 * 86_400_000, current: 1 }, // 300 days ago
-      { ts: now - 200 * 86_400_000, current: 2 },
-      { ts: now - 100 * 86_400_000, current: 3 },
-      { ts: now - 50 * 86_400_000, current: 4 },
-      { ts: now - 10 * 86_400_000, current: 5 },
-      { ts: now, current: 6 }, // huge span
+      { ts: now - 300 * 86_400_000, current: 1, source: "steamcharts", granularity: "hourly" },
+      { ts: now - 200 * 86_400_000, current: 2, source: "steamcharts", granularity: "hourly" },
+      { ts: now - 100 * 86_400_000, current: 3, source: "steamcharts", granularity: "hourly" },
+      { ts: now - 50 * 86_400_000, current: 4, source: "steamcharts", granularity: "hourly" },
+      { ts: now - 10 * 86_400_000, current: 5, source: "steamcharts", granularity: "hourly" },
+      { ts: now - 3_600_000, current: 6, source: "steamcharts", granularity: "hourly" },
     ];
     expect(hasEnoughGraphHistory(data, 0)).toBe(true);
   });
@@ -184,7 +184,7 @@ describe("hasEnoughGraphHistory with regular windows (non-zero windowMs)", () =>
       { ts: now - 2 * 86_400_000, current: 5 },
       { ts: now - 0.1 * 86_400_000, current: 6 }, // span ≈ 6d > 5.25d
     ];
-    expect(hasEnoughGraphHistory(dataWithSpan, windowMs)).toBe(true);
+    expect(hasEnoughGraphHistory(dataWithSpan, windowMs)).toBe(false);
   });
 
   it("returns false for 24h window without 75% span", () => {

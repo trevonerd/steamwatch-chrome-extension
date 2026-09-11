@@ -4,61 +4,22 @@
 // Every response is validated with Zod before use.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { z } from "zod";
-import type { SearchResult, SteamChartsData, SteamSpyData, Snapshot } from "../types/index.js";
+import {
+  AppDetailsSchema,
+  ChartDataSchema,
+  PlayerCountSchema,
+  SteamSpySchema,
+  StoreSearchSchema,
+  TwitchGqlSchema,
+} from "../types/index.js";
+import type { ProviderResult, SearchResult, SteamChartsData, SteamSpyData, Snapshot } from "../types/index.js";
 import { formatError } from "./log.js";
+import { requestWithPolicy } from "./http.js";
 
 export const STEAM_CAPSULE_URL = (appid: string): string =>
   `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appid}/header.jpg`;
 
-// ── Schemas ───────────────────────────────────────────────────────────────────
-
-const PlayerCountSchema = z.object({
-  response: z.object({
-    player_count: z.number().int().nonnegative(),
-  }),
-});
-
-const StoreSearchSchema = z.object({
-  items: z
-    .array(
-      z.object({
-        id: z.number(),
-        name: z.string(),
-        tiny_image: z.string().optional(),
-        small_capsule_image: z.string().optional(),
-      })
-    )
-    .default([]),
-});
-
-const SteamSpySchema = z.object({
-  peak_ccu: z.number().default(0),
-  name:     z.string().default(""),
-});
-
-const TwitchGqlSchema = z.array(
-  z.object({
-    data: z.object({
-      game: z.object({
-        viewersCount: z.number().int().nonnegative(),
-      }).nullable(),
-    }).optional(),
-  })
-);
-
-const AppDetailsSchema = z.object({
-  [z.string()]: z.object({
-    success: z.boolean(),
-    data: z.object({
-      name: z.string(),
-      header_image: z.string().optional(),
-      capsule_image: z.string().optional(),
-    }).optional(),
-  }),
-});
-
-export const ChartDataSchema = z.array(z.tuple([z.number(), z.number()]));
+export { ChartDataSchema } from "../types/index.js";
 
 // ── Fetchers ──────────────────────────────────────────────────────────────────
 
@@ -66,17 +27,13 @@ export const ChartDataSchema = z.array(z.tuple([z.number(), z.number()]));
  * Fetch current concurrent player count from the Steam Web API.
  */
 export async function fetchCurrentPlayers(appid: string): Promise<number | null> {
-  try {
-    const res = await fetch(
-      `https://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1/?appid=${encodeURIComponent(appid)}`
-    );
-    if (!res.ok) return null;
-    const json: unknown = await res.json();
-    const parsed = PlayerCountSchema.safeParse(json);
-    return parsed.success ? parsed.data.response.player_count : null;
-  } catch (_error) {
-    return null;
-  }
+  const result = await requestWithPolicy({
+    url: `https://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1/?appid=${encodeURIComponent(appid)}`,
+    read: (response) => response.json(),
+  });
+  if (result.kind !== "response") return null;
+  const parsed = PlayerCountSchema.safeParse(result.value);
+  return parsed.success ? parsed.data.response.player_count : null;
 }
 
 /**
@@ -84,42 +41,38 @@ export async function fetchCurrentPlayers(appid: string): Promise<number | null>
  */
 export async function fetchSteamSpyData(appid: string): Promise<SteamSpyData> {
   const fallback: SteamSpyData = { peak: 0, name: "" };
-  try {
-    const res = await fetch(
-      `https://steamspy.com/api.php?request=appdetails&appid=${encodeURIComponent(appid)}`
-    );
-    if (!res.ok) return fallback;
-    const json: unknown = await res.json();
-    const parsed = SteamSpySchema.safeParse(json);
-    if (!parsed.success) return fallback;
-    return {
-      peak:      parsed.data.peak_ccu,
-      name:      parsed.data.name,
-    };
-  } catch (_error) {
-    return fallback;
+  const result = await fetchSteamSpyResult(appid);
+  return result.status === "ok" ? result.value : fallback;
+}
+
+export async function fetchSteamSpyResult(appid: string): Promise<ProviderResult<SteamSpyData>> {
+  const result = await requestWithPolicy({
+    url: `https://steamspy.com/api.php?request=appdetails&appid=${encodeURIComponent(appid)}`,
+    read: (response) => response.json(),
+  });
+  if (result.kind === "http-error") {
+    return result.status === 404
+      ? { status: "unavailable" }
+      : { status: "error", error: `SteamSpy HTTP ${result.status}` };
   }
+  if (result.kind === "error") return { status: "error", error: result.error };
+  const parsed = SteamSpySchema.safeParse(result.value);
+  if (!parsed.success) return { status: "error", error: "invalid SteamSpy response" };
+  return { status: "ok", value: { peak: parsed.data.peak_ccu, name: parsed.data.name } };
 }
 
 export async function fetchAppDetails(appid: string): Promise<{ name: string; image: string | null } | null> {
-  try {
-    const res = await fetch(`https://store.steampowered.com/api/appdetails?appids=${appid}`);
-    if (!res.ok) return null;
-    const raw: unknown = await res.json();
-    const parsed = AppDetailsSchema.safeParse(raw);
-    if (!parsed.success) return null;
-    const appData = parsed.data[appid];
-    if (!appData?.success || !appData.data) return null;
-    // Prefer capsule_image (231x87) — correct size for game cards.
-    // Fall back to header_image (460x215) if capsule_image unavailable.
-    const image = appData.data.capsule_image ?? appData.data.header_image ?? null;
-    return {
-      name: appData.data.name,
-      image,
-    };
-  } catch (_error) {
-    return null;
-  }
+  const result = await requestWithPolicy({
+    url: `https://store.steampowered.com/api/appdetails?appids=${appid}`,
+    read: (response) => response.json(),
+  });
+  if (result.kind !== "response") return null;
+  const parsed = AppDetailsSchema.safeParse(result.value);
+  if (!parsed.success) return null;
+  const appData = parsed.data[appid];
+  if (!appData?.success || !appData.data) return null;
+  const image = appData.data.capsule_image ?? appData.data.header_image ?? null;
+  return { name: appData.data.name, image };
 }
 
 export function parseSteamChartsData(html: string): SteamChartsData {
@@ -148,14 +101,23 @@ export function parseSteamChartsData(html: string): SteamChartsData {
 }
 
 export async function fetchSteamChartsData(appid: string): Promise<SteamChartsData> {
-  try {
-    const res = await fetch(`https://steamcharts.com/app/${encodeURIComponent(appid)}`);
-    if (!res.ok) return {};
-    const html = await res.text();
-    return parseSteamChartsData(html);
-  } catch (_error) {
-    return {};
+  const result = await fetchSteamChartsResult(appid);
+  return result.status === "ok" ? result.value : {};
+}
+
+export async function fetchSteamChartsResult(appid: string): Promise<ProviderResult<SteamChartsData>> {
+  const result = await requestWithPolicy({
+    url: `https://steamcharts.com/app/${encodeURIComponent(appid)}`,
+    read: (response) => response.text(),
+  });
+  if (result.kind === "http-error") {
+    return result.status === 404
+      ? { status: "unavailable" }
+      : { status: "error", error: `SteamCharts HTTP ${result.status}` };
   }
+  if (result.kind === "error") return { status: "error", error: result.error };
+  const data = parseSteamChartsData(result.value);
+  return Object.keys(data).length === 0 ? { status: "unavailable" } : { status: "ok", value: data };
 }
 
 /**
@@ -164,60 +126,89 @@ export async function fetchSteamChartsData(appid: string): Promise<SteamChartsDa
  * On any error, returns empty array and logs warning.
  */
 export async function fetchSteamChartsBootstrap(appid: string): Promise<Snapshot[]> {
-  try {
-    const res = await fetch(`https://steamcharts.com/app/${encodeURIComponent(appid)}/chart-data.json`);
-    if (!res.ok) {
-      console.warn(`[SteamWatch] Bootstrap chart-data.json returned ${res.status} for appid ${appid}`);
-      return [];
-    }
-    const json: unknown = await res.json();
-    const parsed = ChartDataSchema.safeParse(json);
-    if (!parsed.success) {
-      console.warn(`[SteamWatch] Bootstrap chart-data.json validation failed for appid ${appid}: ${formatError(parsed.error)}`);
-      return [];
-    }
-    
-    const snapshots = parsed.data
-      .filter(([ts]) => ts > 0)
-      .map(([ts, players]) => ({
-        ts,
-        current: Math.max(0, Math.round(players)),
-      }))
-      .sort((a, b) => a.ts - b.ts);
-    
-    return snapshots;
-  } catch (err) {
-    console.warn(`[SteamWatch] Bootstrap chart-data.json failed for appid ${appid}: ${formatError(err)}`);
-    return [];
+  const result = await fetchSteamChartsHistoryResult(appid);
+  if (result.status === "error") console.warn(`[SteamWatch] History failed for ${appid}: ${result.error}`);
+  return result.status === "ok" ? result.value : [];
+}
+
+export async function fetchSteamChartsHistoryResult(appid: string): Promise<ProviderResult<Snapshot[]>> {
+  const result = await requestWithPolicy({
+    url: `https://steamcharts.com/app/${encodeURIComponent(appid)}/chart-data.json`,
+    timeoutMs: 15_000,
+    read: (response) => response.json(),
+  });
+  if (result.kind === "http-error") {
+    return result.status === 404 ? { status: "unavailable" } : { status: "error", error: `SteamCharts HTTP ${result.status}` };
   }
+  if (result.kind === "error") {
+    return { status: "error", error: result.error };
+  }
+  const parsed = ChartDataSchema.safeParse(result.value);
+  if (!parsed.success) {
+    return { status: "error", error: `Invalid SteamCharts history: ${formatError(parsed.error)}` };
+  }
+  if (parsed.data.length === 0) return { status: "unavailable" };
+  const now = Date.now();
+  const entries = [...new Map(parsed.data
+    .filter(([ts, players]) => Number.isSafeInteger(ts) && ts > 0 && ts <= now && players >= 0)
+    .map(([ts, players]) => [ts, players] as const)).entries()]
+    .sort(([left], [right]) => left - right);
+  const snapshots: Snapshot[] = entries.map(([ts, players], index) => {
+    const previous = entries[index - 1]?.[0];
+    const next = entries[index + 1]?.[0];
+    const hourly = (previous !== undefined && ts - previous <= 2 * 3_600_000)
+      || (next !== undefined && next - ts <= 2 * 3_600_000);
+    const date = new Date(ts);
+    const monthBoundary = date.getUTCDate() === 1
+      && ts === Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1);
+    return {
+      ts,
+      current: Math.round(players),
+      source: "steamcharts",
+      granularity: hourly ? "hourly" : monthBoundary ? "monthly-peak" : "unknown",
+    };
+  });
+  return snapshots.length > 0 ? { status: "ok", value: snapshots } : { status: "error", error: "No valid historical observations" };
 }
 
 export async function fetchTwitchViewers(gameName: string): Promise<number | null> {
+  const result = await fetchTwitchResult(gameName);
+  return result.status === "ok" ? result.value : null;
+}
+
+export async function fetchTwitchResult(gameName: string): Promise<ProviderResult<number>> {
+  let error: string | undefined;
   for (const candidate of buildTwitchNameCandidates(gameName)) {
-    try {
-      const body = JSON.stringify([{
-        query: "query($name:String!){game(name:$name){viewersCount}}",
-        variables: { name: candidate },
-      }]);
-      const res = await fetch("https://gql.twitch.tv/gql", {
+    const body = JSON.stringify([{
+      query: "query($name:String!){game(name:$name){viewersCount}}",
+      variables: { name: candidate },
+    }]);
+    const result = await requestWithPolicy({
+      url: "https://gql.twitch.tv/gql",
+      init: {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Client-Id": "kimne78kx3ncx6brgo4mv6wki5h1ko",
         },
         body,
-      });
-      if (!res.ok) continue;
-      const json: unknown = await res.json();
-      const parsed = TwitchGqlSchema.safeParse(json);
-      if (!parsed.success) continue;
-      const viewers = parsed.data[0]?.data?.game?.viewersCount;
-      if (viewers != null) return viewers;
-    } catch (_error) {
-      // try next candidate
+      },
+      read: (response) => response.json(),
+    });
+    if (result.kind === "error") {
+      error = result.error;
+      continue;
     }
+    if (result.kind === "http-error") {
+      error = `Twitch HTTP ${result.status}`;
+      continue;
+    }
+    const parsed = TwitchGqlSchema.safeParse(result.value);
+    if (!parsed.success) return { status: "error", error: "invalid Twitch response" };
+    const viewers = parsed.data[0]?.data?.game?.viewersCount;
+    if (viewers !== undefined) return { status: "ok", value: viewers };
   }
-  return null;
+  return error === undefined ? { status: "unavailable" } : { status: "error", error };
 }
 
 /**
@@ -225,22 +216,18 @@ export async function fetchTwitchViewers(gameName: string): Promise<number | nul
  */
 export async function searchGames(query: string): Promise<SearchResult[]> {
   if (!query.trim()) return [];
-  try {
-    const res = await fetch(
-      `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(query)}&l=english&cc=US&f=games`
-    );
-    if (!res.ok) return [];
-    const json: unknown = await res.json();
-    const parsed = StoreSearchSchema.safeParse(json);
-    if (!parsed.success) return [];
-    return parsed.data.items.slice(0, 8).map((item) => ({
-      appid: String(item.id),
-      name:  item.name,
-      image: item.tiny_image || item.small_capsule_image || STEAM_CAPSULE_URL(String(item.id)),
-    }));
-  } catch (_error) {
-    return [];
-  }
+  const result = await requestWithPolicy({
+    url: `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(query)}&l=english&cc=US&f=games`,
+    read: (response) => response.json(),
+  });
+  if (result.kind !== "response") return [];
+  const parsed = StoreSearchSchema.safeParse(result.value);
+  if (!parsed.success) return [];
+  return parsed.data.items.slice(0, 8).map((item) => ({
+    appid: String(item.id),
+    name: item.name,
+    image: item.tiny_image || item.small_capsule_image || STEAM_CAPSULE_URL(String(item.id)),
+  }));
 }
 
 function matchStat(text: string, pattern: RegExp): number | undefined {
@@ -289,6 +276,7 @@ function buildTwitchNameCandidates(gameName: string): string[] {
   const trimmed = gameName.trim();
   const normalized = trimmed
     .replace(/[®™©]/g, "")
+    .replace(/[‘’]/g, "'")
     .replace(/\s+/g, " ")
     .trim();
   const withoutSubtitle = normalized

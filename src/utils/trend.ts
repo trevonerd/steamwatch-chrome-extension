@@ -1,235 +1,130 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// SteamWatch — src/utils/trend.ts
-// Pure functions: no side effects, no I/O, easy to test.
-// ─────────────────────────────────────────────────────────────────────────────
+import type { Snapshot, TrendResult } from "../types/index.js";
+import { HOUR_MS, hourlyCoverage, normalizeHourly } from "./series.js";
+import type { HourlyPoint } from "./series.js";
+import { analyzeSeasonalTrend } from "./seasonal.js";
 
-import type {
-  Snapshot,
-  TrendLevel,
-  TrendResult,
-} from "../types/index.js";
+export { analyzeSeasonalTrend, TREND_LEVELS } from "./seasonal.js";
 
-// ── Trend level table (order matters: highest first) ──────────────────────────
-
-export const TREND_LEVELS: readonly TrendLevel[] = [
-  { key: "EXPLOSION",  label: "Explosion!",   icon: "🚀🚀", cls: "explosion",  minPct: 50  },
-  { key: "STRONG_UP",  label: "Strong Rise",  icon: "🚀",   cls: "strong-up",  minPct: 20  },
-  { key: "UP",         label: "Rising",       icon: "📈",   cls: "up",         minPct: 5   },
-  { key: "STABLE",     label: "Stable",       icon: "➡️",   cls: "stable",     minPct: -5  },
-  { key: "DOWN",       label: "Declining",    icon: "📉",   cls: "down",       minPct: -20 },
-  { key: "STRONG_DOWN",label: "Strong Drop",  icon: "⬇️",   cls: "strong-down",minPct: -50 },
-] as const;
-
-// ── Core trend computation ────────────────────────────────────────────────────
-
-/**
- * Compare the average of the older half of snapshots vs the recent half,
- * using up to the last 24 hours of data (or all available data if less).
- *
- * This time-based split ensures the trend reflects the full trajectory:
- * - A game that peaked at 41 and collapsed to 8 will show STRONG_DOWN,
- *   because the older-half average (~25) dwarfs the recent-half average (~8).
- * - A game that surged from 30 to 50 000 will show EXPLOSION because the
- *   recent-half average far exceeds the older-half average.
- *
- * Returns null when fewer than 6 snapshots are available.
- */
-export function computeTrend(
-  snapshots: readonly Snapshot[],
-): TrendResult | null {
-  if (snapshots.length < 6) return null;
-
-  // Use last 24 h of data (or everything available).
-  const cutoff24h = Date.now() - 86_400_000;
-  const window = snapshots.filter((s) => s.ts >= cutoff24h);
-  const pool = window.length >= 6 ? window : snapshots.slice(-Math.max(6, snapshots.length));
-
-  if (pool.length < 6) return null;
-
-  // Split by time midpoint so each half represents an equal time span.
-  const tStart = pool[0]!.ts;
-  const tEnd   = pool[pool.length - 1]!.ts;
-  const tMid   = (tStart + tEnd) / 2;
-
-  const olderHalf  = pool.filter((s) => s.ts <= tMid);
-  const recentHalf = pool.filter((s) => s.ts > tMid);
-
-  if (olderHalf.length === 0 || recentHalf.length === 0) return null;
-
-  const prevAvg   = average(olderHalf.map((s) => s.current));
-  const recentAvg = average(recentHalf.map((s) => s.current));
-
-  if (prevAvg === 0) return null;
-
-  const pct   = round1(((recentAvg - prevAvg) / prevAvg) * 100);
-  const delta = Math.round(recentAvg - prevAvg);
-  const level = TREND_LEVELS.find((t) => pct >= t.minPct) ?? TREND_LEVELS[TREND_LEVELS.length - 1]!;
-
-  return { level, pct, delta };
+export function computeTrend(snapshots: readonly Snapshot[], now = Date.now()): TrendResult | null {
+  const analysis = analyzeSeasonalTrend(snapshots, now);
+  return analysis.status === "ready" ? analysis.trend : null;
 }
 
-/**
- * Average concurrent players over the past 24 hours.
- *
- * Returns `null` when fewer than 6 snapshots exist, or when they span less
- * than 95% of the 24-hour window (brand-new install guard).
- */
-export function compute24hAvg(snapshots: readonly Snapshot[]): number | null {
-  const recent = getReliable24hSnapshots(snapshots);
-  if (!recent) return null;
-
-  return Math.round(average(recent.map((s) => s.current)));
+export function compute24hAvg(snapshots: readonly Snapshot[], now = Date.now()): number | null {
+  return compute24hAvgFromHourly(normalizeHourly(snapshots, now), now);
 }
 
-export function compute24hGain(snapshots: readonly Snapshot[]): number | null {
-  const recent = getReliable24hSnapshots(snapshots);
-  if (!recent) return null;
-
-  const first = recent[0];
-  const last = recent.at(-1);
-  if (!first || !last) return null;
-  return last.current - first.current;
+export function compute24hAvgFromHourly(points: readonly HourlyPoint[], now: number): number | null {
+  const values = reliableWindowFromHourly(points, 24, now);
+  return values ? Math.round(average(values)) : null;
 }
 
-export function computeRetentionAvg(
-  snapshots: readonly Snapshot[],
-  retentionDays: number,
-): number | null {
-  const recent = getRetentionWindowSnapshots(snapshots, retentionDays * 86_400_000);
-  if (!recent) return null;
-  return Math.round(average(recent.map((s) => s.current)));
+export function compute24hGain(snapshots: readonly Snapshot[], now = Date.now()): number | null {
+  return compute24hGainFromHourly(normalizeHourly(snapshots, now), now);
 }
 
-export function computeRetentionGain(
-  snapshots: readonly Snapshot[],
-  retentionDays: number,
-): number | null {
-  const recent = getRetentionWindowSnapshots(snapshots, retentionDays * 86_400_000);
-  if (!recent) return null;
-  const first = recent[0];
-  const last = recent.at(-1);
-  if (!first || !last) return null;
-  return last.current - first.current;
+export function compute24hGainFromHourly(points: readonly HourlyPoint[], now: number): number | null {
+  const values = reliableWindowFromHourly(points, 24, now);
+  return gain(values);
 }
 
-export function computeRetentionWindowLabel(
-  snapshots: readonly Snapshot[],
-  retentionDays: number,
-): string {
-  const recent = getRetentionWindowSnapshots(snapshots, retentionDays * 86_400_000);
-  if (!recent) return `${retentionDays}d`;
+export function computeRetentionAvg(snapshots: readonly Snapshot[], days: number, now = Date.now()): number | null {
+  return computeRetentionAvgFromHourly(normalizeHourly(snapshots, now), days, now);
+}
 
-  const first = recent[0];
-  const last = recent.at(-1);
-  if (!first || !last) return `${retentionDays}d`;
+export function computeRetentionAvgFromHourly(points: readonly HourlyPoint[], days: number, now: number): number | null {
+  const values = reliableWindowFromHourly(points, days * 24, now);
+  return values ? Math.round(average(values)) : null;
+}
 
-  const spanMs = Math.max(0, last.ts - first.ts);
-  if (spanMs < 86_400_000) {
-    const hours = Math.max(1, Math.round(spanMs / 3_600_000));
-    return `${hours}h`;
-  }
+export function computeRetentionGain(snapshots: readonly Snapshot[], days: number, now = Date.now()): number | null {
+  return computeRetentionGainFromHourly(normalizeHourly(snapshots, now), days, now);
+}
 
-  const days = Math.min(retentionDays, Math.max(1, Math.round(spanMs / 86_400_000)));
+export function computeRetentionGainFromHourly(points: readonly HourlyPoint[], days: number, now: number): number | null {
+  const values = reliableWindowFromHourly(points, days * 24, now);
+  return gain(values);
+}
+
+export function computeRetentionWindowLabel(snapshots: readonly Snapshot[], days: number, now = Date.now()): string {
+  void snapshots;
+  void now;
   return `${days}d`;
 }
 
 export function computeLocalPeak(snapshots: readonly Snapshot[]): number | null {
-  if (snapshots.length === 0) return null;
-  return Math.max(...snapshots.map((s) => s.current));
+  const values = snapshots.filter(isComparableExtrema).map((snapshot) => snapshot.aggregate?.max ?? snapshot.current);
+  return values.length === 0 ? null : Math.max(...values);
 }
 
-export function computeWindowMin(
-  snapshots: readonly Snapshot[],
-): { value: number; timestamp: number } | null {
-  if (snapshots.length === 0) return null;
-
-  // Check if any snapshot has non-zero current value
-  const hasNonZero = snapshots.some((s) => s.current > 0);
-
-  // If at least one non-zero exists, filter out zeros (failed fetches)
-  const filtered = hasNonZero ? snapshots.filter((s) => s.current > 0) : snapshots;
-
-  let min = filtered[0]!;
-  for (const snap of filtered) {
-    if (snap.current < min.current) min = snap;
-  }
-  return { value: min.current, timestamp: min.ts };
+export function computeWindowMin(snapshots: readonly Snapshot[]): { value: number; timestamp: number } | null {
+  return snapshots.filter(isComparableExtrema).reduce<{ value: number; timestamp: number } | null>((minimum, snapshot) => {
+    const value = snapshot.aggregate?.min ?? snapshot.current;
+    const timestamp = snapshot.aggregate?.minTs ?? snapshot.ts;
+    return !minimum || value < minimum.value ? { value, timestamp } : minimum;
+  }, null);
 }
 
-// ── Formatting ────────────────────────────────────────────────────────────────
-
-export function fmtNumber(n: number | null | undefined): string {
-  if (n == null) return "—";
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
-  if (n >= 1_000)     return `${(n / 1_000).toFixed(1)}k`;
-  return n.toLocaleString("en-US");
+export function fmtNumber(value: number | null | undefined): string {
+  if (value == null) return "—";
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}k`;
+  return value.toLocaleString("en-US");
 }
 
-/** Short format for browser badge text (max ~4 chars). */
-export function fmtBadge(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`; // "1.2M"
-  if (n >= 10_000)    return `${Math.round(n / 1_000)}k`;       // "42k"
-  if (n >= 1_000)     return `${(n / 1_000).toFixed(1)}k`;      // "1.2k"
-  return String(n);                                               // "999"
+export function fmtBadge(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 10_000) return `${Math.round(value / 1_000)}k`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}k`;
+  return String(value);
 }
 
-export function fmtPct(pct: number): string {
-  return pct >= 0 ? `+${pct}%` : `${pct}%`;
+export function fmtPct(value: number): string { return value >= 0 ? `+${value}%` : `${value}%`; }
+export function fmtTimeAgo(timestamp: number, now = Date.now()): string {
+  const minutes = Math.round((now - timestamp) / 60_000);
+  if (minutes <= 0) return "just now";
+  if (minutes === 1) return "1m ago";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  return hours === 1 ? "1h ago" : `${hours}h ago`;
 }
 
-export function fmtTimeAgo(ts: number): string {
-  const mins = Math.round((Date.now() - ts) / 60_000);
-  if (mins === 0) return "just now";
-  if (mins === 1) return "1m ago";
-  if (mins < 60)  return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  return hrs === 1 ? "1h ago" : `${hrs}h ago`;
+export function computeLatestChangePct(snapshots: readonly Snapshot[], now = Date.now()): number | null {
+  return computeLatestChangePctFromHourly(normalizeHourly(snapshots, now), now);
 }
 
-// ── Private helpers ───────────────────────────────────────────────────────────
-
-function average(values: number[]): number {
-  if (values.length === 0) return 0;
-  return values.reduce((a, b) => a + b, 0) / values.length;
+export function computeLatestChangePctFromHourly(points: readonly HourlyPoint[], now: number): number | null {
+  const previous = points.at(-2);
+  const latest = points.at(-1);
+  return !previous || !latest || latest.hour - previous.hour !== HOUR_MS || now - latest.observedAt > 2 * HOUR_MS || previous.value === 0
+    ? null
+    : Math.round(((latest.value - previous.value) / previous.value) * 1_000) / 10;
 }
 
-function getReliable24hSnapshots(snapshots: readonly Snapshot[]): Snapshot[] | null {
-  return getReliableWindowSnapshots(snapshots, 86_400_000);
+function reliableWindowFromHourly(points: readonly HourlyPoint[], hours: number, now: number): readonly number[] | null {
+  const end = Math.floor(now / HOUR_MS) * HOUR_MS;
+  const start = end - hours * HOUR_MS;
+  const window = points.filter((point) => point.hour >= start && point.hour < end);
+  return hasReliableCoverage(window, start, end, hours) ? window.map((point) => point.value) : null;
 }
 
-function getReliableWindowSnapshots(
-  snapshots: readonly Snapshot[],
-  windowMs: number,
-): Snapshot[] | null {
-  const cutoff = Date.now() - windowMs;
-  const recent = snapshots.filter((s) => s.ts > cutoff);
-  if (recent.length < 6) return null;
+function average(values: readonly number[]): number { return values.reduce((sum, value) => sum + value, 0) / values.length; }
 
-  // Require close to full-window coverage before exposing aggregate stats.
-  const span = (recent.at(-1)?.ts ?? 0) - (recent[0]?.ts ?? 0);
-  if (span < windowMs * 0.95) return null;
-
-  return recent;
+function gain(values: readonly number[] | null): number | null {
+  const first = values?.[0];
+  const last = values?.at(-1);
+  return first === undefined || last === undefined ? null : last - first;
 }
 
-function getRetentionWindowSnapshots(
-  snapshots: readonly Snapshot[],
-  windowMs: number,
-): Snapshot[] | null {
-  const cutoff = Date.now() - windowMs;
-  const recent = snapshots.filter((s) => s.ts > cutoff);
-  if (recent.length < 6) return null;
-  return recent;
+function isComparableExtrema(snapshot: Snapshot): boolean {
+  return (snapshot.source === "steam" || snapshot.source === "steamcharts")
+    && snapshot.granularity !== "unknown" && snapshot.granularity !== "monthly-peak";
 }
 
-function round1(n: number): number {
-  return Math.round(n * 10) / 10;
-}
-
-export function computeLatestChangePct(snapshots: readonly Snapshot[]): number | null {
-  if (snapshots.length < 2) return null;
-  const prev = snapshots[snapshots.length - 2]!;
-  const last = snapshots[snapshots.length - 1]!;
-  if (prev.current === 0) return null;
-  return round1(((last.current - prev.current) / prev.current) * 100);
+function hasReliableCoverage(points: readonly HourlyPoint[], start: number, end: number, hours: number): boolean {
+  const first = points[0]?.hour;
+  const last = points.at(-1)?.hour;
+  if (hourlyCoverage(points, start, end) < 0.8 || first === undefined || last === undefined || first > start + HOUR_MS || last < end - 2 * HOUR_MS) return false;
+  if (points.some((point, index) => index > 0 && point.hour - (points[index - 1]?.hour ?? point.hour) > 3 * HOUR_MS)) return false;
+  return hours < 48 || Array.from({ length: Math.ceil(hours / 24) }, (_, day) => hourlyCoverage(points, start + day * 24 * HOUR_MS, Math.min(end, start + (day + 1) * 24 * HOUR_MS)) >= 0.8).every(Boolean);
 }

@@ -20,33 +20,31 @@ const cache: Record<string, CachedData> = {
     localAllTimePeak: 953_271,
     fetchedAt: Date.now() - 5 * 60_000,
     twitchViewers: 12_345,
+    freshness: {
+      allTimePeak: {
+        source: "steamcharts",
+        status: "ok",
+        acquiredAt: Date.now() - 5 * 60_000,
+        attemptedAt: Date.now() - 5 * 60_000,
+      },
+    },
   },
 };
 
-function makeSnaps(values: number[], intervalMs = 15 * 60_000): Snapshot[] {
-  const base = Date.now() - values.length * intervalMs;
-  return values.map((current, i) => ({ ts: base + i * intervalMs, current }));
+function chartSnapshot(ts: number, current: number): Snapshot {
+  return { ts, current, source: "steamcharts", granularity: "hourly" };
 }
 
-// snaps12 spans 12 × 15min = 3h → enough for 24h median (span ≥ 30min, count ≥ 3)
+function makeSnaps(values: number[], intervalMs = 60 * 60_000): Snapshot[] {
+  const base = Date.now() - values.length * intervalMs;
+  return values.map((current, i) => chartSnapshot(base + i * intervalMs, current));
+}
+
 const snaps12 = makeSnaps([30000,31000,32000,33000,34000,35000,36000,37000,38000,39000,40000,41000]);
 const snaps5  = makeSnaps([1000, 2000, 3000, 4000, 5000]);
-const daySnaps: Snapshot[] = [
-  { ts: Date.now() - 23.5 * 3_600_000, current: 28_000 },
-  { ts: Date.now() - 20 * 3_600_000, current: 29_000 },
-  { ts: Date.now() - 16 * 3_600_000, current: 30_000 },
-  { ts: Date.now() - 12 * 3_600_000, current: 31_000 },
-  { ts: Date.now() - 8 * 3_600_000, current: 32_000 },
-  { ts: Date.now() - 5 * 60_000, current: 33_000 },
-];
-const retentionSnaps: Snapshot[] = [
-  { ts: Date.now() - 2.95 * 86_400_000, current: 26_000 },
-  { ts: Date.now() - 2.4 * 86_400_000, current: 27_000 },
-  { ts: Date.now() - 1.8 * 86_400_000, current: 28_000 },
-  { ts: Date.now() - 1.2 * 86_400_000, current: 29_000 },
-  { ts: Date.now() - 0.6 * 86_400_000, current: 30_000 },
-  { ts: Date.now() - 5 * 60_000, current: 31_000 },
-];
+const daySnaps = makeSnaps(Array.from({ length: 24 }, (_, hour) => 28_000 + hour));
+const retentionSnaps = makeSnaps(Array.from({ length: 72 }, (_, hour) => 26_000 + hour));
+const seasonalSnaps = makeSnaps(Array.from({ length: 35 * 24 }, (_, hour) => 20_000 + hour));
 const emptySnaps: Snapshot[] = [];
 
 // ── buildCardViewModel ─────────────────────────────────────────────────────────
@@ -67,21 +65,23 @@ describe("buildCardViewModel", () => {
     expect(vm.current).toBeNull();
   });
 
-  it("allTimePeak is max of fetched peak, localAllTimePeak and snapshot peak", () => {
+  it("exposes a SteamCharts all-time peak as provider ATH", () => {
     const vm = buildCardViewModel(game, cache, snaps12, 7);
     expect(vm.allTimePeak).toBe(953_271);
   });
 
-  it("allTimePeak uses localAllTimePeak when fetched all-time peak is 0", () => {
+  it("keeps a provider ATH of zero distinct from the observed local peak", () => {
     const cacheLocalPeak = { "1245620": { ...cache["1245620"]!, allTimePeak: 0, localAllTimePeak: 80_000 } };
     const vm = buildCardViewModel(game, cacheLocalPeak, snaps12, 7);
-    expect(vm.allTimePeak).toBe(80_000);
+    expect(vm.allTimePeak).toBe(0);
+    expect(vm.observedPeak).toBe(41_000);
   });
 
-  it("allTimePeak falls back to local snapshot max when all peak sources are 0", () => {
+  it("does not present an observed local peak as a provider ATH", () => {
     const cacheNoPeak = { "1245620": { ...cache["1245620"]!, allTimePeak: 0, localAllTimePeak: 0 } };
     const vm = buildCardViewModel(game, cacheNoPeak, snaps12, 7);
-    expect(vm.allTimePeak).toBe(41_000);
+    expect(vm.allTimePeak).toBe(0);
+    expect(vm.observedPeak).toBe(41_000);
   });
 
   it("allTimePeak is null when both cache peak and snaps are empty", () => {
@@ -90,23 +90,23 @@ describe("buildCardViewModel", () => {
   });
 
   it("reads the 24h peak from cache", () => {
-    const vm = buildCardViewModel(game, cache, snaps12, 7);
+    const vm = buildCardViewModel(game, cache, seasonalSnaps, 7);
     expect(vm.peak24h).toBe(45_000);
   });
 
   it("computes displayTrendPct from smoothed trend when available", () => {
-    const vm = buildCardViewModel(game, cache, snaps12, 7);
+    const vm = buildCardViewModel(game, cache, seasonalSnaps, 7);
     expect(vm.displayTrendPct).not.toBeNull();
     expect(vm.displayTrendIcon).not.toBeNull();
     expect(vm.displayTrendCls).toBe(vm.trend?.level.cls ?? "stable");
   });
 
-  it("falls back to latest interval change when smoothed trend is unavailable", () => {
+  it("does not substitute a latest interval change for an unavailable seasonal trend", () => {
     const vm = buildCardViewModel(game, cache, snaps5, 7);
     expect(vm.trend).toBeNull();
     expect(vm.latestChangePct).not.toBeNull();
-    expect(vm.displayTrendPct).toBe(vm.latestChangePct);
-    expect(vm.displayTrendIcon).toBe("↕");
+    expect(vm.displayTrendPct).toBeNull();
+    expect(vm.displayTrendIcon).toBeNull();
   });
 
   it("displayTrendPct is null when there is not enough history", () => {
@@ -126,8 +126,8 @@ describe("buildCardViewModel", () => {
     expect(vmNoPeak.peak24h).toBeNull();
   });
 
-  it("computes trend for 6+ snapshots", () => {
-    const vm = buildCardViewModel(game, cache, snaps12, 7);
+  it("computes trend only from qualified seasonal coverage", () => {
+    const vm = buildCardViewModel(game, cache, seasonalSnaps, 7);
     expect(vm.trend).not.toBeNull();
   });
 
@@ -148,7 +148,7 @@ describe("buildCardViewModel", () => {
     }
   });
 
-  it("computes latest change for 2+ snapshots", () => {
+  it("computes latest change for fresh adjacent qualified hours", () => {
     const vm = buildCardViewModel(game, cache, snaps12, 7);
     expect(vm.latestChangePct).not.toBeNull();
   });
@@ -173,20 +173,20 @@ describe("buildCardViewModel", () => {
     expect(vm.fetchedAt).toBe(0);
   });
 
-  it("snaps reference is unchanged", () => {
+  it("exposes the qualified snapshot sequence", () => {
     const vm = buildCardViewModel(game, cache, snaps12, 7);
-    expect(vm.snaps).toBe(snaps12);
+    expect(vm.snaps).toEqual(snaps12);
   });
 
   it("keeps fetched supplementary metrics on the view model", () => {
     const vm = buildCardViewModel(game, cache, snaps12, 7);
     expect(vm.twitchViewers).toBe(12_345);
     expect(vm.retentionDays).toBe(7);
-    expect(vm.retentionWindowLabel).toBe("3h");
+    expect(vm.retentionWindowLabel).toBe("7d");
     expect(vm.availableGraphWindows).toEqual([
       { key: "all", label: "all", windowMs: 0 },
     ]);
-    expect(vm.defaultGraphWindow).toBeNull();
+    expect(vm.defaultGraphWindow).toBe("all");
   });
 
   it("only exposes 24h local stats when there is reliable 24h coverage", () => {
@@ -205,43 +205,14 @@ describe("buildCardViewModel", () => {
   });
 
   it("exposes available graph windows and picks 24h as default when possible", () => {
-    const graphSnaps: Snapshot[] = [
-      { ts: Date.now() - 2.95 * 86_400_000, current: 20_000 },
-      { ts: Date.now() - 2.4 * 86_400_000, current: 21_000 },
-      { ts: Date.now() - 1.9 * 86_400_000, current: 22_000 },
-      { ts: Date.now() - 23 * 3_600_000, current: 23_000 },
-      { ts: Date.now() - 18 * 3_600_000, current: 24_000 },
-      { ts: Date.now() - 12 * 3_600_000, current: 25_000 },
-      { ts: Date.now() - 6 * 3_600_000, current: 26_000 },
-      { ts: Date.now() - 2 * 3_600_000, current: 27_000 },
-      { ts: Date.now() - 10 * 60_000, current: 28_000 },
-    ];
+    const graphSnaps = makeSnaps(Array.from({ length: 72 }, (_, hour) => 20_000 + hour));
     const vm = buildCardViewModel(game, cache, graphSnaps, 7);
     expect(vm.availableGraphWindows.map((window) => window.key)).toEqual(["24h", "3d", "all"]);
     expect(vm.defaultGraphWindow).toBe("24h");
   });
 
   it("includes the retention window when there is enough long-range coverage", () => {
-    const retentionGraphSnaps: Snapshot[] = [
-      { ts: Date.now() - 6.9 * 86_400_000, current: 19_000 },
-      { ts: Date.now() - 6.1 * 86_400_000, current: 20_000 },
-      { ts: Date.now() - 5.2 * 86_400_000, current: 21_000 },
-      { ts: Date.now() - 4.1 * 86_400_000, current: 22_000 },
-      { ts: Date.now() - 2.95 * 86_400_000, current: 23_000 },
-      { ts: Date.now() - 2.1 * 86_400_000, current: 24_000 },
-      { ts: Date.now() - 23 * 3_600_000, current: 24_200 },
-      { ts: Date.now() - 18 * 3_600_000, current: 24_300 },
-      { ts: Date.now() - 12 * 3_600_000, current: 24_400 },
-      { ts: Date.now() - 8 * 3_600_000, current: 24_450 },
-      { ts: Date.now() - 2.8 * 3_600_000, current: 24_500 },
-      { ts: Date.now() - 2.2 * 3_600_000, current: 24_700 },
-      { ts: Date.now() - 1.8 * 3_600_000, current: 24_900 },
-      { ts: Date.now() - 1.2 * 3_600_000, current: 25_100 },
-      { ts: Date.now() - 45 * 60_000, current: 25_300 },
-      { ts: Date.now() - 20 * 60_000, current: 25_600 },
-      { ts: Date.now() - 1.1 * 86_400_000, current: 25_000 },
-      { ts: Date.now() - 10 * 60_000, current: 26_000 },
-    ];
+    const retentionGraphSnaps = makeSnaps(Array.from({ length: 7 * 24 }, (_, hour) => 19_000 + hour));
     const vm = buildCardViewModel(game, cache, retentionGraphSnaps, 7);
     expect(vm.availableGraphWindows.map((window) => window.key)).toEqual(["24h", "3d", "7d", "all"]);
   });
@@ -252,13 +223,13 @@ describe("buildCardViewModel", () => {
 describe("buildCardViewModel — record lows", () => {
   it("computes recordLow for active window from filtered snapshots", () => {
     const thirtyDaySnaps: Snapshot[] = [
-      { ts: Date.now() - 29.9 * 86_400_000, current: 30_000 },
-      { ts: Date.now() - 25 * 86_400_000, current: 35_000 },
-      { ts: Date.now() - 15 * 86_400_000, current: 10_000 },
-      { ts: Date.now() - 5 * 86_400_000, current: 50_000 },
-      { ts: Date.now() - 1 * 86_400_000, current: 45_000 },
-      { ts: Date.now() - 12 * 3_600_000, current: 40_000 },
-      { ts: Date.now() - 1 * 3_600_000, current: 45_000 },
+      chartSnapshot(Date.now() - 29.9 * 86_400_000, 30_000),
+      chartSnapshot(Date.now() - 25 * 86_400_000, 35_000),
+      chartSnapshot(Date.now() - 15 * 86_400_000, 10_000),
+      chartSnapshot(Date.now() - 5 * 86_400_000, 50_000),
+      chartSnapshot(Date.now() - 1 * 86_400_000, 45_000),
+      chartSnapshot(Date.now() - 12 * 3_600_000, 40_000),
+      chartSnapshot(Date.now() - 1 * 3_600_000, 45_000),
     ];
     const vm = buildCardViewModel(game, cache, thirtyDaySnaps, 30);
     expect(vm.recordLow).not.toBeNull();
@@ -267,11 +238,11 @@ describe("buildCardViewModel — record lows", () => {
 
   it("computes allTimeLow from all snapshots regardless of active window", () => {
     const thirtyDaySnaps: Snapshot[] = [
-      { ts: Date.now() - 29.9 * 86_400_000, current: 30_000 },
-      { ts: Date.now() - 15 * 86_400_000, current: 10_000 },
-      { ts: Date.now() - 1 * 86_400_000, current: 50_000 },
-      { ts: Date.now() - 12 * 3_600_000, current: 40_000 },
-      { ts: Date.now() - 1 * 3_600_000, current: 45_000 },
+      chartSnapshot(Date.now() - 29.9 * 86_400_000, 30_000),
+      chartSnapshot(Date.now() - 15 * 86_400_000, 10_000),
+      chartSnapshot(Date.now() - 1 * 86_400_000, 50_000),
+      chartSnapshot(Date.now() - 12 * 3_600_000, 40_000),
+      chartSnapshot(Date.now() - 1 * 3_600_000, 45_000),
     ];
     const vm = buildCardViewModel(game, cache, thirtyDaySnaps, 30);
     expect(vm.allTimeLow).not.toBeNull();
@@ -280,8 +251,8 @@ describe("buildCardViewModel — record lows", () => {
 
   it("recordLow reflects the available window (all if that's the only option)", () => {
     const oldSnaps: Snapshot[] = [
-      { ts: Date.now() - 29 * 86_400_000, current: 20_000 },
-      { ts: Date.now() - 25 * 86_400_000, current: 25_000 },
+      chartSnapshot(Date.now() - 29 * 86_400_000, 20_000),
+      chartSnapshot(Date.now() - 25 * 86_400_000, 25_000),
     ];
     const vm = buildCardViewModel(game, cache, oldSnaps, 30);
     expect(vm.recordLow).not.toBeNull();
@@ -295,15 +266,15 @@ describe("buildCardViewModel — record lows", () => {
 
   it("recordLow and allTimeLow can differ when data spans multiple windows", () => {
     const graphSnaps: Snapshot[] = [
-      { ts: Date.now() - 2.95 * 86_400_000, current: 5_000 },
-      { ts: Date.now() - 2.4 * 86_400_000, current: 30_000 },
-      { ts: Date.now() - 1.9 * 86_400_000, current: 22_000 },
-      { ts: Date.now() - 23 * 3_600_000, current: 23_000 },
-      { ts: Date.now() - 18 * 3_600_000, current: 24_000 },
-      { ts: Date.now() - 12 * 3_600_000, current: 45_000 },
-      { ts: Date.now() - 6 * 3_600_000, current: 26_000 },
-      { ts: Date.now() - 2 * 3_600_000, current: 27_000 },
-      { ts: Date.now() - 10 * 60_000, current: 28_000 },
+      chartSnapshot(Date.now() - 2.95 * 86_400_000, 5_000),
+      chartSnapshot(Date.now() - 2.4 * 86_400_000, 30_000),
+      chartSnapshot(Date.now() - 1.9 * 86_400_000, 22_000),
+      chartSnapshot(Date.now() - 23 * 3_600_000, 23_000),
+      chartSnapshot(Date.now() - 18 * 3_600_000, 24_000),
+      chartSnapshot(Date.now() - 12 * 3_600_000, 45_000),
+      chartSnapshot(Date.now() - 6 * 3_600_000, 26_000),
+      chartSnapshot(Date.now() - 2 * 3_600_000, 27_000),
+      chartSnapshot(Date.now() - 10 * 60_000, 28_000),
     ];
     const vm = buildCardViewModel(game, cache, graphSnaps, 7);
     expect(vm.recordLow).not.toBeNull();
@@ -313,10 +284,10 @@ describe("buildCardViewModel — record lows", () => {
 
   it("recordLow includes correct timestamp", () => {
     const snapsWithTimestamps: Snapshot[] = [
-      { ts: Date.now() - 5 * 86_400_000, current: 50_000 },
-      { ts: Date.now() - 2 * 86_400_000, current: 30_000 },
-      { ts: Date.now() - 12 * 3_600_000, current: 25_000 }, // min in window
-      { ts: Date.now() - 1 * 3_600_000, current: 45_000 },
+      chartSnapshot(Date.now() - 5 * 86_400_000, 50_000),
+      chartSnapshot(Date.now() - 2 * 86_400_000, 30_000),
+      chartSnapshot(Date.now() - 12 * 3_600_000, 25_000), // min in window
+      chartSnapshot(Date.now() - 1 * 3_600_000, 45_000),
     ];
     const vm = buildCardViewModel(game, cache, snapsWithTimestamps, 7);
     expect(vm.recordLow?.value).toBe(25_000);
@@ -325,10 +296,10 @@ describe("buildCardViewModel — record lows", () => {
 
   it("allTimeLow includes correct timestamp", () => {
     const snapsWithTimestamps: Snapshot[] = [
-      { ts: Date.now() - 29 * 86_400_000, current: 10_000 }, // absolute min
-      { ts: Date.now() - 5 * 86_400_000, current: 50_000 },
-      { ts: Date.now() - 12 * 3_600_000, current: 25_000 },
-      { ts: Date.now() - 1 * 3_600_000, current: 45_000 },
+      chartSnapshot(Date.now() - 29 * 86_400_000, 10_000), // absolute min
+      chartSnapshot(Date.now() - 5 * 86_400_000, 50_000),
+      chartSnapshot(Date.now() - 12 * 3_600_000, 25_000),
+      chartSnapshot(Date.now() - 1 * 3_600_000, 45_000),
     ];
     const vm = buildCardViewModel(game, cache, snapsWithTimestamps, 7);
     expect(vm.allTimeLow?.value).toBe(10_000);

@@ -1,4 +1,4 @@
-import type { CachedData, Game } from "../types/index.js";
+import type { CachedData, Game, MetricFreshness } from "../types/index.js";
 
 export interface CycleCacheResult {
   readonly game: Game;
@@ -13,6 +13,7 @@ export interface BuildCachedDataInput {
   readonly prevCache?: CachedData;
   readonly fetchedAt: number;
   readonly twitchViewers: number | null;
+  readonly freshness?: MetricFreshness;
 }
 
 export function mergeCycleCache(
@@ -37,10 +38,11 @@ export function buildCachedData(input: BuildCachedDataInput): CachedData {
     prevCache,
     fetchedAt,
     twitchViewers,
+    freshness,
   } = input;
 
   const prevLocalPeak = prevCache?.localAllTimePeak ?? prevCache?.current ?? 0;
-  const localAllTimePeak = Math.max(prevLocalPeak, currentPlayers, allTimePeak ?? 0);
+  const localAllTimePeak = Math.max(prevLocalPeak, currentPlayers);
 
   return {
     current: currentPlayers,
@@ -61,6 +63,9 @@ export function buildCachedData(input: BuildCachedDataInput): CachedData {
         : {}),
     localAllTimePeak,
     fetchedAt,
+    ...(freshness || prevCache?.freshness
+      ? { freshness: { ...prevCache?.freshness, ...freshness } }
+      : {}),
     ...(twitchViewers != null
       ? { twitchViewers }
       : prevCache?.twitchViewers != null

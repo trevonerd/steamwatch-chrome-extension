@@ -14,8 +14,9 @@ import { searchGames } from "../utils/api.js";
 import { append, clear, h, mustGet, show, hide } from "../utils/html.js";
 import { buildDayMask, maskToDays, DAY_LABELS } from "../utils/quietHours.js";
 import { formatError } from "../utils/log.js";
+import { requestRefresh } from "../utils/messages.js";
 import { wireThumbFallback, thumbColor } from "../popup/thumb.js";
-import type { Game, GameSettings, MessageRequest, MessageResponse } from "../types/index.js";
+import type { Game, GameSettings } from "../types/index.js";
 
 const gameSearchEl = mustGet<HTMLInputElement>("gameSearch");
 const acListEl = mustGet<HTMLUListElement>("autocompleteList");
@@ -149,6 +150,10 @@ function buildPerGameSettings(game: Game, gs: GameSettings, row: HTMLLIElement):
     "e.g. 100000",
   );
   absoluteInput.min = "0";
+  absoluteInput.removeAttribute("max");
+  const belowInput = numberInput(`gs-below-${game.appid}`, "notifyBelowPlayers", gs.notifyBelowPlayers ?? "", "e.g. 1000");
+  belowInput.min = "0";
+  belowInput.removeAttribute("max");
 
   const notifyInput = h("input", {
     attrs: {
@@ -176,7 +181,8 @@ function buildPerGameSettings(game: Game, gs: GameSettings, row: HTMLLIElement):
         children: [
           settingGroup(`Rise threshold (%)`, riseInput, "Overrides global rise alert %."),
           settingGroup(`Drop threshold (%)`, dropInput, "Overrides global drop alert %."),
-          settingGroup("Absolute player alert", absoluteInput, "Alert when concurrent players hit this number."),
+          settingGroup("Above player count", absoluteInput, "Notify after crossing above and remaining there for 5 minutes."),
+          settingGroup("Below player count", belowInput, "Notify after crossing below and remaining there for 5 minutes."),
         ],
       }),
       h("div", {
@@ -229,15 +235,20 @@ function settingGroup(label: string, input: HTMLInputElement, hint: string): HTM
 }
 
 async function savePerGameSettings(appid: string, row: HTMLLIElement, saveBtn: HTMLButtonElement): Promise<void> {
+  for (const input of Array.from(row.querySelectorAll<HTMLInputElement>("input[type=number]"))) {
+    if (!input.reportValidity()) return;
+  }
   const partial: GameSettings = {};
   const upVal = row.querySelector<HTMLInputElement>("[name='thresholdUp']")?.value ?? "";
   const downVal = row.querySelector<HTMLInputElement>("[name='thresholdDown']")?.value ?? "";
   const absVal = row.querySelector<HTMLInputElement>("[name='notifyThresholdPlayers']")?.value ?? "";
+  const belowVal = row.querySelector<HTMLInputElement>("[name='notifyBelowPlayers']")?.value ?? "";
   const notifOn = row.querySelector<HTMLInputElement>("[name='notificationsEnabled']")?.checked ?? true;
 
   if (upVal) partial.thresholdUp = Number(upVal);
   if (downVal) partial.thresholdDown = -Math.abs(Number(downVal));
   if (absVal) partial.notifyThresholdPlayers = Number(absVal);
+  if (belowVal) partial.notifyBelowPlayers = Number(belowVal);
   partial.notificationsEnabled = notifOn;
 
   try {
@@ -384,7 +395,7 @@ async function addSearchResult(result: Game): Promise<void> {
   try {
     await addGame({ appid: result.appid, name: result.name, image: result.image });
     await renderGames();
-    chrome.runtime.sendMessage<MessageRequest, MessageResponse>({ type: "FETCH_NOW" }).catch((err: unknown) => {
+    void requestRefresh().catch((err: unknown) => {
       console.warn(`[SteamWatch options] Background fetch after add failed: ${formatError(err)}`);
     });
   } catch (err) {
@@ -526,7 +537,8 @@ function chevronIcon(): SVGSVGElement {
 }
 
 async function init(): Promise<void> {
-  const { version } = chrome.runtime.getManifest();
+  const manifest = chrome.runtime.getManifest();
+  const version = manifest.version_name ?? manifest.version;
   const sidebarVersionEl = document.getElementById("sidebarVersion");
   const aboutVersionEl = document.getElementById("aboutVersion");
   if (sidebarVersionEl) sidebarVersionEl.textContent = `v${version}`;

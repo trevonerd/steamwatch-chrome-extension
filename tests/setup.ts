@@ -45,6 +45,7 @@ Object.defineProperty(globalThis, "chrome", {
   value: {
     storage: storageMock,
     runtime: {
+      getManifest: vi.fn(() => ({ manifest_version: 3, name: "SteamWatch", version: "0.14.7" })),
       sendMessage: vi.fn(),
       openOptionsPage: vi.fn(),
     },
@@ -58,6 +59,7 @@ Object.defineProperty(globalThis, "chrome", {
     },
   },
   writable: true,
+  configurable: true,
 });
 
 // ── Reset storage between tests ───────────────────────────────────────────────

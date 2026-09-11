@@ -2,6 +2,109 @@
 
 All notable changes to this project are documented in this file.
 
+## [2.0.0-beta.7] - 2026-09-11
+
+### Fixed
+- Restore rising, falling and near-flat colors per plotted interval in popup graphs and shared images, independently of the seasonal trend badge
+- Keep missing-history gaps disconnected and isolated observations visible in both renderers
+
+### Changed
+- Visible version advances to `2.0.0-beta.7`; Chrome numeric upgrade version is `2.0.1.7`
+
+### Added
+- Regression coverage for alternating colors, grouped strokes, gaps and zero player counts
+
+## [2.0.0-beta.6] - 2026-09-11
+
+### Fixed
+- Steam titles containing typographic apostrophes now resolve their Twitch categories, including Black Flag and Civilization VI
+
+### Added
+- Opt-in real-provider diagnostic with a recorded random selection, raw response capture, period coverage and historical replay checks
+- Regression replay for ten actual Steam titles: nine distinct hourly histories and Resynced's empty response
+- Pending-notification persistence test across a worker module reload and an isolated Chrome worker-restart harness
+
+### Changed
+- Visible version advances to `2.0.0-beta.6`; Chrome numeric upgrade version is `2.0.1.6`
+
+## [2.0.0-beta.5] - 2026-09-11
+
+### Fixed
+- Black Flag Resynced's missing provider history is distinguished from failed imports; legacy points cannot create confident averages, trends, or a provider all-time record
+- Selected graph periods update their statistics from the same snapshot revision; missing intervals remain gaps and timestamps control horizontal spacing
+- Favorite changes update the badge from cache without starting a full network refresh
+
+### Added
+- Seasonal trend compares seven complete days with matching hours and weekdays in preceding weeks, gated by source quality, coverage, freshness, and baseline size
+- Independent above/below player-count and seasonal threshold crossings with persistence, hysteresis, restart-safe pending events, delivery retry, and quiet hours
+- Observed peak labels, timestamp tooltips, hourly coverage, explicit unavailable trend states, and gap-aware shared images
+
+### Changed
+- Hourly normalization is reused across each card's analytics; graph output has a global point budget and rendering yields between games
+- Visible version is `2.0.0-beta.5`; Chrome's numeric upgrade version is `2.0.1.5`
+- Trend thresholds remain beta defaults: synthetic qualification does not establish real-world false-alert rates
+
+## [2.0.0-beta.4] - 2026-09-11
+
+### Fixed
+- Manual Refresh retries failed history imports immediately instead of waiting for the automatic retry delay
+- Active imports, completed-history cache lifetimes, removed games, and provider rate limits remain protected
+- Unavailable periods remain visible with an explanation in the details panel
+
+### Added
+- Recorded Black Flag history regression covering failed import, recovery, and all six graph periods
+
+### Changed
+- Chrome numeric version is `2.0.1.4`; this is a history-recovery fix before phase 4, not the seasonal-trend update
+
+## [2.0.0-beta.3] - 2026-09-11
+
+### Added
+- Shared refresh coordinator with progressive live counts, independent metadata jobs, and per-field source/freshness
+- Visible-popup refresh every minute and storage events that update open details after remote history imports
+- Bounded HTTP concurrency, response/body deadlines, one transient retry, and per-origin Retry-After cooldowns
+
+### Fixed
+- Overlapping opening, manual, and alarm requests share the same live cycle
+- Failed requests preserve the age of retained data; live attempt and success timestamps are separate
+- Popup shows cached values during automatic refresh and preserves expanded details and selected periods
+- Missing Twitch metadata no longer causes repeated live refreshes on every popup opening
+
+### Changed
+- Visible beta version stays on `2.0.0-beta.N`; Chrome numeric version is `2.0.1.3` to remain above the previously loaded build
+- This checkpoint covers phase 3; seasonal trends, notification rules, and full graph semantics remain in subsequent phases
+
+## [2.0.1-beta.2] - 2026-09-11
+
+### Fixed
+- Failed history imports can retry instead of being blocked by a ten-year bootstrap marker
+- Historical imports are deduplicated and committed with their completion state
+- Snapshot compaction preserves aggregate extrema and weights in an atomic transaction
+- Interrupted game removal and legacy migration can resume without silently marking failures complete
+- Minimum and maximum calculations retain compacted extrema, including real zero-player observations
+
+### Changed
+- Persist source and resolution for new samples; retain legacy data with unknown quality
+- Refresh remote history periodically and distinguish hourly observations from monthly peaks
+- Imported and legacy history alone cannot qualify trend notifications
+- Chrome numeric version is `2.0.1`; trend seasonality and the complete graph redesign remain in later phases
+
+## [2.0.0-beta.1] - 2026-09-11
+
+### Added
+- Visible installed build version in the popup footer and beta labels in Options/About
+- Strict TypeScript check required before production builds
+
+### Fixed
+- Steam AppDetails responses with dynamic app IDs are parsed correctly
+- Malformed stored games, cache entries, notification overrides, and quiet-hour values are recovered at the storage boundary
+- Popup update status remains visible and uses the timestamp after hydration
+- Background refresh failures show an error and allow retry instead of appearing successful
+
+### Changed
+- Started the v2 beta sequence for individually identifiable review builds; Chrome numeric version is `2.0.0`
+- This beta includes phase 1 only; history, trend, and notification redesign remain pending
+
 ## [0.14.7] - 2026-06-04
 
 ### Changed

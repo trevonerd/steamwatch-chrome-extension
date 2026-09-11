@@ -10,26 +10,27 @@
 // No side effects. No I/O. Fully unit-testable.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import type { Game, CachedData, Snapshot, CardViewModel } from "../types/index.js";
+import type { Game, CachedData, Snapshot, CardViewModel, BootstrapStatus } from "../types/index.js";
 import {
-  compute24hAvg,
-  compute24hGain,
-  computeRetentionAvg,
-  computeRetentionGain,
+  compute24hAvgFromHourly,
+  compute24hGainFromHourly,
+  computeRetentionAvgFromHourly,
+  computeRetentionGainFromHourly,
   computeRetentionWindowLabel,
-  computeTrend,
-  computeLatestChangePct,
+  computeLatestChangePctFromHourly,
   computeLocalPeak,
   computeWindowMin,
 } from "./trend.js";
 import {
   buildAvailableGraphWindows,
-  hasEnoughGraphHistory,
+  hasEnoughGraphHistoryFromHourly,
   sparklineColor,
   filterSnapshotsByWindow,
   GRAPH_WINDOW_MS,
 } from "./sparkline.js";
 import { formatError } from "./log.js";
+import { isQualifiedSnapshot, normalizeHourly } from "./series.js";
+import { analyzeSeasonalTrendFromHourly } from "./seasonal.js";
 
 /**
  * Build the complete view model for a single game card.
@@ -46,44 +47,47 @@ export function buildCardViewModel(
   cache: Record<string, CachedData>,
   snaps: readonly Snapshot[],
   retentionDays: number,
+  now = Date.now(),
 ): CardViewModel {
   const data      = cache[game.appid];
-  const legacyPeak = (data as (CachedData & { peak?: number }) | undefined)?.peak ?? 0;
+  const observations = snaps.filter((snapshot) => isQualifiedSnapshot(snapshot) && snapshot.ts <= now);
+  const hourly = normalizeHourly(observations, now);
   const current   = data?.current ?? null;
-  const localSnap = computeLocalPeak(snaps);
-  const stored    = data?.localAllTimePeak ?? 0;
-  const rawAllTimePeak = Math.max(data?.allTimePeak ?? 0, legacyPeak, stored, localSnap ?? 0);
-  const allTimePeak = rawAllTimePeak > 0 ? rawAllTimePeak : null;
+  const observedPeak = computeLocalPeak(observations);
+  const allTimePeak = data?.freshness?.allTimePeak?.source === "steamcharts" && data.freshness.allTimePeak.acquiredAt !== undefined ? data.allTimePeak ?? null : null;
   const peak24h    = data?.peak24h ?? null;
-  const avg24h     = compute24hAvg(snaps);
-  const gain24h    = compute24hGain(snaps);
-  const retentionAvg = computeRetentionAvg(snaps, retentionDays);
-  const retentionGain = computeRetentionGain(snaps, retentionDays);
-  const retentionWindowLabel = computeRetentionWindowLabel(snaps, retentionDays);
+  const avg24h     = compute24hAvgFromHourly(hourly, now);
+  const gain24h    = compute24hGainFromHourly(hourly, now);
+  const retentionAvg = computeRetentionAvgFromHourly(hourly, retentionDays, now);
+  const retentionGain = computeRetentionGainFromHourly(hourly, retentionDays, now);
+  const retentionWindowLabel = computeRetentionWindowLabel(snaps, retentionDays, now);
   const availableGraphWindows = buildAvailableGraphWindows(retentionDays)
-    .filter((window) => hasEnoughGraphHistory(snaps, window.windowMs));
-  const defaultGraphWindow = availableGraphWindows.find((w) => w.key !== "all")?.key ?? null;
-  const trend      = computeTrend(snaps);
+    .filter((window) => hasEnoughGraphHistoryFromHourly(hourly, window.windowMs, now));
+  const defaultGraphWindow = availableGraphWindows.find((w) => w.key !== "all")?.key ?? availableGraphWindows[0]?.key ?? null;
+  const seasonalAnalysis = analyzeSeasonalTrendFromHourly(hourly, now);
+  const trend = seasonalAnalysis.status === "ready" ? seasonalAnalysis.trend : null;
   const trendCls   = trend?.level.cls ?? "stable";
-  const latestChangePct = computeLatestChangePct(snaps);
-  const display = computeDisplayTrend(trend, latestChangePct);
-  const stroke     = sparklineColor(snaps);
+  const latestChangePct = computeLatestChangePctFromHourly(hourly, now);
+  const stroke = trend ? sparklineColor(observations) : "#00c8ff";
 
   const activeWindowKey = defaultGraphWindow ?? "all";
   const activeWindowMs = GRAPH_WINDOW_MS[activeWindowKey];
-  const filteredSnapsForWindow = filterSnapshotsByWindow(snaps, activeWindowMs);
+  const filteredSnapsForWindow = filterSnapshotsByWindow(observations, activeWindowMs, now);
   const recordLow = computeWindowMin(filteredSnapsForWindow);
-  const allTimeLow = computeWindowMin(snaps);
+  const allTimeLow = computeWindowMin(observations);
 
   return {
     game,
+    evaluatedAt: now,
     current,
     peak24h,
     allTimePeak,
-    ...(data?.allTimePeakLabel ? { allTimePeakLabel: data.allTimePeakLabel } : {}),
-    displayTrendPct: display.pct,
-    displayTrendIcon: display.icon,
-    displayTrendCls: display.cls,
+    ...(allTimePeak !== null && data?.allTimePeakLabel ? { allTimePeakLabel: data.allTimePeakLabel } : {}),
+    ...(observedPeak !== null ? { observedPeak } : {}),
+    seasonalAnalysis,
+    displayTrendPct: trend?.pct ?? null,
+    displayTrendIcon: trend?.level.icon ?? null,
+    displayTrendCls: trend?.level.cls ?? "stable",
     ...(avg24h != null ? { avg24h } : {}),
     ...(gain24h != null ? { gain24h } : {}),
     ...(retentionAvg != null ? { retentionAvg } : {}),
@@ -95,9 +99,10 @@ export function buildCardViewModel(
     trend,
     trendCls,
     latestChangePct,
-    snaps,
+    snaps: observations,
     sparklineStroke: stroke,
     fetchedAt: data?.fetchedAt ?? 0,
+    ...(data?.freshness ? { freshness: data.freshness } : {}),
     ...(data?.twitchViewers != null ? { twitchViewers: data.twitchViewers } : {}),
     recordLow,
     allTimeLow,
@@ -105,29 +110,6 @@ export function buildCardViewModel(
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
-
-function computeDisplayTrend(
-  trend: ReturnType<typeof computeTrend>,
-  latestChangePct: number | null,
-): { pct: number | null; icon: string | null; cls: string } {
-  if (trend) {
-    return { pct: trend.pct, icon: trend.level.icon, cls: trend.level.cls };
-  }
-  if (latestChangePct != null) {
-    // When we don't yet have enough history for a smoothed trend,
-    // fall back to the last-interval change (still useful early on).
-    return { pct: latestChangePct, icon: "↕", cls: pctToBadgeClass(latestChangePct) };
-  }
-  return { pct: null, icon: null, cls: "stable" };
-}
-
-function pctToBadgeClass(pct: number): string {
-  if (pct >= 8) return "strong-up";
-  if (pct >= 2) return "up";
-  if (pct <= -8) return "strong-down";
-  if (pct <= -2) return "down";
-  return "stable";
-}
 
 /**
  * Build view models for all games in parallel.
@@ -139,8 +121,10 @@ export async function buildAllViewModels(
   cache: Record<string, CachedData>,
   loadSnaps: (appid: string) => Promise<Snapshot[]>,
   retentionDays: number,
+  loadHistoryStatus?: (appid: string) => Promise<BootstrapStatus | null>,
 ): Promise<CardViewModel[]> {
-  return Promise.all(
+  const now = Date.now();
+  const loaded = await Promise.all(
     games.map(async (game) => {
       let snaps: Snapshot[] = [];
       try {
@@ -149,7 +133,20 @@ export async function buildAllViewModels(
         console.warn(`[SteamWatch] Failed to load snapshots for appid ${game.appid}: ${formatError(error)}`);
         snaps = [];
       }
-      return buildCardViewModel(game, cache, snaps, retentionDays);
+      let historyStatus: BootstrapStatus | null = null;
+      try {
+        historyStatus = loadHistoryStatus ? await loadHistoryStatus(game.appid) : null;
+      } catch (error) {
+        console.warn(`[SteamWatch] Failed to load history status for ${game.appid}: ${formatError(error)}`);
+      }
+      return { game, snaps, historyStatus };
     }),
   );
+  const models: CardViewModel[] = [];
+  for (const [index, item] of loaded.entries()) {
+    // Yield between games so ten full histories do not occupy one UI task.
+    if (index > 0) await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    models.push({ ...buildCardViewModel(item.game, cache, item.snaps, retentionDays, now), ...(item.historyStatus ? { historyStatus: item.historyStatus } : {}) });
+  }
+  return models;
 }

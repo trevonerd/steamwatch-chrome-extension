@@ -4,13 +4,25 @@
 // Every function is typed, handles errors, and never silently fails.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { z } from "zod";
+import { deleteNotificationState } from "../background/notificationState.js";
+import {
+  CachedDataSchema,
+  GameSchema,
+  GameSettingsSchema,
+  SettingsSchema,
+} from "../types/index.js";
 import type {
   Game,
   CachedData,
   Settings,
   GameSettings,
 } from "../types/index.js";
-import { idbClearAllData, idbDeleteSnapshots } from "./idb-storage.js";
+import {
+  idbClearAllData,
+  idbClearGameTombstone,
+  idbDeleteGameData,
+} from "./idb-storage.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -36,9 +48,14 @@ const KEYS = {
   settings: "sw_settings",
   cache: "sw_cache",
   gameSettingsPrefix: "sw_gs_", // per-game: sw_gs_{appid}
+  legacySnapshotsPrefix: "sw_snaps_",
+  pendingGameCleanups: "sw_pending_game_cleanups",
   /** Unix ms timestamp of the last successful global fetch cycle. */
   lastFetchTime: "sw_last_fetch",
+  lastFetchAttempt: "sw_last_fetch_attempt",
 } as const;
+
+let pendingGameCleanupPromise: Promise<void> | null = null;
 
 // ── Generic helpers ───────────────────────────────────────────────────────────
 
@@ -51,10 +68,81 @@ async function set(key: string, value: unknown): Promise<void> {
   await chrome.storage.local.set({ [key]: value });
 }
 
+function toRecord(raw: unknown): Record<string, unknown> | undefined {
+  const parsed = z.record(z.unknown()).safeParse(raw);
+  return parsed.success ? parsed.data : undefined;
+}
+
+function hasChanged(raw: unknown, normalized: unknown): boolean {
+  return !isEquivalent(raw, normalized);
+}
+
+function isEquivalent(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+  if (Array.isArray(left) && Array.isArray(right)) {
+    return left.length === right.length && left.every((item, index) => isEquivalent(item, right[index]));
+  }
+
+  const leftRecord = toRecord(left);
+  const rightRecord = toRecord(right);
+  if (!leftRecord || !rightRecord) return false;
+
+  const leftEntries = Object.entries(leftRecord);
+  const rightEntries = Object.entries(rightRecord);
+  return leftEntries.length === rightEntries.length
+    && leftEntries.every(([key, value]) => key in rightRecord && isEquivalent(value, rightRecord[key]));
+}
+
+function parseCachedData(raw: unknown): CachedData | undefined {
+  const parsed = CachedDataSchema.safeParse(raw);
+  if (!parsed.success) return undefined;
+
+  const {
+    current,
+    peak,
+    peak24h,
+    allTimePeak,
+    allTimePeakLabel,
+    localAllTimePeak,
+    fetchedAt,
+    twitchViewers,
+    freshness,
+    ...legacyFields
+  } = parsed.data;
+  return {
+    ...legacyFields,
+    current,
+    ...(peak !== undefined ? { peak } : {}),
+    ...(peak24h !== undefined ? { peak24h } : {}),
+    ...(allTimePeak !== undefined ? { allTimePeak } : {}),
+    ...(allTimePeakLabel !== undefined ? { allTimePeakLabel } : {}),
+    ...(localAllTimePeak !== undefined ? { localAllTimePeak } : {}),
+    fetchedAt,
+    ...(twitchViewers !== undefined ? { twitchViewers } : {}),
+    ...(freshness !== undefined ? { freshness } : {}),
+  };
+}
+
 // ── Games ─────────────────────────────────────────────────────────────────────
 
 export async function getGames(): Promise<Game[]> {
-  return (await get<Game[]>(KEYS.games)) ?? [];
+  await resumePendingGameCleanups();
+  const raw = await get<unknown>(KEYS.games);
+  if (raw === undefined) return [];
+
+  const games = parseGames(raw);
+  if (hasChanged(raw, games)) await set(KEYS.games, games);
+  return games;
+}
+
+function parseGames(raw: unknown): Game[] {
+  const parsed = z.array(z.unknown()).safeParse(raw);
+  return parsed.success
+    ? parsed.data.flatMap((item) => {
+      const game = GameSchema.safeParse(item);
+      return game.success ? [game.data] : [];
+    })
+    : [];
 }
 
 export async function addGame(game: Game): Promise<Game[]> {
@@ -67,27 +155,103 @@ export async function addGame(game: Game): Promise<Game[]> {
     throw new Error(`"${game.name}" is already in your list.`);
   }
 
+  await idbClearGameTombstone(game.appid);
   const updated = [...games, game];
   await set(KEYS.games, updated);
   return updated;
 }
 
 export async function removeGame(appid: string): Promise<Game[]> {
-  const games = (await getGames()).filter((g) => g.appid !== appid);
+  const currentGames = await getGames();
+  await addPendingGameCleanup(appid);
+  const games = currentGames.filter((g) => g.appid !== appid);
   await set(KEYS.games, games);
 
-  // Clean up per-game settings left in chrome.storage.local.
-  await chrome.storage.local.remove([
-    `${KEYS.gameSettingsPrefix}${appid}`,
-  ]);
-  await idbDeleteSnapshots(appid);
-
-  // Remove from cache
-  const cache = await getCache();
-  const { [appid]: _removed, ...rest } = cache;
-  await set(KEYS.cache, rest);
+  await cleanupGameData(appid);
+  await removePendingGameCleanup(appid);
 
   return games;
+}
+
+function pendingGameCleanupIds(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+
+  return [...new Set(raw.filter((appid): appid is string => typeof appid === "string" && appid.length > 0))];
+}
+
+async function addPendingGameCleanup(appid: string): Promise<void> {
+  const pending = pendingGameCleanupIds(await get<unknown>(KEYS.pendingGameCleanups));
+  if (!pending.includes(appid)) {
+    await set(KEYS.pendingGameCleanups, [...pending, appid]);
+  }
+}
+
+async function removePendingGameCleanup(appid: string): Promise<void> {
+  const pending = pendingGameCleanupIds(await get<unknown>(KEYS.pendingGameCleanups));
+  const remaining = pending.filter((pendingAppid) => pendingAppid !== appid);
+  if (remaining.length === 0) {
+    await chrome.storage.local.remove(KEYS.pendingGameCleanups);
+    return;
+  }
+  await set(KEYS.pendingGameCleanups, remaining);
+}
+
+async function cleanupGameData(appid: string): Promise<void> {
+  await idbDeleteGameData(appid);
+  await deleteNotificationState(appid);
+  await chrome.storage.local.remove([
+    `${KEYS.gameSettingsPrefix}${appid}`,
+    `${KEYS.legacySnapshotsPrefix}${appid}`,
+  ]);
+
+  const rawCache = toRecord(await get<unknown>(KEYS.cache));
+  if (rawCache && appid in rawCache) {
+    const { [appid]: _removed, ...cache } = rawCache;
+    await set(KEYS.cache, cache);
+  }
+
+  const rawSettings = toRecord(await get<unknown>(KEYS.settings));
+  if (rawSettings?.["badgeFavoriteAppid"] === appid) {
+    const { badgeFavoriteAppid: _removed, ...settings } = rawSettings;
+    await set(KEYS.settings, settings);
+  }
+}
+
+async function resumePendingGameCleanups(): Promise<void> {
+  if (pendingGameCleanupPromise) {
+    return pendingGameCleanupPromise;
+  }
+
+  pendingGameCleanupPromise = resumePendingGameCleanupsOnce();
+  try {
+    await pendingGameCleanupPromise;
+  } finally {
+    pendingGameCleanupPromise = null;
+  }
+}
+
+async function resumePendingGameCleanupsOnce(): Promise<void> {
+  const raw = await get<unknown>(KEYS.pendingGameCleanups);
+  const pending = pendingGameCleanupIds(raw);
+  if (raw !== undefined && !isEquivalent(raw, pending)) {
+    await set(KEYS.pendingGameCleanups, pending);
+  }
+
+  if (pending.length === 0) return;
+
+  const rawGames = await get<unknown>(KEYS.games);
+  if (rawGames !== undefined) {
+    const games = parseGames(rawGames);
+    const reconciledGames = games.filter((game) => !pending.includes(game.appid));
+    if (hasChanged(rawGames, reconciledGames)) {
+      await set(KEYS.games, reconciledGames);
+    }
+  }
+
+  for (const appid of pending) {
+    await cleanupGameData(appid);
+    await removePendingGameCleanup(appid);
+  }
 }
 
 export async function updateGameImage(appid: string, imageUrl: string): Promise<void> {
@@ -103,9 +267,9 @@ export async function updateGameImage(appid: string, imageUrl: string): Promise<
 // ── Settings ──────────────────────────────────────────────────────────────────
 
 export async function getSettings(): Promise<Settings> {
-  const stored = await get<Record<string, unknown>>(KEYS.settings);
+  const stored = toRecord(await get<unknown>(KEYS.settings));
   const normalized = normalizeSettings(stored);
-  if (!stored || JSON.stringify(stored) !== JSON.stringify(normalized)) {
+  if (!stored || hasChanged(stored, normalized)) {
     await set(KEYS.settings, normalized);
   }
   return normalized;
@@ -123,29 +287,37 @@ function normalizeSettings(raw: Record<string, unknown> | undefined): Settings {
   const settings: Settings = { ...DEFAULT_SETTINGS };
   if (!raw) return settings;
 
-  if (typeof raw["notificationsEnabled"] === "boolean") {
-    settings.notificationsEnabled = raw["notificationsEnabled"];
+  const notificationsEnabled = SettingsSchema.shape.notificationsEnabled.safeParse(raw["notificationsEnabled"]);
+  if (notificationsEnabled.success && notificationsEnabled.data !== undefined) {
+    settings.notificationsEnabled = notificationsEnabled.data;
   }
-  if (typeof raw["globalThresholdUp"] === "number" && Number.isFinite(raw["globalThresholdUp"])) {
-    settings.globalThresholdUp = Math.max(5, Math.min(100, raw["globalThresholdUp"]));
+  const globalThresholdUp = SettingsSchema.shape.globalThresholdUp.safeParse(raw["globalThresholdUp"]);
+  if (globalThresholdUp.success && globalThresholdUp.data !== undefined) {
+    settings.globalThresholdUp = Math.max(5, Math.min(100, globalThresholdUp.data));
   }
-  if (typeof raw["globalThresholdDown"] === "number" && Number.isFinite(raw["globalThresholdDown"])) {
-    settings.globalThresholdDown = -Math.max(5, Math.min(90, Math.abs(raw["globalThresholdDown"])));
+  const globalThresholdDown = SettingsSchema.shape.globalThresholdDown.safeParse(raw["globalThresholdDown"]);
+  if (globalThresholdDown.success && globalThresholdDown.data !== undefined) {
+    settings.globalThresholdDown = -Math.max(5, Math.min(90, Math.abs(globalThresholdDown.data)));
   }
-  if (typeof raw["quietHoursEnabled"] === "boolean") {
-    settings.quietHoursEnabled = raw["quietHoursEnabled"];
+  const quietHoursEnabled = SettingsSchema.shape.quietHoursEnabled.safeParse(raw["quietHoursEnabled"]);
+  if (quietHoursEnabled.success && quietHoursEnabled.data !== undefined) {
+    settings.quietHoursEnabled = quietHoursEnabled.data;
   }
-  if (typeof raw["quietStart"] === "string" && raw["quietStart"]) {
-    settings.quietStart = raw["quietStart"];
+  const quietStart = SettingsSchema.shape.quietStart.safeParse(raw["quietStart"]);
+  if (quietStart.success && quietStart.data !== undefined) {
+    settings.quietStart = quietStart.data;
   }
-  if (typeof raw["quietEnd"] === "string" && raw["quietEnd"]) {
-    settings.quietEnd = raw["quietEnd"];
+  const quietEnd = SettingsSchema.shape.quietEnd.safeParse(raw["quietEnd"]);
+  if (quietEnd.success && quietEnd.data !== undefined) {
+    settings.quietEnd = quietEnd.data;
   }
-  if (typeof raw["quietDays"] === "number" && Number.isInteger(raw["quietDays"])) {
-    settings.quietDays = raw["quietDays"] & 0b1111111;
+  const quietDays = SettingsSchema.shape.quietDays.safeParse(raw["quietDays"]);
+  if (quietDays.success && quietDays.data !== undefined) {
+    settings.quietDays = quietDays.data & 0b1111111;
   }
-  if (typeof raw["badgeFavoriteAppid"] === "string" && raw["badgeFavoriteAppid"]) {
-    settings.badgeFavoriteAppid = raw["badgeFavoriteAppid"];
+  const badgeFavoriteAppid = SettingsSchema.shape.badgeFavoriteAppid.safeParse(raw["badgeFavoriteAppid"]);
+  if (badgeFavoriteAppid.success && badgeFavoriteAppid.data !== undefined) {
+    settings.badgeFavoriteAppid = badgeFavoriteAppid.data;
   }
 
   return settings;
@@ -154,7 +326,35 @@ function normalizeSettings(raw: Record<string, unknown> | undefined): Settings {
 // ── Per-game settings ─────────────────────────────────────────────────────────
 
 export async function getGameSettings(appid: string): Promise<GameSettings> {
-  return (await get<GameSettings>(`${KEYS.gameSettingsPrefix}${appid}`)) ?? {};
+  const raw = await get<unknown>(`${KEYS.gameSettingsPrefix}${appid}`);
+  if (raw === undefined) return {};
+
+  const stored = toRecord(raw);
+  if (!stored) {
+    await set(`${KEYS.gameSettingsPrefix}${appid}`, {});
+    return {};
+  }
+
+  const normalized: GameSettings = {};
+  const thresholdUp = GameSettingsSchema.shape.thresholdUp.safeParse(stored["thresholdUp"]);
+  if (thresholdUp.success && thresholdUp.data !== undefined) normalized.thresholdUp = thresholdUp.data;
+  const thresholdDown = GameSettingsSchema.shape.thresholdDown.safeParse(stored["thresholdDown"]);
+  if (thresholdDown.success && thresholdDown.data !== undefined) normalized.thresholdDown = thresholdDown.data;
+  const notifyThresholdPlayers = GameSettingsSchema.shape.notifyThresholdPlayers.safeParse(stored["notifyThresholdPlayers"]);
+  if (notifyThresholdPlayers.success && notifyThresholdPlayers.data !== undefined) {
+    normalized.notifyThresholdPlayers = notifyThresholdPlayers.data;
+  }
+  const notifyBelowPlayers = GameSettingsSchema.shape.notifyBelowPlayers.safeParse(stored["notifyBelowPlayers"]);
+  if (notifyBelowPlayers.success && notifyBelowPlayers.data !== undefined) {
+    normalized.notifyBelowPlayers = notifyBelowPlayers.data;
+  }
+  const notificationsEnabled = GameSettingsSchema.shape.notificationsEnabled.safeParse(stored["notificationsEnabled"]);
+  if (notificationsEnabled.success && notificationsEnabled.data !== undefined) {
+    normalized.notificationsEnabled = notificationsEnabled.data;
+  }
+
+  if (hasChanged(stored, normalized)) await set(`${KEYS.gameSettingsPrefix}${appid}`, normalized);
+  return normalized;
 }
 
 export async function saveGameSettings(
@@ -170,7 +370,20 @@ export async function saveGameSettings(
 type CacheMap = Record<string, CachedData>;
 
 export async function getCache(): Promise<CacheMap> {
-  return (await get<CacheMap>(KEYS.cache)) ?? {};
+  const raw = await get<unknown>(KEYS.cache);
+  if (raw === undefined) return {};
+
+  const stored = toRecord(raw);
+  const cache: CacheMap = {};
+  if (stored) {
+    for (const [appid, value] of Object.entries(stored)) {
+      const parsed = parseCachedData(value);
+      if (parsed) cache[appid] = parsed;
+    }
+  }
+
+  if (!stored || hasChanged(stored, cache)) await set(KEYS.cache, cache);
+  return cache;
 }
 
 export async function setCache(cache: CacheMap): Promise<void> {
@@ -198,4 +411,13 @@ export async function setLastFetchTime(ts: number): Promise<void> {
 /** Read the last-fetch timestamp. Returns 0 if never set. */
 export async function getLastFetchTime(): Promise<number> {
   return (await get<number>(KEYS.lastFetchTime)) ?? 0;
+}
+
+export async function setLastFetchAttemptTime(ts: number): Promise<void> {
+  await set(KEYS.lastFetchAttempt, ts);
+}
+
+export async function getLastFetchAttemptTime(): Promise<number> {
+  const parsed = z.number().finite().nonnegative().safeParse(await get<unknown>(KEYS.lastFetchAttempt));
+  return parsed.success ? parsed.data : 0;
 }

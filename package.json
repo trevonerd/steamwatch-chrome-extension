@@ -1,6 +1,6 @@
 {
   "name": "steamwatch",
-  "version": "0.14.7",
+  "version": "2.0.1.7",
   "description": "Chrome extension for tracking Steam games with live player counts, local trend history, Twitch viewers, and alerts.",
   "author": "trevonerd / TREVISOFT",
   "license": "MIT",
@@ -9,7 +9,8 @@
     "version-sync": "tsx scripts/sync-version.ts",
     "prebuild": "tsx scripts/sync-version.ts",
     "dev": "vite build --watch",
-    "build": "vite build",
+    "build": "pnpm run typecheck && vite build",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"

@@ -29,9 +29,17 @@ function startOfIsoWeekUtc(timestamp: number): number {
 }
 
 async function seed(appId: string, snaps: readonly Snapshot[]): Promise<void> {
-  for (const snap of snaps) {
+  for (const snap of snaps.map((snapshot) => ({
+    ...snapshot,
+    source: snapshot.source ?? "steam",
+    granularity: snapshot.granularity ?? "instant",
+  }))) {
     await idbSaveSnapshot(appId, snap);
   }
+}
+
+function values(snapshots: readonly Snapshot[]): Array<{ ts: number; current: number }> {
+  return snapshots.map(({ ts, current }) => ({ ts, current }));
 }
 
 describe("compactSnapshots", () => {
@@ -67,7 +75,7 @@ describe("compactSnapshots", () => {
 
     await compactSnapshots(appId, 7);
 
-    await expect(idbGetSnapshots(appId)).resolves.toEqual(snaps.slice().sort((a, b) => a.ts - b.ts));
+    expect(values(await idbGetSnapshots(appId))).toEqual(snaps.slice().sort((a, b) => a.ts - b.ts));
   });
 
   it("compacts medium-age snapshots to one daily aggregate", async () => {
@@ -83,7 +91,7 @@ describe("compactSnapshots", () => {
 
     await compactSnapshots(appId, 7);
 
-    await expect(idbGetSnapshots(appId)).resolves.toEqual([
+    expect(values(await idbGetSnapshots(appId))).toEqual([
       { ts: startOfDayUtc(ts(2026, 2, 1, 5)), current: 50 },
       { ts: startOfDayUtc(ts(2026, 3, 10, 2)), current: 200 },
     ]);
@@ -102,9 +110,47 @@ describe("compactSnapshots", () => {
 
     await compactSnapshots(appId, 7);
 
-    await expect(idbGetSnapshots(appId)).resolves.toEqual([
+    expect(values(await idbGetSnapshots(appId))).toEqual([
       { ts: startOfIsoWeekUtc(ts(2025, 11, 24, 8)), current: 150 },
       { ts: startOfIsoWeekUtc(ts(2025, 12, 8, 4)), current: 20 },
+    ]);
+  });
+
+  it("retains aggregate coverage and never averages monthly peaks into observations", async () => {
+    const appId = "provenance";
+    const monthlyPeak: Snapshot = {
+      ts: ts(2025, 11, 1),
+      current: 999,
+      source: "steamcharts",
+      granularity: "monthly-peak",
+    };
+    const hourly: Snapshot[] = [
+      { ts: ts(2025, 11, 3, 1), current: 100, source: "steamcharts", granularity: "hourly" },
+      { ts: ts(2025, 11, 3, 2), current: 300, source: "steamcharts", granularity: "hourly" },
+    ];
+    await seed(appId, [monthlyPeak, ...hourly]);
+
+    await compactSnapshots(appId, 7);
+
+    await expect(idbGetSnapshots(appId)).resolves.toEqual([
+      monthlyPeak,
+      {
+        ts: startOfIsoWeekUtc(ts(2025, 11, 3, 1)),
+        current: 200,
+        source: "steamcharts",
+        granularity: "weekly",
+        aggregate: {
+          startTs: ts(2025, 11, 3, 1),
+          endTs: ts(2025, 11, 3, 2),
+          sampleCount: 2,
+          sum: 400,
+          min: 100,
+          max: 300,
+          minTs: ts(2025, 11, 3, 1),
+          maxTs: ts(2025, 11, 3, 2),
+          observedDurationMs: 60 * 60_000,
+        },
+      },
     ]);
   });
 
@@ -120,8 +166,7 @@ describe("compactSnapshots", () => {
     await compactSnapshots(appId, 7);
     const compacted = await idbGetSnapshots(appId);
 
-    expect(compacted).toContainEqual({ ts: ts(2025, 11, 3, 10), current: 0 });
-    expect(compacted).toContainEqual({ ts: startOfIsoWeekUtc(ts(2025, 11, 3, 10)), current: 50 });
+    expect(compacted).toContainEqual(expect.objectContaining({ ts: startOfIsoWeekUtc(ts(2025, 11, 3, 10)), current: 50 }));
   });
 
   it("is idempotent when run twice", async () => {
@@ -149,7 +194,7 @@ describe("compactSnapshots", () => {
 
     await expect(compactSnapshots("missing-app", 7)).resolves.toBeUndefined();
     await expect(idbGetSnapshots("missing-app")).resolves.toEqual([]);
-    await expect(idbGetSnapshots("another-app")).resolves.toEqual([{ ts: FIXED_NOW - DAY_MS, current: 123 }]);
+    expect(values(await idbGetSnapshots("another-app"))).toEqual([{ ts: FIXED_NOW - DAY_MS, current: 123 }]);
   });
 
   it("compacts all three tiers independently when present together", async () => {
@@ -172,7 +217,7 @@ describe("compactSnapshots", () => {
 
     await compactSnapshots(appId, 7);
 
-    await expect(idbGetSnapshots(appId)).resolves.toEqual([
+    expect(values(await idbGetSnapshots(appId))).toEqual([
       { ts: startOfIsoWeekUtc(ts(2025, 11, 24, 3)), current: 40 },
       { ts: startOfIsoWeekUtc(ts(2025, 12, 8, 3)), current: 10 },
       { ts: startOfDayUtc(ts(2026, 2, 20, 6)), current: 400 },

@@ -2,8 +2,12 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   fetchCurrentPlayers,
+  fetchAppDetails,
   fetchSteamChartsData,
   fetchSteamSpyData,
+  fetchSteamSpyResult,
+  fetchSteamChartsResult,
+  fetchTwitchResult,
   fetchTwitchViewers,
   parseSteamChartsData,
   searchGames,
@@ -37,6 +41,40 @@ function createJsonResponse(body: unknown, ok = true, status = 200): Response {
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
+});
+
+describe("fetchAppDetails", () => {
+  it("returns details for the requested app and prefers the capsule when the response is valid", async () => {
+    mockFetch({ "570": { success: true, data: {
+      name: "Dota 2", header_image: "https://example.com/header.jpg",
+      capsule_image: "https://example.com/capsule.jpg",
+    } } });
+    expect(await fetchAppDetails("570")).toEqual({ name: "Dota 2", image: "https://example.com/capsule.jpg" });
+  });
+
+  it("uses the header when the capsule is missing", async () => {
+    mockFetch({ "570": { success: true, data: { name: "Dota 2", header_image: "https://example.com/header.jpg" } } });
+    expect(await fetchAppDetails("570")).toEqual({ name: "Dota 2", image: "https://example.com/header.jpg" });
+  });
+
+  it("retains the name when both images are missing", async () => {
+    mockFetch({ "570": { success: true, data: { name: "Dota 2" } } });
+    expect(await fetchAppDetails("570")).toEqual({ name: "Dota 2", image: null });
+  });
+
+  it.each([
+    null, {}, { "730": { success: true, data: { name: "Counter-Strike" } } },
+    { "570": { success: false } }, { "570": { success: true } },
+    { "570": { success: true, data: { name: 42 } } },
+  ])("returns null when details are unavailable or malformed: %j", async (body) => {
+    mockFetch(body);
+    expect(await fetchAppDetails("570")).toBeNull();
+  });
+
+  it("returns null when the request fails", async () => {
+    mockFetchError();
+    expect(await fetchAppDetails("570")).toBeNull();
+  });
 });
 
 // ── fetchCurrentPlayers ───────────────────────────────────────────────────────
@@ -101,6 +139,52 @@ describe("fetchSteamSpyData", () => {
     mockFetchError();
     const result = await fetchSteamSpyData("570");
     expect(result.peak).toBe(0);
+  });
+});
+
+describe("provider result adapters", () => {
+  it("reports malformed SteamSpy data as an error without another request", async () => {
+    mockFetch({ peak_ccu: "unknown", name: "Game" });
+
+    const result = await fetchSteamSpyResult("570");
+
+    expect(result.status).toBe("error");
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports an empty SteamCharts page as unavailable", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, text: async () => "<main />" })));
+
+    expect(await fetchSteamChartsResult("570")).toEqual({ status: "unavailable" });
+  });
+
+  it("reports a missing Twitch game as unavailable", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => [{ data: { game: null } }],
+    })));
+
+    expect(await fetchTwitchResult("Marathon")).toEqual({ status: "unavailable" });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports SteamSpy server failures as errors instead of missing data", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => createJsonResponse({}, false, 503)));
+
+    await expect(fetchSteamSpyResult("570")).resolves.toMatchObject({ status: "error", error: "SteamSpy HTTP 503" });
+  });
+
+  it("reports SteamCharts rate limits as errors instead of missing data", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => createJsonResponse({}, false, 429)));
+
+    await expect(fetchSteamChartsResult("570")).resolves.toMatchObject({ status: "error", error: "SteamCharts HTTP 429" });
+  });
+
+  it("reports Twitch rate limits as errors instead of an absent category", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => createJsonResponse({}, false, 429)));
+
+    await expect(fetchTwitchResult("Marathon")).resolves.toMatchObject({ status: "error", error: "Twitch HTTP 429" });
   });
 });
 
@@ -239,12 +323,14 @@ describe("ChartDataSchema", () => {
 });
 
 describe("fetchSteamChartsBootstrap", () => {
-  let warnSpy: ReturnType<typeof vi.spyOn>;
-  let errorSpy: ReturnType<typeof vi.spyOn>;
+  const silenceWarn = () => vi.spyOn(console, "warn").mockImplementation(() => undefined);
+  const silenceError = () => vi.spyOn(console, "error").mockImplementation(() => undefined);
+  let warnSpy: ReturnType<typeof silenceWarn>;
+  let errorSpy: ReturnType<typeof silenceError>;
 
   beforeEach(() => {
-    warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    warnSpy = silenceWarn();
+    errorSpy = silenceError();
   });
 
   afterEach(() => {
@@ -261,8 +347,8 @@ describe("fetchSteamChartsBootstrap", () => {
     const result = await fetchSteamChartsBootstrap("570");
     
     expect(result).toHaveLength(2);
-    expect(result[0]).toEqual({ ts: 1341100800000, current: 25123 });
-    expect(result[1]).toEqual({ ts: 1343779200000, current: 0 });
+    expect(result[0]).toMatchObject({ ts: 1341100800000, current: 25123 });
+    expect(result[1]).toMatchObject({ ts: 1343779200000, current: 0 });
   });
 
   it("filters out entries where timestamp <= 0", async () => {
@@ -274,7 +360,7 @@ describe("fetchSteamChartsBootstrap", () => {
     const result = await fetchSteamChartsBootstrap("570");
     
     expect(result).toHaveLength(1);
-    expect(result[0]).toEqual({ ts: 1341100800000, current: 200 });
+    expect(result[0]).toMatchObject({ ts: 1341100800000, current: 200 });
   });
 
   it("sorts snapshots by timestamp ascending", async () => {
@@ -306,7 +392,7 @@ describe("fetchSteamChartsBootstrap", () => {
     const result = await fetchSteamChartsBootstrap("570");
     
     expect(result).toEqual([]);
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("[SteamWatch] Bootstrap chart-data.json failed for appid 570"));
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("[SteamWatch] History failed for 570"));
     expect(errorSpy).not.toHaveBeenCalled();
   });
 
@@ -347,7 +433,7 @@ describe("fetchSteamChartsBootstrap", () => {
     expect(result).toEqual([]);
   });
 
-  it("uses Math.max to ensure current is never negative", async () => {
+  it("rejects negative counts instead of manufacturing a zero sample", async () => {
     globalThis.fetch = vi.fn().mockResolvedValueOnce({
       ok: true,
       json: async () => [[1341100800000, -50.5]],
@@ -355,6 +441,43 @@ describe("fetchSteamChartsBootstrap", () => {
     
     const result = await fetchSteamChartsBootstrap("570");
     
-    expect(result[0]!.current).toBe(0);
+    expect(result).toEqual([]);
+  });
+
+  it("rejects future timestamps and deduplicates observations", async () => {
+    const ts = Date.now() - 3_600_000;
+    globalThis.fetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => [[ts, 100], [ts, 100], [Date.now() + 86_400_000, 200]],
+    });
+    const result = await fetchSteamChartsBootstrap("570");
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ ts, current: 100, source: "steamcharts" });
+  });
+
+  it("distinguishes calendar-month peaks from nearby hourly observations", async () => {
+    const monthly = Date.UTC(2026, 0, 1);
+    const hourly = Date.UTC(2026, 0, 15, 9, 1);
+    globalThis.fetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => [[monthly, 900], [hourly, 150], [hourly + 3_600_000, 200]],
+    });
+    const result = await fetchSteamChartsBootstrap("570");
+    expect(result[0]).toMatchObject({ current: 900, granularity: "monthly-peak" });
+    expect(result[1]).toMatchObject({ current: 150, granularity: "hourly" });
+  });
+});
+
+
+describe("Twitch Steam title normalization", () => {
+  it.each([
+    ["Assassin’s Creed® IV Black Flag™", "Assassin's Creed IV Black Flag"],
+    ["Sid Meier’s Civilization® VI", "Sid Meier's Civilization VI"],
+  ])("resolves the actual Twitch category for %s", async (steamName, twitchName) => {
+    vi.mocked(fetch).mockImplementation(async (_input, init) => {
+      const matched = typeof init?.body === "string" && init.body.includes(JSON.stringify(twitchName));
+      return new Response(JSON.stringify([{ data: { game: matched ? { viewersCount: 171 } : null } }]), { status: 200 });
+    });
+    expect(await fetchTwitchResult(steamName)).toEqual({ status: "ok", value: 171 });
   });
 });

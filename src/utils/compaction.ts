@@ -1,84 +1,179 @@
-import type { Snapshot } from "../types/index.js";
-import { idbDeleteSnapshots, idbGetSnapshots, idbSaveSnapshot } from "./idb-storage.js";
+import type { Snapshot, SnapshotAggregate, SnapshotSource } from "../types/index.js";
+import { idbTransformSnapshotsAtomically } from "./idb-storage.js";
 
 const DAY_MS = 86_400_000;
 
+interface AggregateAccumulator {
+  sum: number;
+  sampleCount: number;
+  min: number;
+  max: number;
+  minTs: number;
+  maxTs: number;
+  startTs: number;
+  endTs: number;
+  observedDurationMs: number;
+  sources: Set<SnapshotSource>;
+  lastRawTs?: number;
+  lastRawSource?: SnapshotSource;
+  lastRawGranularity?: Snapshot["granularity"];
+}
+
 function startOfDay(ts: number): number {
-  const d = new Date(ts);
-  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  const date = new Date(ts);
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
 }
 
 function startOfWeek(ts: number): number {
-  const d = new Date(ts);
-  const day = d.getUTCDay();
-  const daysSinceMonday = (day + 6) % 7;
-  d.setUTCDate(d.getUTCDate() - daysSinceMonday);
-  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  const date = new Date(ts);
+  const daysSinceMonday = (date.getUTCDay() + 6) % 7;
+  date.setUTCDate(date.getUTCDate() - daysSinceMonday);
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
 }
 
-function groupAndAverage(snaps: readonly Snapshot[], keyFn: (ts: number) => number): Snapshot[] {
-  const grouped = new Map<number, { sum: number; count: number }>();
+function aggregateOf(snapshot: Snapshot): SnapshotAggregate {
+  return snapshot.aggregate ?? {
+    startTs: snapshot.ts,
+    endTs: snapshot.ts,
+    sampleCount: 1,
+    sum: snapshot.current,
+    min: snapshot.current,
+    max: snapshot.current,
+    minTs: snapshot.ts,
+    maxTs: snapshot.ts,
+    observedDurationMs: 0,
+  };
+}
 
-  for (const snap of snaps) {
-    const key = keyFn(snap.ts);
-    const current = grouped.get(key);
-    if (!current) {
-      grouped.set(key, { sum: snap.current, count: 1 });
+function addToAccumulator(accumulator: AggregateAccumulator, snapshot: Snapshot): void {
+  const aggregate = aggregateOf(snapshot);
+  accumulator.sum += aggregate.sum;
+  accumulator.sampleCount += aggregate.sampleCount;
+  accumulator.startTs = Math.min(accumulator.startTs, aggregate.startTs);
+  accumulator.endTs = Math.max(accumulator.endTs, aggregate.endTs);
+  accumulator.observedDurationMs += aggregate.observedDurationMs;
+  accumulator.sources.add(snapshot.source ?? "legacy");
+  if (aggregate.min < accumulator.min) {
+    accumulator.min = aggregate.min;
+    accumulator.minTs = aggregate.minTs;
+  }
+  if (aggregate.max > accumulator.max) {
+    accumulator.max = aggregate.max;
+    accumulator.maxTs = aggregate.maxTs;
+  }
+  addObservedGap(accumulator, snapshot);
+}
+
+function maxObservedGap(granularity: Snapshot["granularity"]): number {
+  if (granularity === "instant") return 5 * 60_000;
+  if (granularity === "hourly") return 60 * 60_000;
+  return 0;
+}
+
+function addObservedGap(accumulator: AggregateAccumulator, snapshot: Snapshot): void {
+  if (snapshot.aggregate) return;
+  const source = snapshot.source ?? "legacy";
+  const maxGap = maxObservedGap(snapshot.granularity);
+  if (
+    accumulator.lastRawTs !== undefined
+    && accumulator.lastRawSource === source
+    && accumulator.lastRawGranularity === snapshot.granularity
+  ) {
+    const gap = snapshot.ts - accumulator.lastRawTs;
+    if (gap > 0 && gap <= maxGap) accumulator.observedDurationMs += gap;
+  }
+  accumulator.lastRawTs = snapshot.ts;
+  accumulator.lastRawSource = source;
+  accumulator.lastRawGranularity = snapshot.granularity;
+}
+
+function sourceFor(accumulator: AggregateAccumulator): SnapshotSource {
+  if (accumulator.sources.size !== 1) return "legacy";
+  const [source] = accumulator.sources;
+  return source ?? "legacy";
+}
+
+function groupSnapshots(
+  snapshots: readonly Snapshot[],
+  keyFor: (ts: number) => number,
+  granularity: "daily" | "weekly",
+): Snapshot[] {
+  const grouped = new Map<number, AggregateAccumulator>();
+  for (const snapshot of [...snapshots].sort((left, right) => left.ts - right.ts)) {
+    const key = keyFor(snapshot.ts);
+    const aggregate = aggregateOf(snapshot);
+    const accumulator = grouped.get(key);
+    if (accumulator) {
+      addToAccumulator(accumulator, snapshot);
       continue;
     }
-    current.sum += snap.current;
-    current.count += 1;
+    grouped.set(key, {
+      sum: aggregate.sum,
+      sampleCount: aggregate.sampleCount,
+      min: aggregate.min,
+      max: aggregate.max,
+      minTs: aggregate.minTs,
+      maxTs: aggregate.maxTs,
+      startTs: aggregate.startTs,
+      endTs: aggregate.endTs,
+      observedDurationMs: aggregate.observedDurationMs,
+      sources: new Set([snapshot.source ?? "legacy"]),
+      ...(snapshot.aggregate ? {} : {
+        lastRawTs: snapshot.ts,
+        lastRawSource: snapshot.source ?? "legacy",
+        lastRawGranularity: snapshot.granularity,
+      }),
+    });
   }
 
-  return Array.from(grouped.entries())
-    .map(([ts, agg]) => ({ ts, current: Math.round(agg.sum / agg.count) }))
-    .sort((a, b) => a.ts - b.ts);
+  return [...grouped.entries()]
+    .map(([ts, accumulator]) => ({
+      ts,
+      current: Math.round(accumulator.sum / accumulator.sampleCount),
+      source: sourceFor(accumulator),
+      granularity,
+      aggregate: {
+        startTs: accumulator.startTs,
+        endTs: accumulator.endTs,
+        sampleCount: accumulator.sampleCount,
+        sum: accumulator.sum,
+        min: accumulator.min,
+        max: accumulator.max,
+        minTs: accumulator.minTs,
+        maxTs: accumulator.maxTs,
+        observedDurationMs: accumulator.observedDurationMs,
+      },
+    }))
+    .sort((left, right) => left.ts - right.ts);
 }
 
-function excludePreservedMinFromAlreadyCompactedTier(
-  snaps: readonly Snapshot[],
-  allTimeMin: Snapshot,
-  keyFn: (ts: number) => number,
+function compactSeries(
+  allSnapshots: readonly Snapshot[],
+  fullResolutionDays: number,
+  now: number,
 ): Snapshot[] {
-  const minKey = keyFn(allTimeMin.ts);
-  const hasGroupAnchor = snaps.some((snap) => snap.ts === minKey);
-  if (!hasGroupAnchor) {
-    return [...snaps];
-  }
-  return snaps.filter((snap) => !(snap.ts === allTimeMin.ts && snap.current === allTimeMin.current));
+  if (allSnapshots.length === 0) return [];
+
+  const opaqueSnapshots = allSnapshots.filter((snapshot) => (
+    snapshot.granularity === "monthly-peak" || snapshot.granularity === "unknown"
+  ));
+  const observations = allSnapshots.filter((snapshot) => (
+    snapshot.granularity !== "monthly-peak" && snapshot.granularity !== "unknown"
+  ));
+  if (observations.length === 0) return [...opaqueSnapshots];
+
+  const mediumBoundary = now - fullResolutionDays * DAY_MS;
+  const oldBoundary = now - 90 * DAY_MS;
+  const recent = observations.filter((snapshot) => snapshot.ts >= mediumBoundary);
+  const medium = observations.filter((snapshot) => snapshot.ts < mediumBoundary && snapshot.ts >= oldBoundary);
+  const old = observations.filter((snapshot) => snapshot.ts < oldBoundary);
+  const compactedMedium = groupSnapshots(medium, startOfDay, "daily");
+  const compactedOld = groupSnapshots(old, startOfWeek, "weekly");
+  return [...opaqueSnapshots, ...recent, ...compactedMedium, ...compactedOld];
 }
 
+/** Compacts one game's observation tiers without exposing a partial series. */
 export async function compactSnapshots(appId: string, fullResolutionDays: number): Promise<void> {
-  const allSnaps = await idbGetSnapshots(appId);
-  if (allSnaps.length === 0) {
-    return;
-  }
-
   const now = Date.now();
-  const fullResMs = fullResolutionDays * DAY_MS;
-  const mediumBoundary = now - fullResMs;
-  const oldBoundary = now - 90 * DAY_MS;
-
-  const allTimeMin = allSnaps.reduce((min, snap) => (snap.current < min.current ? snap : min));
-  const recentSnaps = allSnaps.filter((s) => s.ts >= mediumBoundary);
-  const mediumSnaps = allSnaps.filter((s) => s.ts < mediumBoundary && s.ts >= oldBoundary);
-  const oldSnaps = allSnaps.filter((s) => s.ts < oldBoundary);
-
-  const mediumForGrouping = excludePreservedMinFromAlreadyCompactedTier(mediumSnaps, allTimeMin, startOfDay);
-  const oldForGrouping = excludePreservedMinFromAlreadyCompactedTier(oldSnaps, allTimeMin, startOfWeek);
-
-  const compactedMedium = groupAndAverage(mediumForGrouping, startOfDay);
-  const compactedOld = groupAndAverage(oldForGrouping, startOfWeek);
-
-  await idbDeleteSnapshots(appId);
-
-  const rebuilt = [...recentSnaps, ...compactedMedium, ...compactedOld].sort((a, b) => a.ts - b.ts);
-  for (const snap of rebuilt) {
-    await idbSaveSnapshot(appId, snap);
-  }
-
-  const hasAllTimeMin = rebuilt.some((snap) => snap.current === allTimeMin.current);
-  if (!hasAllTimeMin) {
-    await idbSaveSnapshot(appId, allTimeMin);
-  }
+  await idbTransformSnapshotsAtomically(appId, (snapshots) => compactSeries(snapshots, fullResolutionDays, now));
 }

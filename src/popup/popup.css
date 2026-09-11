@@ -412,10 +412,16 @@ body {
   background: var(--accent-dim);
 }
 
+.history-notice {
+  margin: 0 12px 10px;
+  color: var(--text-2);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .graph-pill--disabled {
-  opacity: .35;
+  opacity: .55;
   cursor: not-allowed;
-  pointer-events: none;
 }
 
 .panel-sparkline { padding: 8px 12px 0; line-height: 0; }
@@ -576,6 +582,8 @@ body {
   padding: 6px 14px;
   display: flex; align-items: center; justify-content: space-between;
   background: rgba(0 0 0 / .25);
+  flex-wrap: wrap;
+  row-gap: 4px;
   position: sticky; bottom: 0;
   backdrop-filter: blur(8px);
 }
@@ -588,3 +596,10 @@ body {
 .footer-link:hover { color: var(--accent); }
 .footer-sep  { color: var(--text-4); font-size: 11px; }
 .footer-copy { font-size: 11px; color: var(--text-3); font-family: var(--ff-mono); }
+.footer-version {
+  flex-basis: 100%;
+  text-align: right;
+  font-size: 11px;
+  color: var(--text-2);
+  font-family: var(--ff-mono);
+}

@@ -1,11 +1,20 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Game, Snapshot } from "../src/types/index.js";
 import {
   _resetDbForTesting,
   idbGetSnapshots,
+  idbSaveSnapshot,
 } from "../src/utils/idb-storage.js";
 import { migrateToIndexedDB } from "../src/utils/migrate.js";
+
+function legacySnapshots(snapshots: readonly Snapshot[]): Snapshot[] {
+  return snapshots.map((snapshot) => ({
+    ...snapshot,
+    source: "legacy",
+    granularity: "unknown",
+  }));
+}
 
 describe("migrateToIndexedDB", () => {
   beforeEach(async () => {
@@ -47,8 +56,8 @@ describe("migrateToIndexedDB", () => {
 
     await migrateToIndexedDB();
 
-    await expect(idbGetSnapshots("100")).resolves.toEqual(snaps100);
-    await expect(idbGetSnapshots("200")).resolves.toEqual(snaps200);
+    await expect(idbGetSnapshots("100")).resolves.toEqual(legacySnapshots(snaps100));
+    await expect(idbGetSnapshots("200")).resolves.toEqual(legacySnapshots(snaps200));
   });
 
   it("sets sw_migration_complete sentinel after migration", async () => {
@@ -77,7 +86,7 @@ describe("migrateToIndexedDB", () => {
 
     expect(first).toEqual({ migrated: 2, skipped: 0, errors: 0 });
     expect(second).toEqual({ migrated: 0, skipped: 0, errors: 0 });
-    await expect(idbGetSnapshots("100")).resolves.toEqual(snaps);
+    await expect(idbGetSnapshots("100")).resolves.toEqual(legacySnapshots(snaps));
   });
 
   it("handles empty sw_games gracefully", async () => {
@@ -109,7 +118,8 @@ describe("migrateToIndexedDB", () => {
     const result = await migrateToIndexedDB();
 
     expect(result).toEqual({ migrated: 1, skipped: 0, errors: 3 });
-    await expect(idbGetSnapshots("100")).resolves.toEqual([{ ts: 1_000, current: 10 }]);
+    await expect(idbGetSnapshots("100")).resolves.toEqual(legacySnapshots([{ ts: 1_000, current: 10 }]));
+    expect((await chrome.storage.local.get("sw_migration_complete")).sw_migration_complete).toBeUndefined();
   });
 
   it("preserves original chrome.storage.local data after migration", async () => {
@@ -144,5 +154,54 @@ describe("migrateToIndexedDB", () => {
     const result = await migrateToIndexedDB();
 
     expect(result).toEqual({ migrated: 2, skipped: 1, errors: 1 });
+  });
+
+  it("does not duplicate snapshots that are already present when a prior run was interrupted", async () => {
+    const games: Game[] = [{ appid: "100", name: "Game A", image: "a.jpg" }];
+    const snapshots: Snapshot[] = [
+      { ts: 1_000, current: 10 },
+      { ts: 2_000, current: 20 },
+    ];
+    await idbSaveSnapshot("100", snapshots[0]!);
+    await chrome.storage.local.set({ sw_games: games, sw_snaps_100: snapshots });
+
+    const result = await migrateToIndexedDB();
+
+    expect(result).toEqual({ migrated: 1, skipped: 0, errors: 0 });
+    await expect(idbGetSnapshots("100")).resolves.toEqual(legacySnapshots(snapshots));
+  });
+
+  it("rejects negative and future legacy snapshot values", async () => {
+    const games: Game[] = [{ appid: "100", name: "Game A", image: "a.jpg" }];
+    await chrome.storage.local.set({
+      sw_games: games,
+      sw_snaps_100: [
+        { ts: 1_000, current: 10 },
+        { ts: -1, current: 20 },
+        { ts: 2_000, current: -1 },
+        { ts: Date.now() + 60_000, current: 30 },
+      ],
+    });
+
+    const result = await migrateToIndexedDB();
+
+    expect(result).toEqual({ migrated: 1, skipped: 0, errors: 3 });
+    await expect(idbGetSnapshots("100")).resolves.toEqual(legacySnapshots([{ ts: 1_000, current: 10 }]));
+  });
+
+  it("leaves migration incomplete when an IndexedDB write fails", async () => {
+    const games: Game[] = [{ appid: "100", name: "Game A", image: "a.jpg" }];
+    await chrome.storage.local.set({
+      sw_games: games,
+      sw_snaps_100: [{ ts: 1_000, current: 10 }],
+    });
+    const saveSpy = vi.spyOn(await import("../src/utils/idb-storage.js"), "idbSaveSnapshot")
+      .mockRejectedValueOnce(new Error("write failed"));
+
+    const result = await migrateToIndexedDB();
+
+    expect(result).toEqual({ migrated: 0, skipped: 0, errors: 1 });
+    expect((await chrome.storage.local.get("sw_migration_complete")).sw_migration_complete).toBeUndefined();
+    saveSpy.mockRestore();
   });
 });

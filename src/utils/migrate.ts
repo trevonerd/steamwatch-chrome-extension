@@ -12,7 +12,7 @@ export interface MigrationStats {
   errors: number;
 }
 
-function isValidSnapshot(value: unknown): value is Snapshot {
+function isValidSnapshot(value: unknown, now: number): value is Snapshot {
   if (typeof value !== "object" || value === null) {
     return false;
   }
@@ -21,9 +21,16 @@ function isValidSnapshot(value: unknown): value is Snapshot {
   return (
     typeof candidate.ts === "number" &&
     Number.isFinite(candidate.ts) &&
+    candidate.ts >= 0 &&
+    candidate.ts <= now &&
     typeof candidate.current === "number" &&
-    Number.isFinite(candidate.current)
+    Number.isFinite(candidate.current) &&
+    candidate.current >= 0
   );
+}
+
+function snapshotKey(snapshot: Snapshot): string {
+  return `${snapshot.ts}:${snapshot.current}`;
 }
 
 async function getLocal<T>(key: string): Promise<T | undefined> {
@@ -39,12 +46,14 @@ export async function migrateToIndexedDB(): Promise<MigrationStats> {
 
   const stats: MigrationStats = { migrated: 0, skipped: 0, errors: 0 };
   const games = await getLocal<readonly Game[]>(GAMES_KEY);
+  const now = Date.now();
 
   if (!Array.isArray(games) || games.length === 0) {
     return stats;
   }
 
   const expectedByApp = new Map<string, number>();
+  let allVerified = true;
 
   for (const game of games) {
     const appId = game.appid;
@@ -57,18 +66,45 @@ export async function migrateToIndexedDB(): Promise<MigrationStats> {
     }
 
     let validCount = 0;
+    let storedSnapshots: Snapshot[];
+
+    try {
+      storedSnapshots = await idbGetSnapshots(appId);
+    } catch (error) {
+      allVerified = false;
+      stats.errors += 1;
+      console.error(`[migrate] Failed to inspect existing snapshots — appId: ${appId}: ${formatError(error)}`);
+      expectedByApp.set(appId, 0);
+      continue;
+    }
+
+    const existingKeys = new Set(storedSnapshots.map(snapshotKey));
 
     for (const rawSnapshot of rawSnapshots) {
-      if (!isValidSnapshot(rawSnapshot)) {
+      if (!isValidSnapshot(rawSnapshot, now)) {
+        allVerified = false;
         stats.errors += 1;
         continue;
       }
 
+      const legacySnapshot: Snapshot = {
+        ts: rawSnapshot.ts,
+        current: rawSnapshot.current,
+        source: "legacy",
+        granularity: "unknown",
+      };
+      const key = snapshotKey(legacySnapshot);
+      if (existingKeys.has(key)) {
+        continue;
+      }
+
       try {
-        await idbSaveSnapshot(appId, rawSnapshot);
+        await idbSaveSnapshot(appId, legacySnapshot);
         stats.migrated += 1;
         validCount += 1;
+        existingKeys.add(key);
       } catch (error) {
+        allVerified = false;
         stats.errors += 1;
         console.error(`[migrate] Failed to save snapshot to IndexedDB — appId: ${appId}: ${formatError(error)}`);
       }
@@ -76,8 +112,6 @@ export async function migrateToIndexedDB(): Promise<MigrationStats> {
 
     expectedByApp.set(appId, validCount);
   }
-
-  let allVerified = true;
 
   for (const [appId, expectedCount] of expectedByApp.entries()) {
     try {

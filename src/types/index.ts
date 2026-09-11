@@ -3,7 +3,17 @@
 // Central type definitions. Import from here, never duplicate.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { z } from "zod";
+
+export const ChartDataSchema = z.array(z.tuple([z.number().finite(), z.number().finite()]));
+
 // ── Domain models ─────────────────────────────────────────────────────────────
+
+export const GameSchema = z.object({
+  appid: z.string(),
+  name: z.string(),
+  image: z.string(),
+});
 
 export interface Game {
   readonly appid: string;
@@ -11,11 +21,119 @@ export interface Game {
   readonly image: string;
 }
 
+/** Origin of a persisted player-count value. */
+export type SnapshotSource = "steam" | "steamcharts" | "legacy";
+
+/** Resolution of a persisted player-count value. */
+export type SnapshotGranularity =
+  | "instant"
+  | "hourly"
+  | "monthly-peak"
+  | "daily"
+  | "weekly"
+  | "unknown";
+
+export const SnapshotSourceSchema = z.enum(["steam", "steamcharts", "legacy"]);
+export const SnapshotGranularitySchema = z.enum([
+  "instant",
+  "hourly",
+  "monthly-peak",
+  "daily",
+  "weekly",
+  "unknown",
+]);
+
+/** Statistics retained when multiple observations are compacted into one row. */
+export interface SnapshotAggregate {
+  readonly startTs: number;
+  readonly endTs: number;
+  readonly sampleCount: number;
+  readonly sum: number;
+  readonly min: number;
+  readonly max: number;
+  readonly minTs: number;
+  readonly maxTs: number;
+  readonly observedDurationMs: number;
+}
+
+export const SnapshotAggregateSchema = z.object({
+  startTs: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  endTs: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  sampleCount: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  sum: z.number().finite().nonnegative(),
+  min: z.number().finite().nonnegative(),
+  max: z.number().finite().nonnegative(),
+  minTs: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  maxTs: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  observedDurationMs: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+}).refine((aggregate) => aggregate.startTs <= aggregate.endTs, {
+  message: "aggregate start must not be after end",
+});
+
 /** A single player-count sample stored over time. */
 export interface Snapshot {
   readonly ts: number;      // Unix ms timestamp
   readonly current: number; // Concurrent players at this moment
+  /** Absent only before a legacy row is normalized on read. */
+  readonly source?: SnapshotSource;
+  /** Absent only before a legacy row is normalized on read. */
+  readonly granularity?: SnapshotGranularity;
+  /** Present for compacted observations; raw samples remain unaggregated. */
+  readonly aggregate?: SnapshotAggregate;
 }
+
+export const SnapshotSchema = z.object({
+  ts: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  current: z.number().finite().nonnegative(),
+  source: SnapshotSourceSchema.optional(),
+  granularity: SnapshotGranularitySchema.optional(),
+  aggregate: SnapshotAggregateSchema.optional(),
+});
+
+export type BootstrapState = "leased" | "retry" | "unavailable" | "completed";
+
+/** A time-bounded, single-writer claim for one game's historical import. */
+export interface BootstrapLease {
+  readonly appId: string;
+  readonly token: string;
+  readonly expiresAt: number;
+  readonly attempt: number;
+}
+
+/** Durable import status, deliberately separate from notification cooldowns. */
+export interface BootstrapStatus {
+  readonly appId: string;
+  readonly state: BootstrapState;
+  readonly attempt: number;
+  readonly retryAt?: number;
+  readonly completedAt?: number;
+  readonly importedCount?: number;
+  readonly startTs?: number;
+  readonly endTs?: number;
+}
+
+export type ProviderResult<T> =
+  | { readonly status: "ok"; readonly value: T }
+  | { readonly status: "unavailable" }
+  | { readonly status: "error"; readonly error: string };
+
+export const FieldFreshnessSchema = z.object({
+  source: z.enum(["steam", "steamcharts", "steamspy", "twitch", "legacy"]),
+  status: z.enum(["ok", "error", "unavailable"]),
+  acquiredAt: z.number().finite().nonnegative().optional(),
+  attemptedAt: z.number().finite().nonnegative(),
+});
+
+export type FieldFreshness = z.infer<typeof FieldFreshnessSchema>;
+export type MetricKey = "current" | "peak24h" | "allTimePeak" | "twitchViewers";
+export type MetricFreshness = z.infer<typeof MetricFreshnessSchema>;
+
+export const MetricFreshnessSchema = z.object({
+  current: FieldFreshnessSchema.optional(),
+  peak24h: FieldFreshnessSchema.optional(),
+  allTimePeak: FieldFreshnessSchema.optional(),
+  twitchViewers: FieldFreshnessSchema.optional(),
+});
 
 /** Latest fetched stats kept in cache for immediate popup display. */
 export interface CachedData {
@@ -26,7 +144,21 @@ export interface CachedData {
   readonly localAllTimePeak?: number;
   readonly fetchedAt: number;
   readonly twitchViewers?: number;
+  readonly freshness?: MetricFreshness;
 }
+
+/** Validates cache entries restored from chrome.storage.local. */
+export const CachedDataSchema = z.object({
+  current: z.number().finite().nonnegative(),
+  peak: z.number().finite().nonnegative().optional(),
+  peak24h: z.number().finite().nonnegative().optional(),
+  allTimePeak: z.number().finite().nonnegative().optional(),
+  allTimePeakLabel: z.string().optional(),
+  localAllTimePeak: z.number().finite().nonnegative().optional(),
+  fetchedAt: z.number().finite().nonnegative(),
+  twitchViewers: z.number().finite().nonnegative().optional(),
+  freshness: MetricFreshnessSchema.catch({}).optional(),
+}).passthrough();
 
 // ── Settings ─────────────────────────────────────────────────────────────────
 
@@ -48,8 +180,32 @@ export interface GameSettings {
   thresholdUp?: number;
   thresholdDown?: number;
   notifyThresholdPlayers?: number;
+  notifyBelowPlayers?: number;
   notificationsEnabled?: boolean;
 }
+
+/** Validates individual per-game notification overrides from local storage. */
+export const GameSettingsSchema = z.object({
+  thresholdUp: z.number().finite().positive().optional(),
+  thresholdDown: z.number().finite().negative().optional(),
+  notifyThresholdPlayers: z.number().finite().nonnegative().optional(),
+  notifyBelowPlayers: z.number().finite().nonnegative().optional(),
+  notificationsEnabled: z.boolean().optional(),
+}).strip();
+
+export const QuietTimeSchema = z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/);
+
+/** Parses stored global settings field by field during controlled recovery. */
+export const SettingsSchema = z.object({
+  notificationsEnabled: z.boolean().optional(),
+  globalThresholdUp: z.number().finite().optional(),
+  globalThresholdDown: z.number().finite().optional(),
+  quietHoursEnabled: z.boolean().optional(),
+  quietStart: QuietTimeSchema.optional(),
+  quietEnd: QuietTimeSchema.optional(),
+  quietDays: z.number().int().optional(),
+  badgeFavoriteAppid: z.string().min(1).optional(),
+}).strip();
 
 // ── Trend ────────────────────────────────────────────────────────────────────
 
@@ -79,7 +235,7 @@ export interface TrendResult {
 // ── Background ↔ UI messages ──────────────────────────────────────────────────
 
 export type MessageRequest =
-  | { readonly type: "FETCH_NOW" }
+  | { readonly type: "FETCH_NOW"; readonly retryHistory?: boolean }
   | { readonly type: "RESET_ALARM" };
 
 export interface MessageResponse {
@@ -87,7 +243,21 @@ export interface MessageResponse {
   readonly error?: string;
 }
 
+export const MessageResponseSchema = z.object({
+  ok: z.boolean(),
+  error: z.string().optional(),
+});
+
 // ── API data ──────────────────────────────────────────────────────────────────
+
+export const AppDetailsSchema = z.record(z.string(), z.object({
+  success: z.boolean(),
+  data: z.object({
+    name: z.string(),
+    header_image: z.string().optional(),
+    capsule_image: z.string().optional(),
+  }).optional(),
+}));
 
 export interface SearchResult {
   readonly appid: string;
@@ -163,9 +333,45 @@ export interface CardViewModel {
   readonly sparklineStroke: string;
   /** Timestamp of the last successful fetch (0 if never). */
   readonly fetchedAt: number;
+  readonly freshness?: MetricFreshness;
   readonly twitchViewers?: number;
+  readonly historyStatus?: BootstrapStatus;
+  readonly historyLoading?: boolean;
+  readonly seasonalAnalysis?: SeasonalTrendAnalysis;
+  readonly observedPeak?: number;
+  readonly evaluatedAt?: number;
   /** Minimum within the active graph window: { value, timestamp } or null. */
   readonly recordLow: { value: number; timestamp: number } | null;
   /** Minimum across all snapshots: { value, timestamp } or null. */
   readonly allTimeLow: { value: number; timestamp: number } | null;
 }
+
+// ── External API schemas ──────────────────────────────────────────────────────
+
+export const PlayerCountSchema = z.object({
+  response: z.object({ player_count: z.number().int().nonnegative() }),
+});
+
+export const StoreSearchSchema = z.object({
+  items: z.array(z.object({
+    id: z.number(),
+    name: z.string(),
+    tiny_image: z.string().optional(),
+    small_capsule_image: z.string().optional(),
+  })).default([]),
+});
+
+export const SteamSpySchema = z.object({
+  peak_ccu: z.number().finite().nonnegative().default(0),
+  name: z.string().default(""),
+});
+
+export const TwitchGqlSchema = z.array(z.object({
+  data: z.object({
+    game: z.object({ viewersCount: z.number().int().nonnegative() }).nullable(),
+  }).optional(),
+}));
+
+export type SeasonalTrendAnalysis =
+  | { readonly status: "ready"; readonly trend: TrendResult; readonly coverage: number; readonly reason: string }
+  | { readonly status: "insufficient" | "stale" | "low-baseline"; readonly coverage: number; readonly reason: string };

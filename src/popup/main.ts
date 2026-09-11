@@ -9,27 +9,20 @@ import {
   TRACKING_RETENTION_DAYS,
   MAX_GAMES,
 } from "../utils/storage.js";
-import { idbGetSnapshots, idbGetSnapshotsInRange } from "../utils/idb-storage.js";
-import { fmtNumber, fmtPct, fmtTimeAgo, computeWindowMin } from "../utils/trend.js";
-import {
-  downsampleSnapshotsForGraph,
-  findNearestPointIndex,
-  sparklineColor,
-  mapToPoints,
-} from "../utils/sparkline.js";
-import { buildAllViewModels } from "../utils/card.js";
+import { idbGetSnapshots, idbGetBootstrapStatus } from "../utils/idb-storage.js";
+import { fmtNumber, fmtPct, fmtTimeAgo } from "../utils/trend.js";
+import { populatePanel, renderSparkline, freshnessTitle } from "./graphs.js";
+import { buildAllViewModels, buildCardViewModel } from "../utils/card.js";
 import { buildShareText, renderShareCanvas } from "../utils/share.js";
 import { append, clear, h, mustGet, s, show, hide } from "../utils/html.js";
 import { formatError } from "../utils/log.js";
+import { requestRefresh } from "../utils/messages.js";
 import { bindGlobalShareBarClose } from "./shareBar.js";
 import { thumbColor, wireThumbFallback } from "./thumb.js";
+import { shouldRefreshGames, startPopupUpdates } from "./updates.js";
 
 import type {
   CardViewModel,
-  GraphWindowKey,
-  MessageRequest,
-  MessageResponse,
-  Snapshot,
 } from "../types/index.js";
 
 const loadingEl = mustGet<HTMLDivElement>("loading");
@@ -43,66 +36,90 @@ const refreshBtn = mustGet<HTMLButtonElement>("refreshBtn");
 const settingsBtn = mustGet<HTMLButtonElement>("settingsBtn");
 const openOptionsBtn = document.getElementById("openOptionsBtn") as HTMLButtonElement | null;
 const retryBtn = document.getElementById("retryBtn") as HTMLButtonElement | null;
+const manifest = chrome.runtime.getManifest();
+mustGet<HTMLSpanElement>("appVersion").textContent = `v${manifest.version_name ?? manifest.version}`;
 
-const WINDOW_MS: Readonly<Record<GraphWindowKey, number>> = {
-  "24h": 86_400_000,
-  "3d": 3 * 86_400_000,
-  "7d": 7 * 86_400_000,
-  "15d": 15 * 86_400_000,
-  "1m": 30 * 86_400_000,
-  "all": 0,
-};
+let renderRevision = 0;
+let updating = false;
+let automaticError = false;
 
-async function init(): Promise<void> {
-  showState("loading");
+async function init(refreshOnOpen = false): Promise<void> {
+  const revision = ++renderRevision;
+  if (gamesListEl.children.length === 0) showState("loading");
 
   try {
-    const [games, cache, settings, lastFetch] = await Promise.all([
+    const [games, cache, settings] = await Promise.all([
       getGames(),
       getCache(),
       getSettings(),
-      getLastFetchTime(),
     ]);
 
+    if (revision !== renderRevision) return;
     if (games.length === 0) {
       showState("empty");
       return;
     }
 
-    const vms = await buildAllViewModels(games, cache, idbGetSnapshots, TRACKING_RETENTION_DAYS);
-    if (vms.some(needsRichDataHydration)) {
-      try {
-        await chrome.runtime.sendMessage<MessageRequest, MessageResponse>({ type: "FETCH_NOW" });
-        const freshCache = await getCache();
-        vms.splice(0, vms.length, ...(await buildAllViewModels(games, freshCache, idbGetSnapshots, TRACKING_RETENTION_DAYS)));
-      } catch (err) {
-        console.error(`[SteamWatch popup] Rich data hydration failed: ${formatError(err)}`);
-      }
+    if (gamesListEl.children.length === 0) {
+      const initial = games.map((game) => ({ ...buildCardViewModel(game, cache, [], TRACKING_RETENTION_DAYS), historyLoading: true }));
+      initial.sort((a, b) => (b.current ?? -1) - (a.current ?? -1));
+      renderGames(initial, settings.badgeFavoriteAppid);
+      showState("list");
+      updateHeaderTimestamp(initial);
+      updateFetchBar(await getLastFetchTime());
     }
 
+    const vms = await buildAllViewModels(games, cache, idbGetSnapshots, TRACKING_RETENTION_DAYS, idbGetBootstrapStatus);
+    const lastFetch = await getLastFetchTime();
+    if (revision !== renderRevision) return;
     vms.sort((a, b) => (b.current ?? -1) - (a.current ?? -1));
     renderGames(vms, settings.badgeFavoriteAppid);
-    updateFetchBar(lastFetch);
     updateHeaderTimestamp(vms);
     showState("list");
+    updateFetchBar(lastFetch);
+    if (automaticError) showAutomaticError();
+    if (refreshOnOpen && shouldRefreshGames(games, cache)) void refresh(true);
   } catch (err) {
+    if (revision !== renderRevision) return;
     console.error(`[SteamWatch popup] ${formatError(err)}`);
     showError("Failed to load SteamWatch data.");
   }
 }
 
 function renderGames(vms: CardViewModel[], favoriteAppid?: string): void {
+  const expanded = new Map<string, string | undefined>();
+  const focusedLabel = document.activeElement?.getAttribute("aria-label");
+  for (const item of Array.from(gamesListEl.querySelectorAll<HTMLElement>(".game-item"))) {
+    const appId = item.querySelector<HTMLElement>(".game-card")?.dataset["appid"];
+    if (appId && item.classList.contains("expanded")) {
+      expanded.set(appId, item.querySelector<HTMLElement>(".graph-pill--active")?.dataset["window"]);
+    }
+    const graph = item.querySelector<HTMLDivElement>(".panel-sparkline") as (HTMLDivElement & { hoverCleanup?: () => void }) | null;
+    graph?.hoverCleanup?.();
+  }
   clear(gamesListEl);
 
   vms.forEach((vm, index) => {
     const rankEmoji = vms.length > 1
       ? index === 0 ? "1" : index === 1 ? "2" : index === 2 ? "3" : ""
       : "";
-    gamesListEl.appendChild(buildGameItem(vm, rankEmoji, index === 0, favoriteAppid));
+    const item = buildGameItem(vm, rankEmoji, index === 0, favoriteAppid);
+    gamesListEl.appendChild(item);
+    if (expanded.has(vm.game.appid)) {
+      item.querySelector<HTMLButtonElement>(".btn-expand")?.click();
+      const selected = expanded.get(vm.game.appid);
+      const button = Array.from(item.querySelectorAll<HTMLButtonElement>(".graph-pill"))
+        .find((pill) => pill.dataset["window"] === selected && !pill.disabled);
+      button?.click();
+    }
     if (index < vms.length - 1) {
       gamesListEl.appendChild(h("li", { className: "game-divider", attrs: { "aria-hidden": "true" } }));
     }
   });
+  if (focusedLabel) {
+    Array.from(gamesListEl.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.getAttribute("aria-label") === focusedLabel)?.focus({ preventScroll: true });
+  }
 
   if (vms.length >= MAX_GAMES) {
     gamesListEl.appendChild(h("li", {
@@ -115,7 +132,7 @@ function renderGames(vms: CardViewModel[], favoriteAppid?: string): void {
 
 function buildGameItem(vm: CardViewModel, rankEmoji: string, isTop: boolean, favoriteAppid?: string): HTMLLIElement {
   const { game, current, peak24h, allTimePeak, trendCls, displayTrendPct, displayTrendIcon, displayTrendCls } = vm;
-  const li = h("li", { className: "game-item" });
+  const li = h("li", { className: "game-item", dataset: { historyLoading: String(vm.historyLoading === true) } });
   const card = h("div", {
     className: `game-card ${trendCls}${isTop ? " rank-first" : ""}`,
     dataset: { appid: game.appid },
@@ -158,13 +175,16 @@ function buildGameItem(vm: CardViewModel, rankEmoji: string, isTop: boolean, fav
     h("span", {
       className: "stat-current",
       text: fmtNumber(current),
-      attrs: { "aria-label": `${fmtNumber(current)} concurrent players` },
+      attrs: {
+        "aria-label": `${fmtNumber(current)} concurrent players`,
+        title: freshnessTitle(vm.freshness?.current),
+      },
     }),
     h("div", {
       className: "stat-meta",
       children: [
-        statRow("24H PK", "24-hour peak", peak24h),
-        statRow("ATH", "all-time peak", allTimePeak),
+        statRow("24H PK", `24-hour peak · ${freshnessTitle(vm.freshness?.peak24h)}`, peak24h),
+        statRow(allTimePeak !== null ? "ATH" : "OBS PK", allTimePeak !== null ? `SteamCharts record · ${freshnessTitle(vm.freshness?.allTimePeak)}` : "Maximum in available observations; not an all-time record", allTimePeak ?? vm.observedPeak ?? null),
       ],
     }),
   );
@@ -172,8 +192,10 @@ function buildGameItem(vm: CardViewModel, rankEmoji: string, isTop: boolean, fav
     stats.appendChild(h("span", {
       className: `trend-badge ${displayTrendCls}`,
       text: `${displayTrendIcon ? `${displayTrendIcon} ` : ""}${fmtPct(displayTrendPct)}`,
-      attrs: { "aria-label": `Trend ${fmtPct(displayTrendPct)}` },
+      attrs: { "aria-label": `Seasonal trend ${fmtPct(displayTrendPct)}`, title: "7-day seasonal trend: matched hours and weekdays from previous weeks" },
     }));
+  } else {
+    stats.appendChild(h("span", { className: "trend-badge stable", text: "No trend", attrs: { title: vm.seasonalAnalysis?.reason ?? "Not enough comparable history" } }));
   }
 
   append(
@@ -331,330 +353,6 @@ function togglePanel(li: HTMLLIElement, panel: HTMLDivElement, btn: HTMLButtonEl
   }
 }
 
-function populatePanel(panel: HTMLDivElement, vm: CardViewModel): void {
-  const {
-    game,
-    current,
-    peak24h,
-    allTimePeak,
-    twitchViewers,
-    avg24h,
-    gain24h,
-    retentionAvg,
-    retentionGain,
-    retentionWindowLabel,
-    availableGraphWindows,
-    defaultGraphWindow,
-  } = vm;
-
-  clear(panel);
-  const availableKeys = new Set(availableGraphWindows.map((window) => window.key));
-  if (availableKeys.size > 0) {
-    panel.appendChild(buildGraphPills(availableKeys, defaultGraphWindow, panel, vm));
-  }
-
-  const sparklinePanel = h("div", { className: "panel-sparkline", attrs: { "aria-hidden": "true" } });
-  const recordLowEl = h("div", { className: "panel-record-low" });
-
-  append(
-    panel,
-    sparklinePanel,
-    h("dl", {
-      className: "panel-stats",
-      children: [
-        panelStat("Current", fmtNumber(current)),
-        panelStat("24h peak", fmtNumber(peak24h)),
-        panelStat("All-time peak", fmtNumber(allTimePeak)),
-        panelStat("Twitch viewers", twitchViewers != null ? fmtNumber(twitchViewers) : "—"),
-        panelStat("24h average", avg24h != null ? fmtNumber(avg24h) : "—"),
-        panelStat("24h gain/loss", gain24h != null ? fmtSignedPlayers(gain24h) : "—"),
-        panelStat(`${retentionWindowLabel} average`, retentionAvg != null ? fmtNumber(retentionAvg) : "—"),
-        panelStat(`${retentionWindowLabel} gain/loss`, retentionGain != null ? fmtSignedPlayers(retentionGain) : "—"),
-      ],
-    }),
-    recordLowEl,
-    h("div", {
-      className: "panel-links",
-      children: [
-        panelLink(`https://store.steampowered.com/app/${game.appid}`, "Steam"),
-        panelLink(`https://steamdb.info/app/${game.appid}`, "SteamDB"),
-      ],
-    }),
-  );
-
-  updateRecordLowElement(recordLowEl, defaultGraphWindow ?? "all", vm.recordLow, vm.allTimeLow);
-  void renderPanelSparklineFromIdb(panel, game.appid, defaultGraphWindow);
-}
-
-function buildGraphPills(
-  availableKeys: Set<GraphWindowKey>,
-  defaultGraphWindow: GraphWindowKey | null,
-  panel: HTMLDivElement,
-  vm: CardViewModel,
-): HTMLDivElement {
-  const allKeys: GraphWindowKey[] = ["24h", "3d", "7d", "15d", "1m", "all"];
-  const bar = h("div", { className: "graph-pill-bar", attrs: { role: "group", "aria-label": "Graph time range" } });
-
-  allKeys.forEach((key) => {
-    const disabled = key !== "all" && !availableKeys.has(key);
-    const active = key === defaultGraphWindow;
-    const button = h("button", {
-      className: `graph-pill${active ? " graph-pill--active" : ""}${disabled ? " graph-pill--disabled" : ""}`,
-      text: key === "all" ? "All" : key,
-      attrs: {
-        type: "button",
-        disabled,
-        "aria-disabled": disabled ? "true" : undefined,
-      },
-      dataset: { window: key },
-    });
-
-    if (!disabled) {
-      button.addEventListener("click", () => {
-        bar.querySelectorAll<HTMLButtonElement>(".graph-pill").forEach((pill) => {
-          pill.classList.toggle("graph-pill--active", pill === button);
-        });
-        void renderPanelSparklineFromIdb(panel, vm.game.appid, key);
-        void refreshRecordLow(panel, vm, key);
-      });
-    }
-    bar.appendChild(button);
-  });
-
-  return bar;
-}
-
-function panelStat(label: string, value: string): HTMLDivElement {
-  return h("div", {
-    className: "panel-stat",
-    children: [
-      h("dt", { className: "panel-stat-label", text: label }),
-      h("dd", { className: "panel-stat-value", text: value }),
-    ],
-  });
-}
-
-function panelLink(href: string, text: string): HTMLAnchorElement {
-  return h("a", {
-    className: "panel-link",
-    text,
-    attrs: {
-      href,
-      target: "_blank",
-      rel: "noopener noreferrer",
-    },
-  });
-}
-
-async function refreshRecordLow(panel: HTMLDivElement, vm: CardViewModel, key: GraphWindowKey): Promise<void> {
-  const recordLowEl = panel.querySelector<HTMLDivElement>(".panel-record-low");
-  if (!recordLowEl || !vm.allTimeLow) return;
-
-  const snaps = key === "all"
-    ? await idbGetSnapshots(vm.game.appid)
-    : await idbGetSnapshotsInRange(vm.game.appid, Date.now() - WINDOW_MS[key], Date.now());
-  updateRecordLowElement(recordLowEl, key, computeWindowMin(snaps), vm.allTimeLow);
-}
-
-function updateRecordLowElement(
-  el: HTMLDivElement,
-  key: GraphWindowKey,
-  windowLow: { value: number; timestamp: number } | null,
-  allTimeLow: { value: number; timestamp: number } | null,
-): void {
-  if (!allTimeLow) {
-    el.hidden = true;
-    clear(el);
-    return;
-  }
-
-  el.hidden = false;
-  clear(el);
-  append(
-    el,
-    `${key === "all" ? "All" : key} Low: `,
-    h("span", { className: "panel-record-low-val", text: windowLow ? fmtNumber(windowLow.value) : "—" }),
-    " • All-time Low: ",
-    h("span", { className: "panel-record-low-val", text: fmtNumber(allTimeLow.value) }),
-  );
-}
-
-function needsRichDataHydration(vm: CardViewModel): boolean {
-  if (vm.current == null) return false;
-  return vm.peak24h == null || vm.allTimePeak == null || vm.twitchViewers == null;
-}
-
-function fmtSignedPlayers(value: number): string {
-  const abs = fmtNumber(Math.abs(value));
-  if (value > 0) return `+${abs}`;
-  if (value < 0) return `-${abs}`;
-  return "0";
-}
-
-async function renderPanelSparklineFromIdb(
-  panel: HTMLDivElement,
-  appId: string,
-  selectedWindow: GraphWindowKey | null,
-): Promise<void> {
-  const sparklineEl = panel.querySelector<HTMLDivElement>(".panel-sparkline");
-  if (!sparklineEl) return;
-
-  const containerWithCleanup = sparklineEl as HTMLDivElement & { hoverCleanup?: () => void };
-  containerWithCleanup.hoverCleanup?.();
-  containerWithCleanup.hoverCleanup = undefined;
-  clear(sparklineEl);
-
-  const snaps = selectedWindow === null || selectedWindow === "all"
-    ? await idbGetSnapshots(appId)
-    : await idbGetSnapshotsInRange(appId, Date.now() - WINDOW_MS[selectedWindow], Date.now());
-
-  const graphSnaps = downsampleSnapshotsForGraph([...snaps], 96);
-  const result = renderSparkline(graphSnaps, {
-    strokeColor: sparklineColor(graphSnaps),
-    width: 372,
-    height: 56,
-    maxPoints: 96,
-  });
-
-  sparklineEl.hidden = !result;
-  if (!result) return;
-
-  sparklineEl.appendChild(result.svg);
-  containerWithCleanup.hoverCleanup = attachSparklineHover(sparklineEl, result.points, graphSnaps);
-}
-
-function attachSparklineHover(
-  container: HTMLDivElement,
-  points: ReadonlyArray<{ x: number; y: number }>,
-  snaps: readonly Snapshot[],
-): () => void {
-  const viewW = 372;
-  const viewH = 56;
-
-  const tooltip = h("div", { className: "sparkline-tooltip", attrs: { hidden: true } });
-  const hoverLine = h("div", { className: "sparkline-hover-line", attrs: { hidden: true } });
-  const hoverDot = h("div", { className: "sparkline-hover-dot", attrs: { hidden: true } });
-  append(container, tooltip, hoverLine, hoverDot);
-
-  function onMouseMove(event: MouseEvent): void {
-    const rect = container.getBoundingClientRect();
-    const domX = event.clientX - rect.left;
-    const domW = rect.width;
-    if (domW <= 0) return;
-
-    const svgX = (domX / domW) * viewW;
-    const index = findNearestPointIndex(svgX, points);
-    const snap = snaps[index];
-    if (!snap) return;
-
-    const point = points[index]!;
-    const pctX = (point.x / viewW) * 100;
-    const pctY = (point.y / viewH) * 100;
-
-    tooltip.textContent = fmtNumber(snap.current);
-    tooltip.hidden = false;
-    hoverLine.hidden = false;
-    hoverDot.hidden = false;
-
-    hoverLine.style.left = `${pctX}%`;
-    hoverDot.style.left = `${pctX}%`;
-    hoverDot.style.top = `${pctY}%`;
-
-    const tooltipW = tooltip.offsetWidth;
-    const containerW = container.offsetWidth;
-    if (containerW > 0 && tooltipW > 0) {
-      const halfTooltipPct = (tooltipW / 2 / containerW) * 100;
-      tooltip.style.left = `${Math.max(halfTooltipPct, Math.min(pctX, 100 - halfTooltipPct))}%`;
-    } else {
-      tooltip.style.left = `${pctX}%`;
-    }
-  }
-
-  function onMouseLeave(): void {
-    tooltip.hidden = true;
-    hoverLine.hidden = true;
-    hoverDot.hidden = true;
-  }
-
-  container.addEventListener("mousemove", onMouseMove);
-  container.addEventListener("mouseleave", onMouseLeave);
-
-  return () => {
-    container.removeEventListener("mousemove", onMouseMove);
-    container.removeEventListener("mouseleave", onMouseLeave);
-  };
-}
-
-function renderSparkline(
-  snapshots: readonly Snapshot[],
-  opts: { width: number; height: number; maxPoints: number; strokeColor: string },
-): { svg: SVGSVGElement; points: ReadonlyArray<{ x: number; y: number }> } | null {
-  const sliced = snapshots.slice(-opts.maxPoints);
-  if (sliced.length < 2) return null;
-
-  const values = sliced.map((snapshot) => snapshot.current);
-  const points = mapToPoints(values, opts.width, opts.height);
-  const svg = s("svg", {
-    attrs: {
-      viewBox: `0 0 ${opts.width} ${opts.height}`,
-      preserveAspectRatio: "none",
-      "aria-hidden": "true",
-      role: "img",
-    },
-  });
-
-  const fillPoints = [
-    ...points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`),
-    `${points[points.length - 1]!.x.toFixed(1)},${opts.height}`,
-    `${points[0]!.x.toFixed(1)},${opts.height}`,
-  ].join(" ");
-  svg.appendChild(s("polygon", {
-    attrs: {
-      points: fillPoints,
-      fill: "rgba(0,200,255,0.08)",
-    },
-  }));
-
-  points.slice(1).forEach((point, index) => {
-    const previous = points[index]!;
-    svg.appendChild(s("line", {
-      attrs: {
-        x1: previous.x.toFixed(1),
-        y1: previous.y.toFixed(1),
-        x2: point.x.toFixed(1),
-        y2: point.y.toFixed(1),
-        stroke: segmentColor(values[index]!, values[index + 1]!),
-        "stroke-width": "1.8",
-        "stroke-linecap": "round",
-      },
-    }));
-  });
-
-  svg.appendChild(s("polyline", {
-    attrs: {
-      points: points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" "),
-      fill: "none",
-      stroke: opts.strokeColor,
-      "stroke-width": "0.01",
-      "stroke-linecap": "round",
-      "stroke-linejoin": "round",
-      opacity: "0",
-    },
-  }));
-
-  return { svg, points };
-}
-
-function segmentColor(prev: number, next: number): string {
-  if (prev <= 0) return "#00c8ff";
-  const pct = ((next - prev) / prev) * 100;
-  if (pct >= 8) return "#16a34a";
-  if (pct >= 2) return "#22c55e";
-  if (pct <= -8) return "#dc2626";
-  if (pct <= -2) return "#ef4444";
-  return "#00c8ff";
-}
-
 function toggleShareBar(bar: HTMLDivElement, btn: HTMLButtonElement): void {
   if (bar.hidden) {
     bar.hidden = false;
@@ -743,11 +441,7 @@ async function handleToggleFavorite(appid: string, clickedBtn: HTMLButtonElement
     });
 
     clickedBtn.blur();
-    try {
-      await chrome.runtime.sendMessage<MessageRequest, MessageResponse>({ type: "FETCH_NOW" });
-    } catch (err) {
-      console.warn(`[SteamWatch] Favorite badge refresh failed: ${formatError(err)}`);
-    }
+
   } catch (err) {
     console.error(`[SteamWatch] Toggle favorite failed: ${formatError(err)}`);
   }
@@ -772,10 +466,15 @@ function updateFetchBar(lastFetch: number): void {
   }
 
   fetchBarEl.textContent = label;
+  fetchBarEl.title = "Latest successful live player update. Each metric has its own source update time.";
   show(fetchBarEl);
 }
 
 function updateHeaderTimestamp(vms: CardViewModel[]): void {
+  if (vms.some((vm) => vm.current === null || vm.freshness?.current?.status === "error")) {
+    lastUpdatedEl.textContent = "Partial update";
+    return;
+  }
   const timestamps = vms.map((vm) => vm.fetchedAt).filter((timestamp) => timestamp > 0);
   if (!timestamps.length) return;
   lastUpdatedEl.textContent = fmtTimeAgo(Math.max(...timestamps));
@@ -884,23 +583,47 @@ function imageIcon(): SVGSVGElement {
   ]);
 }
 
-refreshBtn.addEventListener("click", async () => {
+function showAutomaticError(): void {
+  fetchBarEl.textContent = "Update failed — showing saved data. Retry with Refresh.";
+  show(fetchBarEl);
+}
+
+async function refresh(automatic = false): Promise<void> {
+  if (updating) return;
+  updating = true;
+  automaticError = false;
   refreshBtn.classList.add("spinning");
   refreshBtn.disabled = true;
   try {
-    await chrome.runtime.sendMessage<MessageRequest, MessageResponse>({ type: "FETCH_NOW" });
+    await requestRefresh(!automatic);
     await init();
   } catch (err) {
     console.error(`[SteamWatch] Refresh failed: ${formatError(err)}`);
+    if (automatic && gamesListEl.children.length > 0) {
+      automaticError = true;
+      showAutomaticError();
+    } else {
+      showError("Unable to refresh game data. Please retry.");
+    }
   } finally {
+    updating = false;
     refreshBtn.classList.remove("spinning");
     refreshBtn.disabled = false;
   }
-});
+}
+
+refreshBtn.addEventListener("click", () => void refresh());
 
 settingsBtn.addEventListener("click", () => chrome.runtime.openOptionsPage());
 openOptionsBtn?.addEventListener("click", () => chrome.runtime.openOptionsPage());
-retryBtn?.addEventListener("click", () => void init());
+retryBtn?.addEventListener("click", () => void refresh());
 bindGlobalShareBarClose(document);
 
-void init();
+startPopupUpdates(
+  async () => {
+    const [games, cache] = await Promise.all([getGames(), getCache()]);
+    if (shouldRefreshGames(games, cache)) await refresh(true);
+  },
+  () => init(),
+);
+void init(true);

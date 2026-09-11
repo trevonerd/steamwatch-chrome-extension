@@ -32,6 +32,15 @@ The version number lives in `manifest.json` only. Never update `package.json` ve
 - MINOR: new features
 - MAJOR: breaking changes
 
+### Active v2 beta workflow
+
+- User-requested beta builds use a numeric Chrome `version` and descriptive `version_name` in `manifest.json`, starting at `2.0.0` / `2.0.0-beta.1`.
+- Keep the visible base fixed at `2.0.0`: increment ONLY the beta counter in `version_name` (`2.0.0-beta.3`, `2.0.0-beta.4`, etc.). The beta 2 patch increment was corrected by the user.
+- Keep Chrome's technical version monotonic using its fourth numeric component: after the already delivered `2.0.1`, use `2.0.1.3` for beta 3, `2.0.1.4` for beta 4, etc. Do not increment for repeated builds/tests of the same change set.
+- Run `pnpm version-sync`, update `CHANGELOG.md`, build, and test before handing the build to the user.
+- Popup and About must display `chrome.runtime.getManifest().version_name` with `version` as fallback, so they identify the extension actually loaded.
+- Before leaving beta, choose a stable numeric version greater than the last beta build; do not reset to an older numeric version.
+
 ### Release Checklist
 
 1. Update `manifest.json` version

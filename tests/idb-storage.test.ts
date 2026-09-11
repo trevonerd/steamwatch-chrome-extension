@@ -4,15 +4,26 @@ import type { Snapshot } from "../src/types/index.js";
 import {
   _resetDbForTesting,
   idbBulkSaveSnapshots,
+  idbAcquireBootstrapLease,
   idbClearAllData,
+  idbClearGameTombstone,
+  idbCompleteBootstrapImport,
+  idbDeleteGameData,
   idbDeleteSnapshots,
+  idbFailBootstrapLease,
   idbGetCooldown,
+  idbGetBootstrapStatus,
   idbGetSnapshots,
   idbGetSnapshotsInRange,
   idbPurgeCooldowns,
   idbSaveSnapshot,
   idbSetCooldown,
+  idbTransformSnapshotsAtomically,
 } from "../src/utils/idb-storage.js";
+
+function values(snapshots: readonly Snapshot[]): Array<{ ts: number; current: number }> {
+  return snapshots.map(({ ts, current }) => ({ ts, current }));
+}
 
 describe("idb-storage", () => {
   beforeEach(async () => {
@@ -35,7 +46,7 @@ describe("idb-storage", () => {
     await idbSaveSnapshot(appId, second);
 
     const snapshots = await idbGetSnapshots(appId);
-    expect(snapshots).toEqual([
+    expect(values(snapshots)).toEqual([
       { ts: 1000, current: 10 },
       { ts: 2000, current: 11 },
     ]);
@@ -52,12 +63,27 @@ describe("idb-storage", () => {
     expect(inRange.map((s) => s.ts)).toEqual([3000, 4000, 5000, 6000, 7000]);
   });
 
+  it("rejects an invalid or future sample at the persistence boundary", async () => {
+    const future = Date.now() + 60_000;
+    const invalid: Snapshot = { ts: 1_000, current: -1 };
+
+    await idbBulkSaveSnapshots("100", [
+      { ts: future, current: 20 },
+      invalid,
+      { ts: 1_000, current: 10 },
+    ]);
+
+    await expect(idbGetSnapshots("100")).resolves.toEqual([
+      { ts: 1_000, current: 10, source: "legacy", granularity: "unknown" },
+    ]);
+  });
+
   it("keeps snapshots isolated per appId", async () => {
     await idbSaveSnapshot("100", { ts: 1000, current: 10 });
     await idbSaveSnapshot("200", { ts: 1000, current: 20 });
 
-    expect(await idbGetSnapshots("100")).toEqual([{ ts: 1000, current: 10 }]);
-    expect(await idbGetSnapshots("200")).toEqual([{ ts: 1000, current: 20 }]);
+    expect(values(await idbGetSnapshots("100"))).toEqual([{ ts: 1000, current: 10 }]);
+    expect(values(await idbGetSnapshots("200"))).toEqual([{ ts: 1000, current: 20 }]);
   });
 
   it("deletes all snapshots for an appId", async () => {
@@ -68,7 +94,38 @@ describe("idb-storage", () => {
     await idbDeleteSnapshots("100");
 
     await expect(idbGetSnapshots("100")).resolves.toEqual([]);
-    await expect(idbGetSnapshots("200")).resolves.toEqual([{ ts: 1000, current: 30 }]);
+    expect(values(await idbGetSnapshots("200"))).toEqual([{ ts: 1000, current: 30 }]);
+  });
+
+  it("rolls back a failing atomic transformation", async () => {
+    await idbSaveSnapshot("100", { ts: 1_000, current: 10 });
+
+    await expect(idbTransformSnapshotsAtomically("100", () => {
+      throw new Error("calculation failed");
+    })).rejects.toThrow("calculation failed");
+
+    await expect(idbGetSnapshots("100")).resolves.toEqual([
+      { ts: 1_000, current: 10, source: "legacy", granularity: "unknown" },
+    ]);
+  });
+
+  it("deduplicates separate writes at one timestamp and prefers an instant sample", async () => {
+    await idbSaveSnapshot("100", {
+      ts: 1_000,
+      current: 10,
+      source: "steamcharts",
+      granularity: "hourly",
+    });
+    await idbSaveSnapshot("100", {
+      ts: 1_000,
+      current: 11,
+      source: "steamcharts",
+      granularity: "instant",
+    });
+
+    await expect(idbGetSnapshots("100")).resolves.toEqual([
+      { ts: 1_000, current: 11, source: "steamcharts", granularity: "instant" },
+    ]);
   });
 
   describe("cooldowns", () => {
@@ -177,7 +234,7 @@ describe("idb-storage", () => {
      });
    });
 
-   describe("idbBulkSaveSnapshots", () => {
+  describe("idbBulkSaveSnapshots", () => {
      it("bulk saves multiple snapshots and retrieves them sorted by ts", async () => {
        const appId = "100";
        const snapshots: Snapshot[] = [
@@ -189,7 +246,7 @@ describe("idb-storage", () => {
        await idbBulkSaveSnapshots(appId, snapshots);
 
        const retrieved = await idbGetSnapshots(appId);
-       expect(retrieved).toEqual([
+       expect(values(retrieved)).toEqual([
          { ts: 1000, current: 10 },
          { ts: 2000, current: 20 },
          { ts: 3000, current: 30 },
@@ -223,8 +280,8 @@ describe("idb-storage", () => {
        const retrieved1 = await idbGetSnapshots(appId1);
        const retrieved2 = await idbGetSnapshots(appId2);
 
-       expect(retrieved1).toEqual(snapshots1);
-       expect(retrieved2).toEqual(snapshots2);
+       expect(values(retrieved1)).toEqual(snapshots1);
+       expect(values(retrieved2)).toEqual(snapshots2);
      });
 
      it("bulk saves 150 snapshots and retrieves all", async () => {
@@ -238,8 +295,141 @@ describe("idb-storage", () => {
 
        const retrieved = await idbGetSnapshots(appId);
        expect(retrieved).toHaveLength(150);
-       expect(retrieved[0]).toEqual({ ts: 1000, current: 1 });
-       expect(retrieved[149]).toEqual({ ts: 150000, current: 150 });
-     });
-   });
+       expect(values(retrieved)[0]).toEqual({ ts: 1000, current: 1 });
+       expect(values(retrieved)[149]).toEqual({ ts: 150000, current: 150 });
+  });
+
+  describe("bootstrap import", () => {
+    it("deduplicates import timestamps while preserving a live Steam sample", async () => {
+      await idbSaveSnapshot("100", {
+        ts: 1_000,
+        current: 99,
+        source: "steam",
+        granularity: "instant",
+      });
+      const lease = await idbAcquireBootstrapLease("100", 10_000, 1_000);
+
+      expect(lease).not.toBeNull();
+      if (!lease) throw new Error("expected bootstrap lease");
+
+      await expect(idbCompleteBootstrapImport(lease, [
+        { ts: 1_000, current: 1, source: "steamcharts", granularity: "hourly" },
+        { ts: 2_000, current: 2, source: "steamcharts", granularity: "hourly" },
+        { ts: 2_000, current: 3, source: "steamcharts", granularity: "hourly" },
+      ])).resolves.toBe(true);
+
+      await expect(idbGetSnapshots("100")).resolves.toEqual([
+        { ts: 1_000, current: 99, source: "steam", granularity: "instant" },
+        { ts: 2_000, current: 2, source: "steamcharts", granularity: "hourly" },
+      ]);
+      await expect(idbGetBootstrapStatus("100")).resolves.toMatchObject({
+        state: "completed",
+        importedCount: 2,
+        startTs: 1_000,
+        endTs: 2_000,
+      });
+    });
+
+    it("retains a monthly peak and weekly aggregate when live and imported rows share their timestamp", async () => {
+      const timestamp = 1_000;
+      await idbBulkSaveSnapshots("100", [
+        { ts: timestamp, current: 999, source: "steamcharts", granularity: "monthly-peak" },
+        {
+          ts: timestamp,
+          current: 50,
+          source: "steamcharts",
+          granularity: "weekly",
+          aggregate: {
+            startTs: timestamp,
+            endTs: timestamp,
+            sampleCount: 1,
+            sum: 50,
+            min: 50,
+            max: 50,
+            minTs: timestamp,
+            maxTs: timestamp,
+            observedDurationMs: 0,
+          },
+        },
+      ]);
+      await idbSaveSnapshot("100", {
+        ts: timestamp,
+        current: 55,
+        source: "steam",
+        granularity: "instant",
+      });
+      const lease = await idbAcquireBootstrapLease("100", 10_000, 1_000);
+      expect(lease).not.toBeNull();
+      if (!lease) throw new Error("expected bootstrap lease");
+
+      await expect(idbCompleteBootstrapImport(lease, [
+        { ts: timestamp, current: 20, source: "steamcharts", granularity: "hourly" },
+      ])).resolves.toBe(true);
+
+      await expect(idbGetSnapshots("100")).resolves.toEqual([
+        { ts: timestamp, current: 999, source: "steamcharts", granularity: "monthly-peak" },
+        expect.objectContaining({ ts: timestamp, current: 50, source: "steamcharts", granularity: "weekly" }),
+        { ts: timestamp, current: 55, source: "steam", granularity: "instant" },
+      ]);
+    });
+
+    it("releases a failed lease only after its retry time", async () => {
+      const first = await idbAcquireBootstrapLease("100", 10_000, 1_000);
+      expect(first).not.toBeNull();
+      if (!first) throw new Error("expected bootstrap lease");
+
+      await expect(idbFailBootstrapLease(first, 20_000)).resolves.toBe(true);
+      await expect(idbAcquireBootstrapLease("100", 19_999, 1_000)).resolves.toBeNull();
+      await expect(idbAcquireBootstrapLease("100", 20_000, 1_000)).resolves.toMatchObject({ attempt: 2 });
+    });
+
+    it("allows an explicit retry of failed history without bypassing active leases or completed imports", async () => {
+      const first = await idbAcquireBootstrapLease("242050", 10_000, 1_000);
+      if (!first) throw new Error("expected bootstrap lease");
+      await expect(idbAcquireBootstrapLease("242050", 10_001, 1_000, true)).resolves.toBeNull();
+      await idbFailBootstrapLease(first, 900_000);
+      await expect(idbAcquireBootstrapLease("242050", 11_000, 1_000)).resolves.toBeNull();
+      const retry = await idbAcquireBootstrapLease("242050", 11_000, 1_000, true);
+      expect(retry).not.toBeNull();
+      if (!retry) throw new Error("expected manual retry lease");
+      await idbCompleteBootstrapImport(retry, [{ ts: 1_000, current: 200, source: "steamcharts", granularity: "hourly" }]);
+      await expect(idbAcquireBootstrapLease("242050", Date.now(), 1_000, true)).resolves.toBeNull();
+      await idbDeleteGameData("242050");
+      await expect(idbAcquireBootstrapLease("242050", Date.now(), 1_000, true)).resolves.toBeNull();
+    });
+
+    it("promotes a matching unknown row to known metadata regardless of import order", async () => {
+      const lease = await idbAcquireBootstrapLease("100", 10_000, 1_000);
+      expect(lease).not.toBeNull();
+      if (!lease) throw new Error("expected bootstrap lease");
+
+      await expect(idbCompleteBootstrapImport(lease, [
+        { ts: 1_000, current: 20, source: "steamcharts", granularity: "hourly" },
+        { ts: 1_000, current: 20, source: "legacy", granularity: "unknown" },
+      ])).resolves.toBe(true);
+
+      await expect(idbGetSnapshots("100")).resolves.toEqual([
+        { ts: 1_000, current: 20, source: "steamcharts", granularity: "hourly" },
+      ]);
+    });
+
+    it("tombstones removed games so an old lease cannot restore history", async () => {
+      const lease = await idbAcquireBootstrapLease("100", 10_000, 1_000);
+      expect(lease).not.toBeNull();
+      if (!lease) throw new Error("expected bootstrap lease");
+      await idbSetCooldown("100__trend_up", Date.now() + 60_000);
+
+      await idbDeleteGameData("100");
+
+      await expect(idbCompleteBootstrapImport(lease, [
+        { ts: 1_000, current: 2, source: "steamcharts", granularity: "hourly" },
+      ])).resolves.toBe(false);
+      await expect(idbGetSnapshots("100")).resolves.toEqual([]);
+      await expect(idbGetCooldown("100__trend_up")).resolves.toBeNull();
+
+      await idbClearGameTombstone("100");
+      await expect(idbAcquireBootstrapLease("100", 30_000, 1_000)).resolves.toMatchObject({ attempt: 1 });
+    });
+  });
+ });
  });

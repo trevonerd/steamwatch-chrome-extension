@@ -9,7 +9,10 @@
 
 import type { CardViewModel } from "../types/index.js";
 import { fmtNumber, fmtPct, fmtTimeAgo } from "./trend.js";
-import { mapToPoints } from "./sparkline.js";
+import { buildGraphSeries, colorGraphSegments, type GraphSeries } from "./sparkline.js";
+
+const DAY_MS = 86_400_000;
+const SHARE_GRAPH_MAX_POINTS = 200;
 
 // ── Text share ────────────────────────────────────────────────────────────────
 
@@ -24,7 +27,18 @@ import { mapToPoints } from "./sparkline.js";
  * @param vm  CardViewModel for the game to share.
  */
 export function buildShareText(vm: CardViewModel): string {
-  const { game, current, peak24h, allTimePeak, allTimePeakLabel, trend, latestChangePct, fetchedAt } = vm;
+  const {
+    game,
+    current,
+    peak24h,
+    allTimePeak,
+    allTimePeakLabel,
+    observedPeak,
+    seasonalAnalysis,
+    trend,
+    latestChangePct,
+    fetchedAt,
+  } = vm;
 
   const line  = "─".repeat(32);
   const name  = game.name;
@@ -39,6 +53,8 @@ export function buildShareText(vm: CardViewModel): string {
   // Trend
   if (trend) {
     parts.push(`${trend.level.icon} Trend:    ${fmtPct(trend.pct)} (${trend.level.label})`);
+  } else if (seasonalAnalysis) {
+    parts.push(`↔ Trend unavailable: ${seasonalAnalysis.reason}`);
   }
 
   if (latestChangePct != null) {
@@ -46,12 +62,13 @@ export function buildShareText(vm: CardViewModel): string {
   }
 
   // Peaks
-  if (peak24h || allTimePeak) {
-    const peak24hStr = peak24h ? `24h peak: ${fmtNumber(peak24h)}` : "";
-    const allTimePeakStr = allTimePeak
-      ? `All-time peak: ${fmtNumber(allTimePeak)}${allTimePeakLabel ? ` (${allTimePeakLabel})` : ""}`
+  if (peak24h != null || allTimePeak != null || observedPeak != null) {
+    const peak24hStr = peak24h != null ? `24h peak: ${fmtNumber(peak24h)}` : "";
+    const allTimePeakStr = allTimePeak != null
+      ? `Provider ATH: ${fmtNumber(allTimePeak)}${allTimePeakLabel ? ` (${allTimePeakLabel})` : ""}`
       : "";
-    const statLine = [peak24hStr, allTimePeakStr].filter(Boolean).join("  ·  ");
+    const observedPeakStr = observedPeak != null ? `Observed peak: ${fmtNumber(observedPeak)}` : "";
+    const statLine = [peak24hStr, allTimePeakStr, observedPeakStr].filter(Boolean).join("  ·  ");
     parts.push(`📊 ${statLine}`);
   }
 
@@ -73,6 +90,16 @@ export function buildShareText(vm: CardViewModel): string {
 const CANVAS_W = 440;
 const CANVAS_H = 128;
 
+/** Build the qualified, gap-aware 24-hour series used by shared PNGs. */
+export function buildShareGraphSeries(
+  vm: Pick<CardViewModel, "snaps">,
+  now = Date.now(),
+  width = CANVAS_W - 100,
+  height = 36,
+): GraphSeries {
+  return buildGraphSeries(vm.snaps, DAY_MS, now, width, height, SHARE_GRAPH_MAX_POINTS);
+}
+
 /**
  * Render a game card to a PNG Blob using Canvas 2D.
  *
@@ -87,7 +114,7 @@ const CANVAS_H = 128;
  * @returns   PNG Blob ready for `navigator.clipboard.write()`.
  */
 export async function renderShareCanvas(vm: CardViewModel): Promise<Blob> {
-  const { game, current, peak24h, allTimePeak, trend, snaps, sparklineStroke } = vm;
+  const { game, current, peak24h, allTimePeak, observedPeak, trend } = vm;
 
   const canvas = document.createElement("canvas");
   canvas.width  = CANVAS_W;
@@ -138,8 +165,9 @@ export async function renderShareCanvas(vm: CardViewModel): Promise<Blob> {
   ctx.font      = "11px 'Courier New', Courier, monospace";
   ctx.fillStyle = "#7a90aa";
   const statsStr = [
-    peak24h ? `24H ${fmtNumber(peak24h)}` : "",
-    allTimePeak ? `ATH ${fmtNumber(allTimePeak)}` : "",
+    peak24h != null ? `24H ${fmtNumber(peak24h)}` : "",
+    allTimePeak != null ? `ATH ${fmtNumber(allTimePeak)}` : "",
+    observedPeak != null ? `OBS ${fmtNumber(observedPeak)}` : "",
   ].filter(Boolean).join("  ");
   if (statsStr) ctx.fillText(statsStr, TEXT_X + 2, 72);
 
@@ -150,7 +178,7 @@ export async function renderShareCanvas(vm: CardViewModel): Promise<Blob> {
     ctx.font = "11px 'Courier New', Courier, monospace";
     const bw = ctx.measureText(badgeText).width + 14;
     const bx = CANVAS_W - bw - 12;
-    const by = 12;
+    const by = 42;
     const bh = 20;
 
     ctx.fillStyle = badgeColor.bg;
@@ -161,39 +189,54 @@ export async function renderShareCanvas(vm: CardViewModel): Promise<Blob> {
     ctx.fillText(badgeText, bx + 7, by + 13);
   }
 
+  if (!trend) {
+    ctx.font = "11px system-ui";
+    ctx.fillStyle = "#7a90aa";
+    ctx.fillText("No seasonal trend", CANVAS_W - 120, 55);
+  }
+
   // ── Sparkline ──────────────────────────────────────────────────────────────
   const SPK_X = TEXT_X;
   const SPK_Y = 80;
   const SPK_W = CANVAS_W - TEXT_X - 16;
   const SPK_H = 36;
 
-  if (snaps.length >= 2) {
-    const recent = snaps.slice(-48);
-    const values = recent.map((s) => s.current);
-    const pts    = mapToPoints(values, SPK_W, SPK_H);
+  const graph = buildShareGraphSeries(vm, Date.now(), SPK_W, SPK_H);
+  for (const segment of graph.segments) {
+    const first = segment.points[0];
+    const last = segment.points.at(-1);
+    if (!first || !last || segment.points.length < 2) continue;
 
-    // Fill
     ctx.beginPath();
-    ctx.moveTo(SPK_X + pts[0]!.x, SPK_Y + pts[0]!.y);
-    for (let i = 1; i < pts.length; i++) {
-      ctx.lineTo(SPK_X + pts[i]!.x, SPK_Y + pts[i]!.y);
+    ctx.moveTo(SPK_X + first.x, SPK_Y + first.y);
+    for (const point of segment.points.slice(1)) {
+      ctx.lineTo(SPK_X + point.x, SPK_Y + point.y);
     }
-    ctx.lineTo(SPK_X + pts[pts.length - 1]!.x, SPK_Y + SPK_H);
-    ctx.lineTo(SPK_X + pts[0]!.x,               SPK_Y + SPK_H);
+    ctx.lineTo(SPK_X + last.x, SPK_Y + SPK_H);
+    ctx.lineTo(SPK_X + first.x, SPK_Y + SPK_H);
     ctx.closePath();
-    ctx.fillStyle = hexToRgba(sparklineStroke, 0.08);
+    ctx.fillStyle = hexToRgba("#00c8ff", 0.08);
     ctx.fill();
-
-    // Stroke
-    ctx.beginPath();
-    ctx.moveTo(SPK_X + pts[0]!.x, SPK_Y + pts[0]!.y);
-    for (let i = 1; i < pts.length; i++) {
-      ctx.lineTo(SPK_X + pts[i]!.x, SPK_Y + pts[i]!.y);
+  }
+  for (const segment of colorGraphSegments(graph)) {
+    const first = segment.points[0];
+    if (!first) continue;
+    if (segment.points.length === 1) {
+      ctx.beginPath();
+      ctx.arc(SPK_X + first.x, SPK_Y + first.y, 1.5, 0, Math.PI * 2);
+      ctx.fillStyle = segment.color;
+      ctx.fill();
+      continue;
     }
-    ctx.strokeStyle   = sparklineStroke;
-    ctx.lineWidth     = 1.5;
-    ctx.lineCap       = "round";
-    ctx.lineJoin      = "round";
+    ctx.beginPath();
+    ctx.moveTo(SPK_X + first.x, SPK_Y + first.y);
+    for (const point of segment.points.slice(1)) {
+      ctx.lineTo(SPK_X + point.x, SPK_Y + point.y);
+    }
+    ctx.strokeStyle = segment.color;
+    ctx.lineWidth = 1.5;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
     ctx.stroke();
   }
 
@@ -220,8 +263,14 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = "anonymous";
-    img.onload  = () => resolve(img);
-    img.onerror = () => reject(new Error(`Image load failed: ${src}`));
+    const timeout = setTimeout(() => {
+      img.onload = null;
+      img.onerror = null;
+      img.src = "";
+      reject(new Error("Image load timed out"));
+    }, 5000);
+    img.onload = () => { clearTimeout(timeout); resolve(img); };
+    img.onerror = () => { clearTimeout(timeout); reject(new Error(`Image load failed: ${src}`)); };
     img.src = src;
   });
 }
@@ -250,10 +299,10 @@ function roundRect(
 function truncate(ctx: CanvasRenderingContext2D, text: string, maxPx: number): string {
   if (ctx.measureText(text).width <= maxPx) return text;
   let t = text;
-  while (t.length > 0 && ctx.measureText(t + "…").width > maxPx) {
+  while (t.length > 0 && ctx.measureText(`${t}…`).width > maxPx) {
     t = t.slice(0, -1);
   }
-  return t + "…";
+  return `${t}…`;
 }
 
 /** Convert a hex colour to rgba() string with given opacity. */
