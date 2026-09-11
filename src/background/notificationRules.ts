@@ -9,7 +9,7 @@ const MAX_GAP_MS = 15 * 60_000;
 export function evaluateRule(input: EvaluateRuleInput): EvaluateRuleResult {
   const { key, threshold, value, now, previous } = input;
   if (value === null || (previous && now <= previous.lastObservedAt)) return { state: previous };
-  const fingerprint = `${key}:${threshold}`;
+  const fingerprint = key === "trendUp" || key === "trendDown" ? `${key}:weekly-v2:${threshold}` : `${key}:${threshold}`;
   const higher = key === "above" || key === "trendUp";
   const hysteresis = key === "above" || key === "below" ? Math.max(1, Math.abs(threshold) * 0.02) : 5;
   const crossed = higher ? value >= threshold : value <= threshold;

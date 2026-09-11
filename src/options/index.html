@@ -101,7 +101,7 @@
 
     <section class="section" id="sec-notifications" aria-labelledby="notif-heading" hidden>
       <h1 class="section-title" id="notif-heading">Notifications</h1>
-      <p class="section-sub">New rules start observing without an immediate alert. Alerts rearm after recovery; seasonal alerts require several weeks of comparable hourly history.</p>
+      <p class="section-sub">New rules start observing without an immediate alert. Alerts rearm after recovery; weekly alerts compare the last 7 days with the previous 7 days. At least 5 days must agree on the direction.</p>
       <p class="section-sub">Global defaults apply to all games unless overridden individually in the Games section.</p>
 
       <div class="card">
@@ -123,7 +123,7 @@
         <div class="slider-row">
           <div class="slider-info">
             <div class="slider-title">Rise alert</div>
-            <div class="slider-desc">Notify after the 7-day seasonal trend crosses this percentage for 5 minutes.</div>
+            <div class="slider-desc">Notify after average players (7d vs previous 7d) cross this percentage for 5 minutes.</div>
           </div>
           <div class="slider-control">
             <span class="slider-val" id="thresholdUpVal" aria-live="polite">+30%</span>
@@ -134,7 +134,7 @@
         <div class="slider-row">
           <div class="slider-info">
             <div class="slider-title">Drop alert</div>
-            <div class="slider-desc">Notify after the 7-day seasonal trend crosses below this percentage for 5 minutes.</div>
+            <div class="slider-desc">Notify after average players (7d vs previous 7d) cross below this percentage for 5 minutes.</div>
           </div>
           <div class="slider-control">
             <span class="slider-val" id="thresholdDownVal" aria-live="polite">-25%</span>

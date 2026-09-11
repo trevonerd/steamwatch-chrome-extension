@@ -191,8 +191,8 @@ function buildGameItem(vm: CardViewModel, rankEmoji: string, isTop: boolean, fav
   if (displayTrendPct != null) {
     stats.appendChild(h("span", {
       className: `trend-badge ${displayTrendCls}`,
-      text: `${displayTrendIcon ? `${displayTrendIcon} ` : ""}${fmtPct(displayTrendPct)}`,
-      attrs: { "aria-label": `Seasonal trend ${fmtPct(displayTrendPct)}`, title: "7-day seasonal trend: matched hours and weekdays from previous weeks" },
+      text: `${displayTrendIcon ? `${displayTrendIcon} ` : ""}${fmtPct(displayTrendPct)} 7d`,
+      attrs: { "aria-label": `${fmtPct(displayTrendPct)} average players: last 7 days vs previous 7 days`, title: `${vm.trend?.level.label ?? "Weekly activity"}. ${vm.seasonalAnalysis?.reason ?? "Last 7 days vs previous 7 days."}` },
     }));
   } else {
     stats.appendChild(h("span", { className: "trend-badge stable", text: "No trend", attrs: { title: vm.seasonalAnalysis?.reason ?? "Not enough comparable history" } }));

@@ -1,5 +1,7 @@
 # Beta 8 — Resynced historical fallback
 
+> Historical report: the trend algorithm described here is superseded by [beta 9 weekly comparison](beta-9-weekly-trend.md). Earlier measured percentages remain evidence of the earlier build.
+
 The previous conclusion was too broad: SteamCharts has no usable history for App ID 3751950, but historical observations exist elsewhere. SteamDB displays a 24-hour peak and lifetime record on its [charts page](https://steamdb.info/app/3751950/charts/). Its [FAQ](https://steamdb.info/faq/) does not offer a public history API and restricts automated scraping, so SteamWatch does not scrape it.
 
 ## Implemented source

@@ -1,11 +1,23 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
-import { freshnessTitle, renderSparkline } from "../src/popup/graphs.js";
+import { freshnessTitle, populatePanel, renderSparkline } from "../src/popup/graphs.js";
+import { buildCardViewModel } from "../src/utils/card.js";
 
 const now = Date.UTC(2026, 8, 11, 12);
 const options = { width: 372, height: 56, maxPoints: 200, strokeColor: "#00c8ff", now };
 
 describe("popup graphs", () => {
+  it("shows matched averages and the fixed weekly comparison independently of the selected graph period", () => {
+    const snaps = Array.from({ length: 14 * 24 }, (_, index) => ({ ts: now - (14 * 24 - index) * 3_600_000,
+      current: index >= 7 * 24 ? 80 : 100, source: "steamcharts" as const, granularity: "hourly" as const }));
+    const panel = document.createElement("div");
+    populatePanel(panel, buildCardViewModel({ appid: "1", name: "Game", image: "" }, {}, snaps, 60, now));
+    expect(panel.querySelector(".weekly-comparison")?.textContent).toContain("7d vs previous 7d: -20%");
+    expect(panel.querySelector(".weekly-comparison")?.textContent).toContain("80 average players vs 100");
+    panel.querySelector<HTMLButtonElement>('[data-window="3d"]')?.click();
+    expect(panel.querySelectorAll(".weekly-comparison")).toHaveLength(1);
+    expect(panel.querySelector(".weekly-comparison")?.textContent).toContain("168/168 matched hours");
+  });
   it("colors individual rises and falls independently of the overall stroke", () => {
     const result = renderSparkline([100, 105, 102, 103].map((current, index) => ({
       ts: now - (3 - index) * 3_600_000, current, source: "steamcharts", granularity: "hourly",

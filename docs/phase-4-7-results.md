@@ -1,5 +1,7 @@
 # Beta 5 — Resynced, trend, notifiche e coerenza
 
+> Historical report: the trend algorithm described here is superseded by [beta 9 weekly comparison](beta-9-weekly-trend.md). Earlier measured percentages remain evidence of the earlier build.
+
 Build visibile: **2.0.0-beta.5**. Versione numerica Chrome: **2.0.1.5**, mantenuta sopra le build già installate. Aumenta soltanto il contatore beta visibile. Cartella da ricaricare: `dist/`.
 
 ## Correzione della segnalazione

@@ -1,6 +1,6 @@
 import type { CardViewModel, FieldFreshness, GraphWindowKey, Snapshot } from "../types/index.js";
 import { append, clear, h, s } from "../utils/html.js";
-import { fmtNumber, fmtTimeAgo, computeWindowMin, computeRetentionAvg, computeRetentionGain } from "../utils/trend.js";
+import { fmtNumber, fmtPct, fmtTimeAgo, computeWindowMin, computeRetentionAvg, computeRetentionGain } from "../utils/trend.js";
 import { buildGraphSeries, colorGraphSegments, findNearestPointIndex, filterSnapshotsByWindow } from "../utils/sparkline.js";
 
 const WINDOW_MS: Readonly<Record<GraphWindowKey, number>> = {
@@ -64,6 +64,23 @@ export function populatePanel(panel: HTMLDivElement, vm: CardViewModel): void {
   );
 
   renderPanelGraph(panel, vm, defaultGraphWindow);
+  const analysis = vm.seasonalAnalysis;
+  if (analysis?.status === "ready" && analysis.comparison) {
+    const comparison = analysis.comparison;
+    const formatMean = (value: number): string => value.toLocaleString("en-US", { maximumFractionDigits: 1 });
+    const timestamp = (value: number): string => new Date(value).toISOString().slice(0, 16).replace("T", " ");
+    const summary = h("section", {
+      className: "weekly-comparison",
+      attrs: { "aria-label": "Weekly activity comparison" },
+      children: [
+        h("strong", { text: `7d vs previous 7d: ${fmtPct(analysis.trend.pct)}` }),
+        h("p", { text: `${formatMean(comparison.recentMean)} average players vs ${formatMean(comparison.baselineMean)} · ${comparison.matchedHours}/168 matched hours` }),
+        h("p", { text: analysis.trend.sustained ? `${analysis.trend.pct < 0 ? comparison.fallingDays : comparison.risingDays}/7 days confirm ${analysis.trend.pct < 0 ? "lower" : "higher"} activity.` : analysis.trend.level.label === "Uneven week" ? "Uneven week: the change is not sustained across five days." : "Weekly activity is broadly stable." }),
+        h("p", { text: `${timestamp(comparison.startTs)} → ${timestamp(comparison.endTs)} UTC`, attrs: { title: `Previous period: ${timestamp(comparison.baselineStartTs)} → ${timestamp(comparison.startTs)} UTC. Only matching hours are averaged. Concurrent players, not unique players lost.` } }),
+      ],
+    });
+    recordLowEl.after(summary);
+  }
 }
 
 function buildGraphPills(

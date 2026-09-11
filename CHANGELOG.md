@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## [2.0.0-beta.9] - 2026-09-11
+
+### Fixed
+- Replace the distant multi-week trend baseline with average players over the last seven days versus the immediately preceding seven days, pairing the same UTC hours and weekdays
+- Stop describing old launch-period losses as an ongoing decline after the population stabilizes
+- Prevent isolated daily events and pending notifications from the old algorithm from producing sustained-trend alerts
+
+### Added
+- Explicit `7d` badge and detail breakdown with matched means, comparison dates, coverage and confirming days
+- Regressions for Black Flag's recorded history, stabilization, night/weekend cycles, one-day events, zero counts, source transitions and rounding boundaries
+
+### Changed
+- Trend notifications and shared cards name the weekly comparison; at least five days must show a material change in the same direction for trend alerts
+- Visible version is `2.0.0-beta.9`; Chrome numeric version is `2.0.1.9`
+
 ## [2.0.0-beta.8] - 2026-09-11
 
 ### Fixed

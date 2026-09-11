@@ -52,7 +52,7 @@ export function buildShareText(vm: CardViewModel): string {
 
   // Trend
   if (trend) {
-    parts.push(`${trend.level.icon} Trend:    ${fmtPct(trend.pct)} (${trend.level.label})`);
+    parts.push(`${trend.level.icon} 7d vs previous 7d: ${fmtPct(trend.pct)} (${trend.level.label})`);
   } else if (seasonalAnalysis) {
     parts.push(`↔ Trend unavailable: ${seasonalAnalysis.reason}`);
   }
@@ -174,7 +174,7 @@ export async function renderShareCanvas(vm: CardViewModel): Promise<Blob> {
   // ── Trend badge ────────────────────────────────────────────────────────────
   if (trend) {
     const badgeColor = trendBadgeColor(vm.trendCls);
-    const badgeText  = `${trend.level.icon} ${fmtPct(trend.pct)}`;
+    const badgeText  = `${trend.level.icon} ${fmtPct(trend.pct)} 7d`;
     ctx.font = "11px 'Courier New', Courier, monospace";
     const bw = ctx.measureText(badgeText).width + 14;
     const bx = CANVAS_W - bw - 12;

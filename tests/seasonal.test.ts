@@ -8,7 +8,7 @@ describe("analyzeSeasonalTrend", () => {
     const ts = now - (35 * 24 - index) * 3_600_000;
     return { ts, current: valueAt(ts), source: "steamcharts" as const, granularity: "hourly" as const };
   });
-  it("requires three same-hour weekday baseline observations", () => {
+  it("requires a preceding week of same-hour weekday observations", () => {
     const now = Date.UTC(2026, 0, 31, 12);
     const snapshots = Array.from({ length: 7 * 24 }, (_, index) => ({
       ts: now - (7 * 24 - index) * 3_600_000,
@@ -37,7 +37,7 @@ describe("analyzeSeasonalTrend", () => {
       source: "steamcharts" as const,
       granularity: "hourly" as const,
     }));
-    expect(analyzeSeasonalTrend(snapshots, now).status).toBe("insufficient");
+    expect(analyzeSeasonalTrend(snapshots, now).status).toBe("low-baseline");
   });
 
   it("keeps a weekday, weekend, and night-shaped stable population stable", () => {
@@ -71,5 +71,53 @@ describe("analyzeSeasonalTrend", () => {
     expect(analyzeSeasonalTrend(hourly(() => 5), now)).toMatchObject({ status: "low-baseline" });
     const sparse = hourly(() => 100).filter((snapshot) => new Date(snapshot.ts).getUTCHours() >= 6);
     expect(analyzeSeasonalTrend(sparse, now)).toMatchObject({ status: "insufficient" });
+  });
+
+  it("reports stability after two stable weeks even when the launch month was much higher", () => {
+    const snapshots = hourly((ts) => ts >= now - 14 * 24 * 3_600_000 ? 3500 : 12000);
+    expect(analyzeSeasonalTrend(snapshots, now)).toMatchObject({ status: "ready", trend: { pct: 0 } });
+  });
+
+  it("reports the current weekly pace instead of cumulative loss against old weeks", () => {
+    const snapshots = hourly((ts) => ts >= now - 7 * 24 * 3_600_000 ? 80 : ts >= now - 14 * 24 * 3_600_000 ? 100 : 200);
+    expect(analyzeSeasonalTrend(snapshots, now)).toMatchObject({ status: "ready", trend: { pct: -20, delta: -20 } });
+  });
+
+  it("uses the ratio of matched means instead of overweighting quiet hours", () => {
+    const snapshots = hourly((ts) => {
+      const recent = ts >= now - 7 * 24 * 3_600_000;
+      return new Date(ts).getUTCHours() < 12 ? recent ? 20 : 10 : recent ? 90 : 100;
+    });
+    expect(analyzeSeasonalTrend(snapshots, now)).toMatchObject({ status: "ready", trend: { pct: 0, delta: 0 } });
+  });
+
+  it("keeps a one-day event visible without classifying it as sustained growth", () => {
+    const result = analyzeSeasonalTrend(hourly((ts) => ts >= now - 24 * 3_600_000 ? 400 : 100), now);
+    expect(result).toMatchObject({ status: "ready", trend: { pct: 42.9, sustained: false, level: { label: "Uneven week" } } });
+  });
+
+  it("detects a week-long crash while a real zero remains a valid observation", () => {
+    expect(analyzeSeasonalTrend(hourly((ts) => ts >= now - 7 * 24 * 3_600_000 ? 0 : 100), now))
+      .toMatchObject({ status: "ready", trend: { pct: -100, sustained: true }, comparison: { fallingDays: 7, matchedHours: 168 } });
+  });
+
+  it("does not refresh an incomplete comparison with an unmatched live hour", () => {
+    const missingEnd = hourly(() => 100).filter((s) => s.ts !== now - 3_600_000);
+    expect(analyzeSeasonalTrend(missingEnd, now).status).toBe("insufficient");
+  });
+
+  it("compares identical observations consistently across history providers", () => {
+    const snapshots = hourly((ts) => 100 + new Date(ts).getUTCHours()).map((s) => ({
+      ...s, source: s.ts >= now - 7 * 24 * 3_600_000 ? "games-popularity" as const : "steamcharts" as const,
+    }));
+    expect(analyzeSeasonalTrend(snapshots, now)).toMatchObject({ status: "ready", trend: { pct: 0 } });
+  });
+
+  it.each([
+    [4.96, 5, "UP", true], [5.04, 5, "UP", true],
+    [-4.96, -5, "STABLE", false], [-5.04, -5, "STABLE", false], [-5.06, -5.1, "DOWN", true],
+  ])("keeps labels and eligibility consistent near the %s%% display boundary", (change, pct, key, sustained) => {
+    const result = analyzeSeasonalTrend(hourly((ts) => ts >= now - 7 * 24 * 3_600_000 ? 100 + Number(change) : 100), now);
+    expect(result).toMatchObject({ status: "ready", trend: { pct, sustained, level: { key } } });
   });
 });

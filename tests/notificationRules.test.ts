@@ -10,6 +10,15 @@ function stateOrThrow(state: ReturnType<typeof evaluateRule>["state"]) {
 }
 
 describe("evaluateRule", () => {
+  it("reprimes pending alerts from the previous trend algorithm", () => {
+    const result = evaluateRule({ key: "trendDown", threshold: -20, value: -25, now: 500000,
+      previous: { fingerprint: "trendDown:-20", lastValue: -46, lastObservedAt: 400000, armed: true, observations: 3, pendingId: "old-alert" },
+    });
+    expect(result.eventId).toBeUndefined();
+    expect(result.state?.fingerprint).toBe("trendDown:weekly-v2:-20");
+    expect(result.state?.pendingId).toBeUndefined();
+  });
+
   it("primes initial unsafe observations and fires only after two qualified crossings", () => {
     const first = step(120, 0);
     const armed = step(90, 60_000, first.state);

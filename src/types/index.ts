@@ -236,6 +236,7 @@ export interface TrendResult {
   readonly level: TrendLevel;
   readonly pct: number;   // rounded to 1 decimal
   readonly delta: number; // absolute player count delta
+  readonly sustained?: boolean;
 }
 
 // ── Background ↔ UI messages ──────────────────────────────────────────────────
@@ -378,6 +379,17 @@ export const TwitchGqlSchema = z.array(z.object({
   }).optional(),
 }));
 
+export interface WeeklyComparison {
+  readonly startTs: number;
+  readonly endTs: number;
+  readonly baselineStartTs: number;
+  readonly recentMean: number;
+  readonly baselineMean: number;
+  readonly matchedHours: number;
+  readonly risingDays: number;
+  readonly fallingDays: number;
+}
+
 export type SeasonalTrendAnalysis =
-  | { readonly status: "ready"; readonly trend: TrendResult; readonly coverage: number; readonly reason: string }
+  | { readonly status: "ready"; readonly trend: TrendResult; readonly coverage: number; readonly reason: string; readonly comparison?: WeeklyComparison }
   | { readonly status: "insufficient" | "stale" | "low-baseline"; readonly coverage: number; readonly reason: string };

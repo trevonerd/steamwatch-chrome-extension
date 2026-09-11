@@ -248,3 +248,5 @@ Frontiere successive, da porre dopo le risposte e le verifiche necessarie:
 Non vengono creati ADR accettati per decisioni ancora aperte. Il piano va consolidato con le risposte, non trasformato in una riscrittura basata su assunzioni silenziose.
 
 Aggiornamento beta 6: [test reali su dieci applicazioni, replay orario, correzione Twitch e recupero worker](beta-6-live-validation.md).
+
+Aggiornamento beta 9: [confronto settimanale verificabile, correzione Black Flag e gate di produzione](beta-9-weekly-trend.md).

@@ -19,7 +19,7 @@ interface PublishInput {
 export async function publishLiveResult(input: PublishInput): Promise<Signal> {
   const now = input.cache[input.game.appid]?.fetchedAt ?? Date.now();
   const trend = computeTrend(input.snapshots, now);
-  const signal = trend && trend.pct >= 5 ? "rising" : trend && trend.pct < -5 ? "alerting" : "stable";
+  const signal = trend && trend.sustained !== false && trend.pct >= 5 ? "rising" : trend && trend.sustained !== false && trend.pct < -5 ? "alerting" : "stable";
   if (!input.settings.notificationsEnabled || input.gameSettings.notificationsEnabled === false) return signal;
   await withNotificationState(input.game.appid, async (state, save) => {
     if (!await isFollowed(input.game.appid)) return;
@@ -32,6 +32,10 @@ export async function publishLiveResult(input: PublishInput): Promise<Signal> {
     }
     const events: { readonly key: RuleKey; readonly id: string; readonly threshold: number }[] = [];
     for (const rule of configured) {
+      if ((rule.key === "trendUp" || rule.key === "trendDown") && rule.value === null) {
+        delete state[rule.key];
+        continue;
+      }
       const previous = state[rule.key];
       const result = evaluateRule({ ...rule, now, ...(previous ? { previous } : {}) });
       if (result.state) state[rule.key] = result.state;
@@ -45,10 +49,10 @@ export async function publishLiveResult(input: PublishInput): Promise<Signal> {
       try {
         await chrome.notifications.create(`sw_${input.game.appid}_${event.id}`, {
           type: "basic", iconUrl: "/icons/logo-128.png",
-          title: `${input.game.name} — ${event.key === "above" ? "Player count above threshold" : event.key === "below" ? "Player count below threshold" : "Seasonal trend alert"}`,
+          title: `${input.game.name} — ${event.key === "above" ? "Player count above threshold" : event.key === "below" ? "Player count below threshold" : "Weekly activity alert"}`,
           message: event.key === "above" || event.key === "below"
             ? `${fmtNumber(input.current)} players; threshold ${fmtNumber(event.threshold)}. Sustained for 5 minutes.`
-            : `${trend?.pct ?? 0}% seasonal change; ${fmtNumber(input.current)} players. Sustained for 5 minutes.`,
+            : `${trend?.pct ?? 0}% average players: last 7 days vs previous 7 days. At least 5 days agree; threshold held for 5 minutes.`,
           priority: 1,
         });
         const rule = state[event.key];
@@ -64,7 +68,8 @@ export async function publishLiveResult(input: PublishInput): Promise<Signal> {
 
 function rulesFor(input: PublishInput, trend: TrendResult | null): { key: RuleKey; threshold: number; value: number | null }[] {
   const { gameSettings, settings, current } = input;
-  const trendValue = trend ? (Math.abs(trend.delta) >= 10 ? trend.pct : 0) : null;
+  const trendValue = !trend || (trend.sustained === false && (trend.pct >= 5 || trend.pct < -5))
+    ? null : Math.abs(trend.delta) >= 10 ? trend.pct : 0;
   return [
     ...(gameSettings.notifyThresholdPlayers !== undefined ? [{ key: "above" as const, threshold: gameSettings.notifyThresholdPlayers, value: current }] : []),
     ...(gameSettings.notifyBelowPlayers !== undefined ? [{ key: "below" as const, threshold: gameSettings.notifyBelowPlayers, value: current }] : []),

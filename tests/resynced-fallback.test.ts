@@ -26,6 +26,12 @@ describe("Resynced actual fallback history", () => {
     expect(vm.availableGraphWindows.map((w) => w.key)).toEqual(["24h", "3d", "7d", "15d", "1m", "all"]);
     expect(vm.avg24h).toBeGreaterThan(0);
     expect(vm.seasonalAnalysis?.status).toBe("ready");
+    expect(vm.trend?.pct).toBe(-20.6);
+    if (vm.seasonalAnalysis?.status === "ready") {
+      expect(vm.seasonalAnalysis.comparison?.recentMean).toBeCloseTo(3786.6687, 3);
+      expect(vm.seasonalAnalysis.comparison?.baselineMean).toBeCloseTo(4769.8675, 3);
+      expect(vm.seasonalAnalysis.comparison?.matchedHours).toBe(166);
+    }
     expect(vm.allTimePeak).toBeNull();
   });
 });
