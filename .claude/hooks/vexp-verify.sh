@@ -1,5 +1,5 @@
 #!/bin/bash
-# vexp-restore: context lifecycle restore on SessionStart (compact/resume). Fails open.
+# vexp-verify: mechanical completion gate on Stop (Horizon). Fails open.
 VEXP_BIN="/Users/m.trevisani/.vscode/extensions/vexp.vexp-vscode-3.1.3-darwin-arm64/binaries/vexp-core-darwin-arm64/vexp-core"
 # An extension upgrade removes the versioned folder above; fall back to the
 # newest installed vexp extension binary. Managed by vexp.
@@ -13,5 +13,5 @@ if [ ! -x "$VEXP_BIN" ]; then
   esac
 fi
 [ -x "$VEXP_BIN" ] || exit 0
-"$VEXP_BIN" session-context 2>/dev/null
+"$VEXP_BIN" stop-gate 2>/dev/null
 exit 0

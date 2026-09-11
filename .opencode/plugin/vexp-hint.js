@@ -1,5 +1,5 @@
 // vexp-hint: per-prompt orientation + idle verification (fail-open). Managed by vexp.
-const VEXP_BIN = "/Users/m.trevisani/.local/share/fnm/node-versions/v24.16.0/installation/lib/node_modules/vexp-cli/node_modules/@vexp/core-darwin-arm64/bin/vexp-core";
+const VEXP_BIN = "/Users/m.trevisani/.vscode/extensions/vexp.vexp-vscode-3.1.3-darwin-arm64/binaries/vexp-core-darwin-arm64/vexp-core";
 export const VexpHint = async ({ directory, client }) => {
   const fs = await import("node:fs");
   const path = await import("node:path");
@@ -23,37 +23,6 @@ export const VexpHint = async ({ directory, client }) => {
       }).catch(() => resolve(""));
     });
   return {
-    // v5: the coupling on the edit, for opencode and Kilo.
-    //
-    // Their guard plugin uses "tool.execute.before" (verified in our own
-    // tests), so ".after" follows the pattern. If that event does not exist
-    // the handler is simply never called — inert, never harmful, which is the
-    // same fail-open contract as every other surface here.
-    "tool.execute.after": async (input, output) => {
-      try {
-        const tool = String((input && input.tool) || "");
-        if (!/^(edit|write|patch|multiedit)$/i.test(tool)) return;
-        const args = (input && input.args) || {};
-        const file =
-          args.filePath || args.file_path || args.path || (output && output.filePath);
-        if (!file) return;
-        const payload = JSON.stringify({
-          tool_name: "Edit",
-          session_id: (input && input.sessionID) || "",
-          tool_input: { file_path: String(file) },
-        });
-        const raw = await runVexp(["edit-hint"], { cwd: directory, input: payload, timeout: 5000 });
-        if (!raw) return;
-        const parsed = JSON.parse(raw);
-        const text = parsed?.hookSpecificOutput?.additionalContext;
-        if (!text) return;
-        if (output && Array.isArray(output.parts)) {
-          output.parts.push({ type: "text", text: String(text) });
-        }
-      } catch (e) {
-        /* fail open */
-      }
-    },
     "chat.message": async (input, output) => {
       try {
         const text = (output.parts || [])

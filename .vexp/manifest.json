@@ -5,16 +5,18 @@
     ".agents/skills/migration-debugging.md": "a1a71eb81974bcf8373c1df034aaa1a516a28c75376c09a54247b8f582771d19",
     ".agents/skills/release-checklist.md": "57bfb99732ef7d1f9b5ccba4e98d89761ee0f0f5484a767812c68afa3cb6d947",
     ".claude/CLAUDE.md": "9c0defe80825d9c30f61f82387d64e7eae37db3dc8d37697b2d4de64ade937d3",
-    ".claude/hooks/vexp-hint.sh": "cc9af5148a59285ec534809e3c8543122e4ae076bb8cc2fc4e62f7851bbc0e1f",
-    ".claude/hooks/vexp-restore.sh": "7475e98c4fbbde76704bfdc4cb99f18d80eff0fb92d3567356ec4ea814f34f4b",
-    ".codex/vexp-hint.sh": "cc9af5148a59285ec534809e3c8543122e4ae076bb8cc2fc4e62f7851bbc0e1f",
+    ".claude/hooks/vexp-hint.sh": "a4cadb65134c4db013f6737af47198865319045baa3655d13bbb749005f1b867",
+    ".claude/hooks/vexp-restore.sh": "e4f5438e808269f4d142c566e053845202d2bf604cd3cb84a6299460540b519e",
+    ".claude/hooks/vexp-verify.sh": "48fbfa5417b9edd5b4f4a34014410088458b43ae265ffa8487186aa04b426669",
+    ".codex/vexp-hint.sh": "a4cadb65134c4db013f6737af47198865319045baa3655d13bbb749005f1b867",
     ".github/copilot-instructions.md": "a50b2d242d0d3babb01d1dd445aa6506b041ec9cc5a76b786a10852c5056a57e",
     ".opencode/plugin/vexp-compress.js": "7620415ed436aecb6ad6cfade557021d306552eab2768256d615f45386ba677f",
-    ".opencode/plugin/vexp-hint.js": "b997fedc1c6b9efa0d718f193f871ff4dd4662ec42e7aaa1a851fc7f09477d7c",
+    ".opencode/plugin/vexp-hint.js": "e95a0745a7862c80b73bc8179da938791112cccf9d684019962833688ae75168",
     "AGENTS.md": "09457e1f9383f39de3be13b827c3af495f3ecf19dbbb1e50a0429aed019a6f53",
     "CHANGELOG.md": "cf6856cb846780f18e657194e4b68a82a04c519645d741639eeb9d8d585ee638",
     "PRIVACY.md": "abfb3447e80c8029097c7aa9abf85be44f2d38f16ad205de3f12b9f8229bdbcf",
     "README.md": "72964820e10e5365e8039a56276b2b8b611d949791ea03a57b2fd67fa30f80ed",
+    "docs/steamwatch-audit-plan.md": "dfe6d0faa3adef517d219d3a38862b26df2fb3e4c7ff971bb7265733edaf6637",
     "manifest.json": "b9fc4bc9af704bdfa37fe3020c6feeb16129e1c6037e617efdfc558f50d07614",
     "scripts/sync-version.ts": "3a6258429d81de5c247b9deabea95c743978b804c4c7e885ef91013e01945658",
     "src/background/fetchCycle.ts": "152fe797b29802b3a25bafd0e37f2429f34bc57856fc463fb43cca579dc58603",
@@ -57,8 +59,8 @@
     "vite.config.ts": "13b1f057377caf9c3288811426260a9bdf4ea37e94372e0fbfb97bbf62ebae30",
     "vitest.config.ts": "3d6c2c7d14ba83cc5d0caba3ffc604c386abed7052992aa876f89bda48cc48a7"
   },
-  "indexed_at_commit": "b4ec76978a1c556cd239aa8153e10b961119c268",
-  "indexed_at_timestamp": "2026-09-11T07:23:51.674139+00:00",
+  "indexed_at_commit": "79540c4c8ddf11b23e92b443749ff155d729fe9f",
+  "indexed_at_timestamp": "2026-09-11T07:30:36.794228+00:00",
   "languages": {
     "css": {
       "calls": 0,
@@ -74,7 +76,7 @@
     },
     "markdown": {
       "calls": 0,
-      "nodes": 147
+      "nodes": 175
     },
     "typescript": {
       "calls": 624,
@@ -83,9 +85,9 @@
   },
   "schema_version": 3,
   "stats": {
-    "total_edges": 1002,
-    "total_files": 56,
-    "total_nodes": 725
+    "total_edges": 1029,
+    "total_files": 58,
+    "total_nodes": 753
   },
   "vexp_version": "3.1.3"
 }
