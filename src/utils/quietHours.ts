@@ -23,15 +23,13 @@ import type { Settings, QuietDaysMask } from "../types/index.js";
 export function isQuietNow(settings: Settings, now: Date = new Date()): boolean {
   if (!settings.quietHoursEnabled) return false;
 
-  const dayBit = 1 << now.getDay(); // Sunday = bit 0, Saturday = bit 6
-  if ((settings.quietDays & dayBit) === 0) return false;
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+  if (!isInQuietWindow(settings.quietStart, settings.quietEnd, now.getHours(), now.getMinutes())) return false;
 
-  return isInQuietWindow(
-    settings.quietStart,
-    settings.quietEnd,
-    now.getHours(),
-    now.getMinutes()
-  );
+  // An overnight window belongs to the day it starts: Friday 23:00 → 07:00 covers Saturday morning.
+  const overnightTail = parseHHMM(settings.quietStart) > parseHHMM(settings.quietEnd) && nowMins < parseHHMM(settings.quietEnd);
+  const day = (now.getDay() + (overnightTail ? 6 : 0)) % 7; // Sunday = bit 0, Saturday = bit 6
+  return (settings.quietDays & (1 << day)) !== 0;
 }
 
 /**

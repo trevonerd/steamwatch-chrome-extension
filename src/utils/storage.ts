@@ -337,9 +337,9 @@ export async function getGameSettings(appid: string): Promise<GameSettings> {
 
   const normalized: GameSettings = {};
   const thresholdUp = GameSettingsSchema.shape.thresholdUp.safeParse(stored["thresholdUp"]);
-  if (thresholdUp.success && thresholdUp.data !== undefined) normalized.thresholdUp = thresholdUp.data;
+  if (thresholdUp.success && thresholdUp.data !== undefined) normalized.thresholdUp = Math.max(5, Math.min(100, thresholdUp.data));
   const thresholdDown = GameSettingsSchema.shape.thresholdDown.safeParse(stored["thresholdDown"]);
-  if (thresholdDown.success && thresholdDown.data !== undefined) normalized.thresholdDown = thresholdDown.data;
+  if (thresholdDown.success && thresholdDown.data !== undefined) normalized.thresholdDown = -Math.max(5, Math.min(90, Math.abs(thresholdDown.data)));
   const notifyThresholdPlayers = GameSettingsSchema.shape.notifyThresholdPlayers.safeParse(stored["notifyThresholdPlayers"]);
   if (notifyThresholdPlayers.success && notifyThresholdPlayers.data !== undefined) {
     normalized.notifyThresholdPlayers = notifyThresholdPlayers.data;
@@ -357,12 +357,9 @@ export async function getGameSettings(appid: string): Promise<GameSettings> {
   return normalized;
 }
 
-export async function saveGameSettings(
-  appid: string,
-  partial: GameSettings
-): Promise<void> {
-  const current = await getGameSettings(appid);
-  await set(`${KEYS.gameSettingsPrefix}${appid}`, { ...current, ...partial });
+/** Replaces the game's settings: an omitted field falls back to the global default or disables that rule. */
+export async function saveGameSettings(appid: string, settings: GameSettings): Promise<void> {
+  await set(`${KEYS.gameSettingsPrefix}${appid}`, settings);
 }
 
 // ── Cache ─────────────────────────────────────────────────────────────────────

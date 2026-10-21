@@ -92,7 +92,7 @@
         <div class="toggle-row no-border">
           <div class="toggle-info">
             <div class="toggle-title">Reset all SteamWatch data</div>
-            <div class="toggle-desc">Deletes tracked games, snapshots, cache, cooldowns, and settings. This cannot be undone.</div>
+            <div class="toggle-desc">Deletes tracked games, snapshots, cache, alert state, and settings. This cannot be undone.</div>
           </div>
           <button class="btn-danger" id="clearDataBtn">Clear All Data</button>
         </div>
@@ -146,7 +146,7 @@
       <div class="card">
         <div class="card-title">Quiet Hours</div>
         <p class="card-note">
-          Suppress all notifications during a defined local time window. The cooldown timer is not consumed during quiet hours.
+          Suppress notifications during a local time window. A window past midnight belongs to the day it starts. Alerts still valid when it ends are delivered then.
         </p>
 
         <div class="toggle-row">

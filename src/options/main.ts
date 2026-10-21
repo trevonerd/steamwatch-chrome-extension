@@ -143,6 +143,11 @@ function buildPerGameSettings(game: Game, gs: GameSettings, row: HTMLLIElement):
     gs.thresholdDown != null ? Math.abs(gs.thresholdDown) : "",
     "Global default",
   );
+  // Same ranges as the global sliders: a sub-5% rise would alert on unsustained weeks.
+  riseInput.min = "5";
+  riseInput.max = "100";
+  dropInput.min = "5";
+  dropInput.max = "90";
   const absoluteInput = numberInput(
     `gs-abs-${game.appid}`,
     "notifyThresholdPlayers",

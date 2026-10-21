@@ -14,7 +14,17 @@ describe("notification delivery", () => {
     mocks.computeTrend.mockReturnValue({ pct: 42.9, delta: 100, sustained: false });
     await publish(90, 360000);
     expect(chrome.notifications.create).not.toHaveBeenCalled();
-    expect((await getNotificationState("1")).trendUp).toBeUndefined();
+    expect((await getNotificationState("1")).trendUp?.pendingId).toBeUndefined();
+  });
+
+  it("still alerts when a mixed week becomes sustained above the threshold", async () => {
+    mocks.computeTrend.mockReturnValue({ pct: 0, delta: 0, sustained: false });
+    await publish(90, 0);
+    mocks.computeTrend.mockReturnValue({ pct: 35, delta: 100, sustained: false });
+    await publish(90, 60_000);
+    mocks.computeTrend.mockReturnValue({ pct: 35, delta: 100, sustained: true });
+    await publish(90, 120_000); await publish(90, 420_000);
+    expect(chrome.notifications.create).toHaveBeenCalledWith("sw_1_trendUp_120000", expect.any(Object));
   });
 
   it("delivers a sustained weekly loss with an explicit comparison period", async () => {

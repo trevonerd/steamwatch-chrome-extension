@@ -15,6 +15,20 @@ const refreshCoordinator = createRefreshCoordinator();
 chrome.runtime.onInstalled.addListener(() => void bootstrap(true).catch((error: unknown) => console.warn(`[SteamWatch] Install bootstrap failed: ${formatError(error)}`)));
 chrome.runtime.onStartup.addListener(() => void bootstrap().catch((error: unknown) => console.warn(`[SteamWatch] Startup bootstrap failed: ${formatError(error)}`)));
 
+// Alarms can vanish (extension disabled/re-enabled, Chrome cleanup) without onStartup firing.
+void ensureAlarms().catch((error: unknown) => console.warn(`[SteamWatch] Alarm check failed: ${formatError(error)}`));
+
+async function ensureAlarms(): Promise<void> {
+  if (!await chrome.alarms.get(ALARM_NAME)) chrome.alarms.create(ALARM_NAME, { periodInMinutes: FETCH_INTERVAL_MINUTES });
+  if (!await chrome.alarms.get(COMPACTION_ALARM_NAME)) chrome.alarms.create(COMPACTION_ALARM_NAME, { periodInMinutes: 24 * 60 });
+}
+
+chrome.notifications.onClicked.addListener((notificationId) => {
+  const appid = /^sw_(\d+)_/.exec(notificationId)?.[1];
+  if (appid) void chrome.tabs.create({ url: `https://store.steampowered.com/app/${appid}` });
+  void chrome.notifications.clear(notificationId);
+});
+
 async function bootstrap(retryHistory = false): Promise<void> {
   await migrateToIndexedDB();
   await resetAlarm();

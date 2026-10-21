@@ -99,15 +99,15 @@ describe("isQuietNow", () => {
   });
 
   it("returns true during window on an active day", () => {
-    const s = settingsWithQuiet(true, "23:00", "07:00", [1]); // Monday only
-    const d = dateAt(1, 2); // Monday 02:00 — inside window
-    expect(isQuietNow(s, d)).toBe(true);
+    const s = settingsWithQuiet(true, "23:00", "07:00", [1]); // Monday night only
+    expect(isQuietNow(s, dateAt(1, 23))).toBe(true); // Monday 23:00 — start of window
+    expect(isQuietNow(s, dateAt(2, 2))).toBe(true); // Tuesday 02:00 — same night
   });
 
-  it("returns false on a day not in the mask", () => {
-    const s = settingsWithQuiet(true, "23:00", "07:00", [1]); // Monday only
-    const d = dateAt(2, 2); // Tuesday 02:00
-    expect(isQuietNow(s, d)).toBe(false);
+  it("attributes the overnight tail to the day the window started", () => {
+    const s = settingsWithQuiet(true, "23:00", "07:00", [1]); // Monday night only
+    expect(isQuietNow(s, dateAt(1, 2))).toBe(false); // Monday 02:00 belongs to Sunday night
+    expect(isQuietNow(s, dateAt(2, 23))).toBe(false); // Tuesday night not selected
   });
 
   it("returns false outside window even on active day", () => {

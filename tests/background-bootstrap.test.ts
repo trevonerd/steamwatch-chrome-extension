@@ -21,6 +21,10 @@ const mocks = vi.hoisted(() => ({
   addStartupListener: vi.fn<[() => void], void>(),
   clearAlarm: vi.fn(),
   createAlarm: vi.fn(),
+  getAlarm: vi.fn(),
+  addNotificationClickListener: vi.fn<[(id: string) => void], void>(),
+  clearNotification: vi.fn(),
+  createTab: vi.fn(),
   addStorageListener: vi.fn(),
   getCache: vi.fn(),
   getSettings: vi.fn(),
@@ -51,8 +55,11 @@ function primeChrome(): void {
     alarms: {
       clear: mocks.clearAlarm,
       create: mocks.createAlarm,
+      get: mocks.getAlarm,
       onAlarm: { addListener: mocks.addAlarmListener },
     },
+    notifications: { onClicked: { addListener: mocks.addNotificationClickListener }, clear: mocks.clearNotification },
+    tabs: { create: mocks.createTab },
     storage: { onChanged: { addListener: mocks.addStorageListener } },
   });
 }
@@ -75,6 +82,9 @@ beforeEach(() => {
   mocks.compactSnapshots.mockResolvedValue(undefined);
   mocks.getCache.mockResolvedValue({ "1": { current: 10, fetchedAt: 1 } });
   mocks.getSettings.mockResolvedValue({ badgeFavoriteAppid: "1" });
+  mocks.getAlarm.mockResolvedValue(undefined);
+  mocks.clearNotification.mockResolvedValue(true);
+  mocks.createTab.mockResolvedValue({});
 });
 
 describe("background lifecycle", () => {
@@ -83,6 +93,26 @@ describe("background lifecycle", () => {
     const installed = mocks.addInstalledListener.mock.calls[0]?.[0];
     installed?.({ reason: "update" as chrome.runtime.OnInstalledReason, previousVersion: "2.0.1.7" });
     await vi.waitFor(() => expect(mocks.refresh).toHaveBeenCalledWith(true));
+  });
+
+  it("recreates missing alarms when the worker loads without a startup event", async () => {
+    await loadListeners();
+    await vi.waitFor(() => expect(mocks.createAlarm).toHaveBeenCalledWith("sw_fetch", { periodInMinutes: 5 }));
+    expect(mocks.createAlarm).toHaveBeenCalledWith("steamwatch-compaction", { periodInMinutes: 1440 });
+  });
+
+  it("keeps existing alarms untouched on worker load", async () => {
+    mocks.getAlarm.mockResolvedValue({ name: "sw_fetch" });
+    await loadListeners();
+    await Promise.resolve(); await Promise.resolve();
+    expect(mocks.createAlarm).not.toHaveBeenCalled();
+  });
+
+  it("opens the game's Steam page when a notification is clicked", async () => {
+    await loadListeners();
+    mocks.addNotificationClickListener.mock.calls[0]?.[0]("sw_3751950_trendUp_60000");
+    expect(mocks.createTab).toHaveBeenCalledWith({ url: "https://store.steampowered.com/app/3751950" });
+    expect(mocks.clearNotification).toHaveBeenCalledWith("sw_3751950_trendUp_60000");
   });
 
   it("routes FETCH_NOW through the shared refresh coordinator", async () => {

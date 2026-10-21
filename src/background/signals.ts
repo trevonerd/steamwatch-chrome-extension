@@ -33,7 +33,9 @@ export async function publishLiveResult(input: PublishInput): Promise<Signal> {
     const events: { readonly key: RuleKey; readonly id: string; readonly threshold: number }[] = [];
     for (const rule of configured) {
       if ((rule.key === "trendUp" || rule.key === "trendDown") && rule.value === null) {
-        delete state[rule.key];
+        // No usable weekly value: drop any pending crossing but keep arming, so a later sustained crossing still alerts.
+        const previous = state[rule.key];
+        if (previous) state[rule.key] = { ...acknowledgeRule(previous), armed: previous.armed };
         continue;
       }
       const previous = state[rule.key];

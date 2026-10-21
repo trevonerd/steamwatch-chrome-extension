@@ -379,12 +379,15 @@ describe("getGameSettings / saveGameSettings", () => {
     expect(gs.notificationsEnabled).toBe(false);
   });
 
-  it("merges partial updates without overwriting existing fields", async () => {
-    await saveGameSettings("1", { thresholdUp: 25 });
+  it("replaces previous settings so a cleared override returns to the global default", async () => {
+    await saveGameSettings("1", { thresholdUp: 25, notifyThresholdPlayers: 100_000 });
     await saveGameSettings("1", { thresholdDown: -15 });
-    const gs = await getGameSettings("1");
-    expect(gs.thresholdUp).toBe(25);
-    expect(gs.thresholdDown).toBe(-15);
+    expect(await getGameSettings("1")).toEqual({ thresholdDown: -15 });
+  });
+
+  it("clamps per-game trend thresholds to the global ranges", async () => {
+    await saveGameSettings("1", { thresholdUp: 2, thresholdDown: -150 });
+    expect(await getGameSettings("1")).toEqual({ thresholdUp: 5, thresholdDown: -90 });
   });
 
   it("recovers valid per-game settings while dropping malformed fields", async () => {
