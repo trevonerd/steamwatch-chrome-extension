@@ -7,6 +7,7 @@ All notable changes to this project are documented in this file.
 First stable release of the v2 tracker (betas 1–14 below). Chrome numeric version `2.0.2`.
 
 ### Fixed
+- History older than two hours (browser closed, sleep) is downloaded again on the next refresh instead of up to six hours later, so cards no longer show "History stale" after a break
 - Fixed-window average and change include the first hour of the window; minimum and maximum use the same completed hourly series, so a single outlier sample no longer sets them
 - Latest hourly change ignores the hour still in progress
 - Games averaging under 10 players show "Low activity" instead of "History incomplete"
@@ -18,6 +19,7 @@ First stable release of the v2 tracker (betas 1–14 below). Chrome numeric vers
 - Fetch and compaction alarms are recreated when missing after the extension is disabled and re-enabled
 - Graph source note no longer overlaps the hover tooltip
 - Search combobox exposes its expanded state; buttons and day selector use correct semantics
+- Popup footer fits on one line
 
 ### Added
 - Clicking a notification opens the game's Steam store page

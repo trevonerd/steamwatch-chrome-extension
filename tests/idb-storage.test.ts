@@ -303,7 +303,7 @@ describe("idb-storage", () => {
         await expect(idbAcquireBootstrapLease("242050", Date.now(), 1_000, true)).resolves.toBeNull();
       });
 
-      it("allows manual recovery of stale completed history after a fifteen-minute cooldown", async () => {
+      it("re-downloads stale completed history on the next cycle after a fifteen-minute cooldown", async () => {
         const now = Date.now();
         const lease = await idbAcquireBootstrapLease("3751950", now, 120_000);
         if (!lease) throw new Error("expected bootstrap lease");
@@ -316,10 +316,10 @@ describe("idb-storage", () => {
         await expect(
           idbAcquireBootstrapLease("3751950", completedAt + 15 * 60_000 - 1, 120_000, true),
         ).resolves.toBeNull();
-        await expect(idbAcquireBootstrapLease("3751950", completedAt + 15 * 60_000, 120_000)).resolves.toBeNull();
-        await expect(
-          idbAcquireBootstrapLease("3751950", completedAt + 15 * 60_000, 120_000, true),
-        ).resolves.toMatchObject({ attempt: 1 });
+        // Automatic cycles recover too: a browser closed overnight must not wait six hours for history.
+        await expect(idbAcquireBootstrapLease("3751950", completedAt + 15 * 60_000, 120_000)).resolves.toMatchObject({
+          attempt: 1,
+        });
         await expect(
           idbAcquireBootstrapLease("3751950", completedAt + 15 * 60_000 + 1, 120_000, true),
         ).resolves.toBeNull();

@@ -357,8 +357,10 @@ function canAcquireBootstrap(row: BootstrapRow | undefined, now: number, retryFa
   if (!row) return true;
   if (row.state === "retry" || row.state === "unavailable") return retryFailed || (row.retryAt ?? 0) <= now;
   if (row.state === "leased") return (row.leaseExpiresAt ?? 0) <= now;
-  const staleHistory = row.endTs !== undefined && now - row.endTs > 2 * 60 * 60_000;
-  if (retryFailed && staleHistory && (row.completedAt ?? 0) + 15 * 60_000 <= now) return true;
+  // Stale history (browser closed, sleep, provider lag) is fetched again on the next cycle, not after 6 hours.
+  // ponytail: a provider that stays behind is re-polled every 15 minutes per game; add backoff if that bites.
+  const staleHistory = row.endTs === undefined || now - row.endTs > 2 * 60 * 60_000;
+  if (staleHistory && (row.completedAt ?? 0) + 15 * 60_000 <= now) return true;
   return (row.completedAt ?? 0) + 6 * 60 * 60_000 <= now;
 }
 
