@@ -69,7 +69,7 @@ async function set(key: string, value: unknown): Promise<void> {
 }
 
 function toRecord(raw: unknown): Record<string, unknown> | undefined {
-  const parsed = z.record(z.unknown()).safeParse(raw);
+  const parsed = z.record(z.string(), z.unknown()).safeParse(raw);
   return parsed.success ? parsed.data : undefined;
 }
 

@@ -164,7 +164,7 @@ export const CachedDataSchema = z.object({
   fetchedAt: z.number().finite().nonnegative(),
   twitchViewers: z.number().finite().nonnegative().optional(),
   freshness: MetricFreshnessSchema.catch({}).optional(),
-}).passthrough();
+}).loose();
 
 // ── Settings ─────────────────────────────────────────────────────────────────
 

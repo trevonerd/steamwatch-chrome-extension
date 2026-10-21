@@ -341,7 +341,7 @@ function buildShareBar(): HTMLDivElement {
 }
 
 function togglePanel(li: HTMLLIElement, panel: HTMLDivElement, btn: HTMLButtonElement, vm: CardViewModel): void {
-  const opening = panel.hidden;
+  const opening = panel.hidden !== false;
   panel.hidden = !opening;
   panel.setAttribute("aria-hidden", String(!opening));
   btn.setAttribute("aria-expanded", String(opening));

@@ -11,18 +11,18 @@ type MessageListener = (
 type AlarmListener = (alarm: chrome.alarms.Alarm) => void;
 
 const mocks = vi.hoisted(() => ({
-  refresh: vi.fn<[], Promise<{ readonly ok: boolean; readonly error?: string }>>(),
-  migrate: vi.fn<[], Promise<void>>(),
+  refresh: vi.fn<(...args: []) => Promise<{ readonly ok: boolean; readonly error?: string }>>(),
+  migrate: vi.fn<(...args: []) => Promise<void>>(),
   getGames: vi.fn(),
   compactSnapshots: vi.fn(),
-  addMessageListener: vi.fn<[MessageListener], void>(),
-  addAlarmListener: vi.fn<[AlarmListener], void>(),
-  addInstalledListener: vi.fn<[(details: chrome.runtime.InstalledDetails) => void], void>(),
-  addStartupListener: vi.fn<[() => void], void>(),
+  addMessageListener: vi.fn<(...args: [MessageListener]) => void>(),
+  addAlarmListener: vi.fn<(...args: [AlarmListener]) => void>(),
+  addInstalledListener: vi.fn<(...args: [(details: chrome.runtime.InstalledDetails) => void]) => void>(),
+  addStartupListener: vi.fn<(...args: [() => void]) => void>(),
   clearAlarm: vi.fn(),
   createAlarm: vi.fn(),
   getAlarm: vi.fn(),
-  addNotificationClickListener: vi.fn<[(id: string) => void], void>(),
+  addNotificationClickListener: vi.fn<(...args: [(id: string) => void]) => void>(),
   clearNotification: vi.fn(),
   createTab: vi.fn(),
   addStorageListener: vi.fn(),
@@ -91,7 +91,7 @@ describe("background lifecycle", () => {
   it("retries unavailable history on extension update", async () => {
     await loadListeners();
     const installed = mocks.addInstalledListener.mock.calls[0]?.[0];
-    installed?.({ reason: "update" as chrome.runtime.OnInstalledReason, previousVersion: "2.0.1.7" });
+    installed?.({ reason: "update", previousVersion: "2.0.1.7" } as chrome.runtime.InstalledDetails);
     await vi.waitFor(() => expect(mocks.refresh).toHaveBeenCalledWith(true));
   });
 

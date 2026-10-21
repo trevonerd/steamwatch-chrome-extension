@@ -29,7 +29,7 @@ beforeEach(async () => {
     sw_games: [{ appid: "570", name: "Dota 2", image: "https://example.com/game.jpg" }],
     sw_cache: { "570": cached }, sw_last_fetch: cached.fetchedAt,
   });
-  vi.mocked(chrome.runtime.sendMessage).mockResolvedValue({ ok: true });
+  vi.mocked(chrome.runtime.sendMessage as (message: unknown) => Promise<unknown>).mockResolvedValue({ ok: true });
   vi.spyOn(console, "error").mockImplementation(() => undefined);
   vi.spyOn(console, "warn").mockImplementation(() => undefined);
 });
@@ -100,7 +100,7 @@ describe("popup refresh", () => {
 
   it("shows an error when the worker rejects a manual refresh", async () => {
     await loadPopup();
-    vi.mocked(chrome.runtime.sendMessage).mockResolvedValue({ ok: false, error: "Refresh failed" });
+    vi.mocked(chrome.runtime.sendMessage as (message: unknown) => Promise<unknown>).mockResolvedValue({ ok: false, error: "Refresh failed" });
     element("refreshBtn").click();
     await vi.waitFor(() => expect(element("errorState").hidden).toBe(false));
     expect(element("refreshBtn").hasAttribute("disabled")).toBe(false);
@@ -108,14 +108,14 @@ describe("popup refresh", () => {
 
   it("shows an error when the worker connection fails", async () => {
     await loadPopup();
-    vi.mocked(chrome.runtime.sendMessage).mockRejectedValue(new Error("Disconnected"));
+    vi.mocked(chrome.runtime.sendMessage as (message: unknown) => Promise<unknown>).mockRejectedValue(new Error("Disconnected"));
     element("refreshBtn").click();
     await vi.waitFor(() => expect(element("errorState").hidden).toBe(false));
   });
 
   it("retries the background request and restores the list after a failed refresh", async () => {
     await loadPopup();
-    vi.mocked(chrome.runtime.sendMessage).mockResolvedValueOnce({ ok: false });
+    vi.mocked(chrome.runtime.sendMessage as (message: unknown) => Promise<unknown>).mockResolvedValueOnce({ ok: false });
     element("refreshBtn").click();
     await vi.waitFor(() => expect(element("errorState").hidden).toBe(false));
     element("retryBtn").click();
@@ -126,7 +126,7 @@ describe("popup refresh", () => {
 
   it("keeps cached counts visible and reports a failed automatic update", async () => {
     await chrome.storage.local.set({ sw_cache: { "570": { current: 100, fetchedAt: 1 } } });
-    vi.mocked(chrome.runtime.sendMessage).mockResolvedValue({ ok: false });
+    vi.mocked(chrome.runtime.sendMessage as (message: unknown) => Promise<unknown>).mockResolvedValue({ ok: false });
     await loadPopup();
     await vi.waitFor(() => expect(element("fetchBar").textContent).toContain("Update failed"));
     expect(element("gamesList").hidden).toBe(false);
@@ -136,7 +136,7 @@ describe("popup refresh", () => {
     await chrome.storage.local.set({
       sw_cache: { "570": { current: 100, fetchedAt: 0 } }, sw_last_fetch: 0,
     });
-    vi.mocked(chrome.runtime.sendMessage).mockImplementation(async () => {
+    vi.mocked(chrome.runtime.sendMessage as (message: unknown) => Promise<unknown>).mockImplementation(async () => {
       await chrome.storage.local.set({ sw_cache: { "570": cached }, sw_last_fetch: cached.fetchedAt });
       return { ok: true };
     });
@@ -147,7 +147,7 @@ describe("popup refresh", () => {
   it("shows cached counts while an automatic update remains pending", async () => {
     await chrome.storage.local.set({ sw_cache: { "570": { ...cached, fetchedAt: 1 } } });
     let finish: (response: { ok: boolean }) => void = () => undefined;
-    vi.mocked(chrome.runtime.sendMessage).mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    vi.mocked(chrome.runtime.sendMessage as (message: unknown) => Promise<unknown>).mockReturnValue(new Promise((resolve) => { finish = resolve; }));
     await loadPopup();
     expect(element("gamesList").hidden).toBe(false);
     expect(document.querySelector(".stat-current")?.textContent).toBe("100");
@@ -164,9 +164,9 @@ describe("popup refresh", () => {
 
   it("changes the favorite from cache without starting a network refresh", async () => {
     await loadPopup();
-    vi.mocked(chrome.runtime.sendMessage).mockResolvedValue({ ok: false });
+    vi.mocked(chrome.runtime.sendMessage as (message: unknown) => Promise<unknown>).mockResolvedValue({ ok: false });
     document.querySelector<HTMLButtonElement>(".btn-star")?.click();
-    await vi.waitFor(async () => expect((await chrome.storage.local.get("sw_settings"))["sw_settings"].badgeFavoriteAppid).toBe("570"));
+    await vi.waitFor(async () => expect((await chrome.storage.local.get<{ sw_settings: { badgeFavoriteAppid?: string } }>("sw_settings")).sw_settings.badgeFavoriteAppid).toBe("570"));
     expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
   });
 

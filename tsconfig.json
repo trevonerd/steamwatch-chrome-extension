@@ -17,6 +17,7 @@
     "rootDir": ".",
     "types": [
       "chrome",
+      "node",
       "vite/client",
       "vitest/globals"
     ]

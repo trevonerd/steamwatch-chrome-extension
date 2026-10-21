@@ -1,0 +1,7 @@
+allowBuilds:
+  esbuild: true
+  spawn-sync: false
+
+# The plugin pins vite as a dependency; share the project copy so every entry builds with one vite.
+overrides:
+  vite-plugin-web-extension>vite: $vite

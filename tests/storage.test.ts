@@ -222,10 +222,7 @@ describe("removeGame", () => {
 
   it("removes a zombie game during reconciliation when the initial games write failed", async () => {
     await addGame(mockGame(1));
-    const storageSet = chrome.storage.local.set as unknown as MockInstance<
-      [items: Record<string, unknown>],
-      Promise<void>
-    >;
+    const storageSet = chrome.storage.local.set as unknown as MockInstance<(items: Record<string, unknown>) => Promise<void>>;
     const originalSet = storageSet.getMockImplementation();
     if (!originalSet) throw new Error("storage mock must expose its implementation");
     storageSet.mockImplementation(async (items) => {

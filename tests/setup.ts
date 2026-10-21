@@ -69,4 +69,6 @@ beforeEach(() => {
     delete store[k];
   });
   vi.clearAllMocks();
+  // No test may reach the network; tests that need responses replace this stub.
+  globalThis.fetch = vi.fn(async () => new Response(null, { status: 404 }));
 });

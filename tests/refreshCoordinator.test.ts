@@ -29,24 +29,24 @@ function deferred<T>(): { readonly promise: Promise<T>; readonly resolve: (value
 
 function makeDependencies(overrides: Partial<RefreshCoordinatorDependencies> = {}): RefreshCoordinatorDependencies {
   return {
-    getGames: vi.fn<[], Promise<Game[]>>().mockResolvedValue([game]),
-    getSettings: vi.fn<[], Promise<Settings>>().mockResolvedValue(settings),
-    getGameSettings: vi.fn<[string], Promise<{}>>().mockResolvedValue({}),
-    getCache: vi.fn<[], Promise<Record<string, CachedData>>>().mockResolvedValue({}),
-    setCache: vi.fn<[Record<string, CachedData>], Promise<void>>().mockResolvedValue(undefined),
-    setLastFetchTime: vi.fn<[number], Promise<void>>().mockResolvedValue(undefined),
-    setLastFetchAttemptTime: vi.fn<[number], Promise<void>>().mockResolvedValue(undefined),
-    fetchCurrentPlayers: vi.fn<[string], Promise<number | null>>().mockResolvedValue(100),
+    getGames: vi.fn<(...args: []) => Promise<Game[]>>().mockResolvedValue([game]),
+    getSettings: vi.fn<(...args: []) => Promise<Settings>>().mockResolvedValue(settings),
+    getGameSettings: vi.fn<(...args: [string]) => Promise<{}>>().mockResolvedValue({}),
+    getCache: vi.fn<(...args: []) => Promise<Record<string, CachedData>>>().mockResolvedValue({}),
+    setCache: vi.fn<(...args: [Record<string, CachedData>]) => Promise<void>>().mockResolvedValue(undefined),
+    setLastFetchTime: vi.fn<(...args: [number]) => Promise<void>>().mockResolvedValue(undefined),
+    setLastFetchAttemptTime: vi.fn<(...args: [number]) => Promise<void>>().mockResolvedValue(undefined),
+    fetchCurrentPlayers: vi.fn<(...args: [string]) => Promise<number | null>>().mockResolvedValue(100),
     fetchSteamChartsResult: vi.fn().mockResolvedValue({ status: "unavailable" }),
     fetchSteamSpyResult: vi.fn().mockResolvedValue({ status: "unavailable" }),
     fetchTwitchResult: vi.fn().mockResolvedValue({ status: "unavailable" }),
-    refreshHistory: vi.fn<[string], Promise<boolean>>().mockResolvedValue(false),
-    saveSnapshot: vi.fn<[string, import("../src/types/index.js").Snapshot], Promise<void>>().mockResolvedValue(undefined),
+    refreshHistory: vi.fn<(...args: [string]) => Promise<boolean>>().mockResolvedValue(false),
+    saveSnapshot: vi.fn<(...args: [string, import("../src/types/index.js").Snapshot]) => Promise<void>>().mockResolvedValue(undefined),
     getSnapshots: vi.fn().mockResolvedValue([]),
-    publishLiveResult: vi.fn<[Parameters<RefreshCoordinatorDependencies["publishLiveResult"]>[0]], Promise<"stable">>().mockResolvedValue("stable"),
+    publishLiveResult: vi.fn<(...args: [Parameters<RefreshCoordinatorDependencies["publishLiveResult"]>[0]]) => Promise<"stable">>().mockResolvedValue("stable"),
     updateBadge: vi.fn(),
     clearBadge: vi.fn(),
-    now: vi.fn<[], number>().mockReturnValue(1_000),
+    now: vi.fn<(...args: []) => number>().mockReturnValue(1_000),
     ...overrides,
   };
 }
@@ -181,7 +181,7 @@ describe("RefreshCoordinator", () => {
 
   it("does not write a current sample after its game is removed", async () => {
     const dependencies = makeDependencies({
-      getGames: vi.fn<[], Promise<Game[]>>().mockResolvedValueOnce([game]).mockResolvedValue([]),
+      getGames: vi.fn<(...args: []) => Promise<Game[]>>().mockResolvedValueOnce([game]).mockResolvedValue([]),
     });
     const coordinator = new RefreshCoordinator(dependencies);
 
