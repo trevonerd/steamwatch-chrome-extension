@@ -1,22 +1,23 @@
 // SteamWatch — src/options/main.ts
-import {
-  getGames,
-  addGame,
-  removeGame,
-  getSettings,
-  saveSettings,
-  getGameSettings,
-  saveGameSettings,
-  clearAllData,
-  MAX_GAMES,
-} from "../utils/storage.js";
+
+import { thumbColor, wireThumbFallback } from "../popup/thumb.js";
+import type { Game, GameSettings } from "../types/index.js";
 import { searchGames } from "../utils/api.js";
-import { append, clear, h, mustGet, show, hide } from "../utils/html.js";
-import { buildDayMask, maskToDays, DAY_LABELS } from "../utils/quietHours.js";
+import { append, clear, h, hide, mustGet, show } from "../utils/html.js";
 import { formatError } from "../utils/log.js";
 import { requestRefresh } from "../utils/messages.js";
-import { wireThumbFallback, thumbColor } from "../popup/thumb.js";
-import type { Game, GameSettings } from "../types/index.js";
+import { buildDayMask, DAY_LABELS, maskToDays } from "../utils/quietHours.js";
+import {
+  addGame,
+  clearAllData,
+  getGameSettings,
+  getGames,
+  getSettings,
+  MAX_GAMES,
+  removeGame,
+  saveGameSettings,
+  saveSettings,
+} from "../utils/storage.js";
 
 const gameSearchEl = mustGet<HTMLInputElement>("gameSearch");
 const acListEl = mustGet<HTMLUListElement>("autocompleteList");
@@ -63,9 +64,7 @@ async function renderGames(): Promise<void> {
   }
 
   hide(noGamesHint);
-  const rows = await Promise.all(
-    games.map(async (game) => buildGameRow(game, await getGameSettings(game.appid))),
-  );
+  const rows = await Promise.all(games.map(async (game) => buildGameRow(game, await getGameSettings(game.appid))));
   rows.forEach((row) => gamesRowsEl.appendChild(row));
 }
 
@@ -156,7 +155,12 @@ function buildPerGameSettings(game: Game, gs: GameSettings, row: HTMLLIElement):
   );
   absoluteInput.min = "0";
   absoluteInput.removeAttribute("max");
-  const belowInput = numberInput(`gs-below-${game.appid}`, "notifyBelowPlayers", gs.notifyBelowPlayers ?? "", "e.g. 1000");
+  const belowInput = numberInput(
+    `gs-below-${game.appid}`,
+    "notifyBelowPlayers",
+    gs.notifyBelowPlayers ?? "",
+    "e.g. 1000",
+  );
   belowInput.min = "0";
   belowInput.removeAttribute("max");
 
@@ -186,8 +190,16 @@ function buildPerGameSettings(game: Game, gs: GameSettings, row: HTMLLIElement):
         children: [
           settingGroup(`Rise threshold (%)`, riseInput, "Overrides global rise alert %."),
           settingGroup(`Drop threshold (%)`, dropInput, "Overrides global drop alert %."),
-          settingGroup("Above player count", absoluteInput, "Notify after crossing above and remaining there for 5 minutes."),
-          settingGroup("Below player count", belowInput, "Notify after crossing below and remaining there for 5 minutes."),
+          settingGroup(
+            "Above player count",
+            absoluteInput,
+            "Notify after crossing above and remaining there for 5 minutes.",
+          ),
+          settingGroup(
+            "Below player count",
+            belowInput,
+            "Notify after crossing below and remaining there for 5 minutes.",
+          ),
         ],
       }),
       h("div", {
@@ -290,11 +302,13 @@ function setupAutocomplete(): void {
 
     acListEl.hidden = false;
     clear(acListEl);
-    acListEl.appendChild(h("li", {
-      className: "ac-status",
-      text: "Searching...",
-      attrs: { role: "status" },
-    }));
+    acListEl.appendChild(
+      h("li", {
+        className: "ac-status",
+        text: "Searching...",
+        attrs: { role: "status" },
+      }),
+    );
     searchTimer = setTimeout(() => void runSearch(query), 300);
   });
 
@@ -342,10 +356,12 @@ async function runSearch(query: string): Promise<void> {
   clear(acListEl);
 
   if (results.length === 0) {
-    acListEl.appendChild(h("li", {
-      className: "ac-status",
-      text: `No games found for "${query}".`,
-    }));
+    acListEl.appendChild(
+      h("li", {
+        className: "ac-status",
+        text: `No games found for "${query}".`,
+      }),
+    );
     return;
   }
 

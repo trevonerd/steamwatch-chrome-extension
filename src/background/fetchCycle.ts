@@ -30,27 +30,15 @@ export function mergeCycleCache(
 }
 
 export function buildCachedData(input: BuildCachedDataInput): CachedData {
-  const {
-    currentPlayers,
-    peak24h,
-    allTimePeak,
-    allTimePeakLabel,
-    prevCache,
-    fetchedAt,
-    twitchViewers,
-    freshness,
-  } = input;
+  const { currentPlayers, peak24h, allTimePeak, allTimePeakLabel, prevCache, fetchedAt, twitchViewers, freshness } =
+    input;
 
   const prevLocalPeak = prevCache?.localAllTimePeak ?? prevCache?.current ?? 0;
   const localAllTimePeak = Math.max(prevLocalPeak, currentPlayers);
 
   return {
     current: currentPlayers,
-    ...(peak24h != null
-      ? { peak24h }
-      : prevCache?.peak24h != null
-        ? { peak24h: prevCache.peak24h }
-        : {}),
+    ...(peak24h != null ? { peak24h } : prevCache?.peak24h != null ? { peak24h: prevCache.peak24h } : {}),
     ...(allTimePeak != null
       ? { allTimePeak }
       : prevCache?.allTimePeak != null
@@ -63,9 +51,7 @@ export function buildCachedData(input: BuildCachedDataInput): CachedData {
         : {}),
     localAllTimePeak,
     fetchedAt,
-    ...(freshness || prevCache?.freshness
-      ? { freshness: { ...prevCache?.freshness, ...freshness } }
-      : {}),
+    ...(freshness || prevCache?.freshness ? { freshness: { ...prevCache?.freshness, ...freshness } } : {}),
     ...(twitchViewers != null
       ? { twitchViewers }
       : prevCache?.twitchViewers != null

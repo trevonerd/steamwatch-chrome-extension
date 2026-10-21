@@ -27,7 +27,8 @@ beforeEach(async () => {
   await idbClearAllData();
   await chrome.storage.local.set({
     sw_games: [{ appid: "570", name: "Dota 2", image: "https://example.com/game.jpg" }],
-    sw_cache: { "570": cached }, sw_last_fetch: cached.fetchedAt,
+    sw_cache: { "570": cached },
+    sw_last_fetch: cached.fetchedAt,
   });
   vi.mocked(chrome.runtime.sendMessage as (message: unknown) => Promise<unknown>).mockResolvedValue({ ok: true });
   vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -45,16 +46,23 @@ afterEach(async () => {
 describe("popup refresh", () => {
   it("shows game names without ranking numbers when several games are tracked", async () => {
     const games = ["570", "730", "440"].map((appid) => ({ appid, name: `Game ${appid}`, image: "" }));
-    await chrome.storage.local.set({ sw_games: games, sw_cache: Object.fromEntries(games.map((game) => [game.appid, cached])) });
+    await chrome.storage.local.set({
+      sw_games: games,
+      sw_cache: Object.fromEntries(games.map((game) => [game.appid, cached])),
+    });
     await loadPopup();
     expect(document.querySelectorAll(".rank-badge")).toHaveLength(0);
-    expect(Array.from(document.querySelectorAll(".game-name"), (item) => item.textContent)).toEqual(games.map((game) => game.name));
+    expect(Array.from(document.querySelectorAll(".game-name"), (item) => item.textContent)).toEqual(
+      games.map((game) => game.name),
+    );
   });
   it("renders cached counts before IndexedDB history finishes loading", async () => {
     let finish: (value: []) => void = () => undefined;
-    const waiting = new Promise<[]>((resolve) => { finish = resolve; });
+    const waiting = new Promise<[]>((resolve) => {
+      finish = resolve;
+    });
     vi.doMock("../src/utils/idb-storage.js", async (importOriginal) => ({
-      ...await importOriginal<typeof import("../src/utils/idb-storage.js")>(),
+      ...(await importOriginal<typeof import("../src/utils/idb-storage.js")>()),
       idbGetSnapshots: () => waiting,
     }));
     await import("../src/popup/main.js");
@@ -73,12 +81,17 @@ describe("popup refresh", () => {
     expect(document.querySelector(".history-notice")).toBeNull();
     expect(document.querySelector(".graph-pill:disabled")?.getAttribute("title")).toBeTruthy();
     element("refreshBtn").click();
-    await vi.waitFor(() => expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({ type: "FETCH_NOW", retryHistory: true }));
+    await vi.waitFor(() =>
+      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({ type: "FETCH_NOW", retryHistory: true }),
+    );
     await vi.waitFor(() => expect(element("refreshBtn").hasAttribute("disabled")).toBe(false));
   });
   it("shows the beta identity reported by the loaded extension", async () => {
     vi.spyOn(chrome.runtime, "getManifest").mockReturnValue({
-      manifest_version: 3, name: "SteamWatch", version: "9.8.7", version_name: "9.8.7-beta.4",
+      manifest_version: 3,
+      name: "SteamWatch",
+      version: "9.8.7",
+      version_name: "9.8.7-beta.4",
     });
     await loadPopup();
     expect(element("appVersion").textContent).toBe("v9.8.7-beta.4");
@@ -86,7 +99,9 @@ describe("popup refresh", () => {
 
   it("shows the numeric version when the loaded extension has no beta label", async () => {
     vi.spyOn(chrome.runtime, "getManifest").mockReturnValue({
-      manifest_version: 3, name: "SteamWatch", version: "9.8.7",
+      manifest_version: 3,
+      name: "SteamWatch",
+      version: "9.8.7",
     });
     await loadPopup();
     expect(element("appVersion").textContent).toBe("v9.8.7");
@@ -100,7 +115,10 @@ describe("popup refresh", () => {
 
   it("shows an error when the worker rejects a manual refresh", async () => {
     await loadPopup();
-    vi.mocked(chrome.runtime.sendMessage as (message: unknown) => Promise<unknown>).mockResolvedValue({ ok: false, error: "Refresh failed" });
+    vi.mocked(chrome.runtime.sendMessage as (message: unknown) => Promise<unknown>).mockResolvedValue({
+      ok: false,
+      error: "Refresh failed",
+    });
     element("refreshBtn").click();
     await vi.waitFor(() => expect(element("errorState").hidden).toBe(false));
     expect(element("refreshBtn").hasAttribute("disabled")).toBe(false);
@@ -108,14 +126,18 @@ describe("popup refresh", () => {
 
   it("shows an error when the worker connection fails", async () => {
     await loadPopup();
-    vi.mocked(chrome.runtime.sendMessage as (message: unknown) => Promise<unknown>).mockRejectedValue(new Error("Disconnected"));
+    vi.mocked(chrome.runtime.sendMessage as (message: unknown) => Promise<unknown>).mockRejectedValue(
+      new Error("Disconnected"),
+    );
     element("refreshBtn").click();
     await vi.waitFor(() => expect(element("errorState").hidden).toBe(false));
   });
 
   it("retries the background request and restores the list after a failed refresh", async () => {
     await loadPopup();
-    vi.mocked(chrome.runtime.sendMessage as (message: unknown) => Promise<unknown>).mockResolvedValueOnce({ ok: false });
+    vi.mocked(chrome.runtime.sendMessage as (message: unknown) => Promise<unknown>).mockResolvedValueOnce({
+      ok: false,
+    });
     element("refreshBtn").click();
     await vi.waitFor(() => expect(element("errorState").hidden).toBe(false));
     element("retryBtn").click();
@@ -134,7 +156,8 @@ describe("popup refresh", () => {
 
   it("uses the new update time when hydration supplies the first successful fetch", async () => {
     await chrome.storage.local.set({
-      sw_cache: { "570": { current: 100, fetchedAt: 0 } }, sw_last_fetch: 0,
+      sw_cache: { "570": { current: 100, fetchedAt: 0 } },
+      sw_last_fetch: 0,
     });
     vi.mocked(chrome.runtime.sendMessage as (message: unknown) => Promise<unknown>).mockImplementation(async () => {
       await chrome.storage.local.set({ sw_cache: { "570": cached }, sw_last_fetch: cached.fetchedAt });
@@ -147,7 +170,11 @@ describe("popup refresh", () => {
   it("shows cached counts while an automatic update remains pending", async () => {
     await chrome.storage.local.set({ sw_cache: { "570": { ...cached, fetchedAt: 1 } } });
     let finish: (response: { ok: boolean }) => void = () => undefined;
-    vi.mocked(chrome.runtime.sendMessage as (message: unknown) => Promise<unknown>).mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    vi.mocked(chrome.runtime.sendMessage as (message: unknown) => Promise<unknown>).mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
     await loadPopup();
     expect(element("gamesList").hidden).toBe(false);
     expect(document.querySelector(".stat-current")?.textContent).toBe("100");
@@ -166,14 +193,24 @@ describe("popup refresh", () => {
     await loadPopup();
     vi.mocked(chrome.runtime.sendMessage as (message: unknown) => Promise<unknown>).mockResolvedValue({ ok: false });
     document.querySelector<HTMLButtonElement>(".btn-star")?.click();
-    await vi.waitFor(async () => expect((await chrome.storage.local.get<{ sw_settings: { badgeFavoriteAppid?: string } }>("sw_settings")).sw_settings.badgeFavoriteAppid).toBe("570"));
+    await vi.waitFor(async () =>
+      expect(
+        (await chrome.storage.local.get<{ sw_settings: { badgeFavoriteAppid?: string } }>("sw_settings")).sw_settings
+          .badgeFavoriteAppid,
+      ).toBe("570"),
+    );
     expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
   });
 
   it("changes graph and period statistics together using qualified hourly observations", async () => {
     const now = Date.now();
     for (let hour = 0; hour < 73; hour++) {
-      await idbSaveSnapshot("570", { ts: now - hour * 3_600_000, current: hour < 24 ? 100 : 200, source: "steamcharts", granularity: "hourly" });
+      await idbSaveSnapshot("570", {
+        ts: now - hour * 3_600_000,
+        current: hour < 24 ? 100 : 200,
+        source: "steamcharts",
+        granularity: "hourly",
+      });
     }
     await loadPopup();
     document.querySelector<HTMLButtonElement>(".btn-expand")?.click();

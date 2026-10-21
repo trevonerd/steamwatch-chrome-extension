@@ -8,9 +8,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { CardViewModel } from "../types/index.js";
-import { fmtNumber, fmtPct, fmtTimeAgo } from "./trend.js";
 import { fallbackBadgeLabel } from "./card.js";
 import { buildGraphSeries, colorGraphSegments, type GraphSeries } from "./sparkline.js";
+import { fmtNumber, fmtPct, fmtTimeAgo } from "./trend.js";
 
 const DAY_MS = 86_400_000;
 const SHARE_GRAPH_MAX_POINTS = 200;
@@ -41,8 +41,8 @@ export function buildShareText(vm: CardViewModel): string {
     fetchedAt,
   } = vm;
 
-  const line  = "─".repeat(32);
-  const name  = game.name;
+  const line = "─".repeat(32);
+  const name = game.name;
   const parts: string[] = [];
 
   parts.push(`🎮 ${name} — SteamWatch`);
@@ -54,15 +54,18 @@ export function buildShareText(vm: CardViewModel): string {
   // Trend
   if (trend) {
     parts.push(`${trend.level.icon} 7d vs previous 7d: ${fmtPct(trend.pct)} (${trend.level.label})`);
-    if (vm.trendAsOf !== undefined) parts.push(`Historical comparison through ${new Date(vm.trendAsOf).toISOString()}; newer history is incomplete.`);
+    if (vm.trendAsOf !== undefined)
+      parts.push(`Historical comparison through ${new Date(vm.trendAsOf).toISOString()}; newer history is incomplete.`);
   } else if (seasonalAnalysis) {
     parts.push(`↔ Trend unavailable: ${seasonalAnalysis.reason}`);
     const early = vm.earlyActivity;
     if (early) {
       const comparison = early.comparison;
-      parts.push(comparison
-        ? `Preliminary 24h vs previous 24h: ${comparison.pct === null ? `${comparison.delta > 0 ? "+" : ""}${comparison.delta} average players` : fmtPct(comparison.pct)}. ${early.reason}`
-        : `${early.observations} observations across ${early.spanHours.toFixed(1)}h; observed range ${fmtNumber(early.minimum)}–${fmtNumber(early.maximum)}. ${early.reason}`);
+      parts.push(
+        comparison
+          ? `Preliminary 24h vs previous 24h: ${comparison.pct === null ? `${comparison.delta > 0 ? "+" : ""}${comparison.delta} average players` : fmtPct(comparison.pct)}. ${early.reason}`
+          : `${early.observations} observations across ${early.spanHours.toFixed(1)}h; observed range ${fmtNumber(early.minimum)}–${fmtNumber(early.maximum)}. ${early.reason}`,
+      );
     }
   }
 
@@ -73,9 +76,10 @@ export function buildShareText(vm: CardViewModel): string {
   // Peaks
   if (peak24h != null || allTimePeak != null || observedPeak != null) {
     const peak24hStr = peak24h != null ? `24h peak: ${fmtNumber(peak24h)}` : "";
-    const allTimePeakStr = allTimePeak != null
-      ? `Provider ATH: ${fmtNumber(allTimePeak)}${allTimePeakLabel ? ` (${allTimePeakLabel})` : ""}`
-      : "";
+    const allTimePeakStr =
+      allTimePeak != null
+        ? `Provider ATH: ${fmtNumber(allTimePeak)}${allTimePeakLabel ? ` (${allTimePeakLabel})` : ""}`
+        : "";
     const observedPeakStr = observedPeak != null ? `Observed peak: ${fmtNumber(observedPeak)}` : "";
     const statLine = [peak24hStr, allTimePeakStr, observedPeakStr].filter(Boolean).join("  ·  ");
     parts.push(`📊 ${statLine}`);
@@ -126,9 +130,9 @@ export async function renderShareCanvas(vm: CardViewModel): Promise<Blob> {
   const { game, current, peak24h, allTimePeak, observedPeak, trend } = vm;
 
   const canvas = document.createElement("canvas");
-  canvas.width  = CANVAS_W;
+  canvas.width = CANVAS_W;
   canvas.height = CANVAS_H;
-  const ctx     = canvas.getContext("2d")!;
+  const ctx = canvas.getContext("2d")!;
 
   // ── Background ─────────────────────────────────────────────────────────────
   ctx.fillStyle = "#080c15";
@@ -163,27 +167,29 @@ export async function renderShareCanvas(vm: CardViewModel): Promise<Blob> {
   const TEXT_X = THUMB_X + THUMB_W + 12;
 
   ctx.fillStyle = "#dde4ee";
-  ctx.font      = "bold 15px system-ui, -apple-system, sans-serif";
+  ctx.font = "bold 15px system-ui, -apple-system, sans-serif";
   ctx.fillText(truncate(ctx, game.name, CANVAS_W - TEXT_X - 20), TEXT_X, 32);
 
   // ── Stats row ──────────────────────────────────────────────────────────────
-  ctx.font      = "600 20px 'Courier New', Courier, monospace";
+  ctx.font = "600 20px 'Courier New', Courier, monospace";
   ctx.fillStyle = "#00c8ff";
   ctx.fillText(fmtNumber(current), TEXT_X, 56);
 
-  ctx.font      = "11px 'Courier New', Courier, monospace";
+  ctx.font = "11px 'Courier New', Courier, monospace";
   ctx.fillStyle = "#7a90aa";
   const statsStr = [
     peak24h != null ? `24H ${fmtNumber(peak24h)}` : "",
     allTimePeak != null ? `ATH ${fmtNumber(allTimePeak)}` : "",
     observedPeak != null ? `OBS ${fmtNumber(observedPeak)}` : "",
-  ].filter(Boolean).join("  ");
+  ]
+    .filter(Boolean)
+    .join("  ");
   if (statsStr) ctx.fillText(statsStr, TEXT_X + 2, 72);
 
   // ── Trend badge ────────────────────────────────────────────────────────────
   if (trend) {
     const badgeColor = trendBadgeColor(vm.trendCls);
-    const badgeText  = `${trend.level.icon} ${fmtPct(trend.pct)} 7d${vm.trendAsOf !== undefined ? ` · ${fmtTimeAgo(vm.trendAsOf, vm.evaluatedAt)}` : ""}`;
+    const badgeText = `${trend.level.icon} ${fmtPct(trend.pct)} 7d${vm.trendAsOf !== undefined ? ` · ${fmtTimeAgo(vm.trendAsOf, vm.evaluatedAt)}` : ""}`;
     ctx.font = "11px 'Courier New', Courier, monospace";
     const bw = ctx.measureText(badgeText).width + 14;
     const bx = CANVAS_W - bw - 12;
@@ -203,7 +209,12 @@ export async function renderShareCanvas(vm: CardViewModel): Promise<Blob> {
     ctx.fillStyle = "#7a90aa";
     const early = vm.earlyActivity;
     const pct = early?.comparison?.pct;
-    const label = early?.status === "preliminary" ? pct != null ? `~${fmtPct(pct)} 24h (early)` : "24h activity (early)" : fallbackBadgeLabel(vm);
+    const label =
+      early?.status === "preliminary"
+        ? pct != null
+          ? `~${fmtPct(pct)} 24h (early)`
+          : "24h activity (early)"
+        : fallbackBadgeLabel(vm);
     ctx.fillText(label, CANVAS_W - ctx.measureText(label).width - 12, 55);
   }
 
@@ -253,7 +264,7 @@ export async function renderShareCanvas(vm: CardViewModel): Promise<Blob> {
   }
 
   // ── Watermark ──────────────────────────────────────────────────────────────
-  ctx.font      = "10px system-ui, -apple-system, sans-serif";
+  ctx.font = "10px system-ui, -apple-system, sans-serif";
   ctx.fillStyle = "#3d5068";
   ctx.textAlign = "right";
   ctx.fillText("SteamWatch · TREVISOFT", CANVAS_W - 8, CANVAS_H - 6);
@@ -261,10 +272,7 @@ export async function renderShareCanvas(vm: CardViewModel): Promise<Blob> {
 
   // ── To Blob ────────────────────────────────────────────────────────────────
   return new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => blob ? resolve(blob) : reject(new Error("Canvas toBlob returned null")),
-      "image/png",
-    );
+    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("Canvas toBlob returned null"))), "image/png");
   });
 }
 
@@ -281,29 +289,30 @@ function loadImage(src: string): Promise<HTMLImageElement> {
       img.src = "";
       reject(new Error("Image load timed out"));
     }, 5000);
-    img.onload = () => { clearTimeout(timeout); resolve(img); };
-    img.onerror = () => { clearTimeout(timeout); reject(new Error(`Image load failed: ${src}`)); };
+    img.onload = () => {
+      clearTimeout(timeout);
+      resolve(img);
+    };
+    img.onerror = () => {
+      clearTimeout(timeout);
+      reject(new Error(`Image load failed: ${src}`));
+    };
     img.src = src;
   });
 }
 
 /** Draw a rounded rectangle path (without stroking/filling). */
-function roundRect(
-  ctx: CanvasRenderingContext2D,
-  x: number, y: number,
-  w: number, h: number,
-  r: number,
-): void {
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
   ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y,     x + w, y + r);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
   ctx.lineTo(x + w, y + h - r);
   ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
   ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x,     y + h, x,     y + h - r);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
   ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x,     y,     x + r, y);
+  ctx.quadraticCurveTo(x, y, x + r, y);
   ctx.closePath();
 }
 
@@ -329,15 +338,13 @@ function hexToRgba(hex: string, alpha: number): string {
 /** Left-border accent colour per trend class. */
 function trendStripColor(cls: string): string {
   if (["explosion", "strong-up", "up"].includes(cls)) return "#22c55e";
-  if (["down", "strong-down"].includes(cls))           return "#ef4444";
+  if (["down", "strong-down"].includes(cls)) return "#ef4444";
   return "#1e3a5f";
 }
 
 /** Badge background + text colours per trend class. */
 function trendBadgeColor(cls: string): { bg: string; text: string } {
-  if (["explosion", "strong-up", "up"].includes(cls))
-    return { bg: "rgba(34,197,94,0.15)",  text: "#22c55e" };
-  if (["down", "strong-down"].includes(cls))
-    return { bg: "rgba(239,68,68,0.15)",  text: "#ef4444" };
+  if (["explosion", "strong-up", "up"].includes(cls)) return { bg: "rgba(34,197,94,0.15)", text: "#22c55e" };
+  if (["down", "strong-down"].includes(cls)) return { bg: "rgba(239,68,68,0.15)", text: "#ef4444" };
   return { bg: "rgba(100,116,139,0.15)", text: "#64748b" };
 }

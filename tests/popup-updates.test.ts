@@ -2,7 +2,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { shouldRefreshGames, startPopupUpdates } from "../src/popup/updates.js";
 
-afterEach(() => { window.dispatchEvent(new Event("pagehide")); vi.useRealTimers(); vi.restoreAllMocks(); });
+afterEach(() => {
+  window.dispatchEvent(new Event("pagehide"));
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
 describe("popup live updates", () => {
   const game = { appid: "570", name: "Dota 2", image: "" };
@@ -34,9 +38,15 @@ describe("popup live updates", () => {
     vi.useFakeTimers();
     let listener: ((changes: Record<string, chrome.storage.StorageChange>, area: string) => void) | undefined;
     const removeListener = vi.fn();
-    Object.defineProperty(chrome.storage, "onChanged", { configurable: true, value: {
-      addListener: (callback: typeof listener) => { listener = callback; }, removeListener,
-    } });
+    Object.defineProperty(chrome.storage, "onChanged", {
+      configurable: true,
+      value: {
+        addListener: (callback: typeof listener) => {
+          listener = callback;
+        },
+        removeListener,
+      },
+    });
     const render = vi.fn(async () => undefined);
     const stop = startPopupUpdates(async () => undefined, render);
     listener?.({ sw_cache: { newValue: {} } }, "sync");

@@ -1,24 +1,3 @@
-import {
-  fetchCurrentPlayers,
-  fetchSteamChartsResult,
-  fetchSteamSpyResult,
-  fetchTwitchResult,
-} from "../utils/api.js";
-import {
-  getCache,
-  getGameSettings,
-  getGames,
-  getSettings,
-  setCache,
-  setLastFetchAttemptTime,
-  setLastFetchTime,
-} from "../utils/storage.js";
-import { idbGetSnapshots, idbSaveSnapshot } from "../utils/idb-storage.js";
-import { refreshHistory } from "./historyBootstrap.js";
-import { buildCachedData } from "./fetchCycle.js";
-import { publishLiveResult, updateBadge } from "./signals.js";
-import { formatError } from "../utils/log.js";
-
 import type {
   CachedData,
   FieldFreshness,
@@ -30,6 +9,21 @@ import type {
   SteamChartsData,
   SteamSpyData,
 } from "../types/index.js";
+import { fetchCurrentPlayers, fetchSteamChartsResult, fetchSteamSpyResult, fetchTwitchResult } from "../utils/api.js";
+import { idbGetSnapshots, idbSaveSnapshot } from "../utils/idb-storage.js";
+import { formatError } from "../utils/log.js";
+import {
+  getCache,
+  getGameSettings,
+  getGames,
+  getSettings,
+  setCache,
+  setLastFetchAttemptTime,
+  setLastFetchTime,
+} from "../utils/storage.js";
+import { buildCachedData } from "./fetchCycle.js";
+import { refreshHistory } from "./historyBootstrap.js";
+import { publishLiveResult, updateBadge } from "./signals.js";
 
 const METADATA_TTL_MS = 60 * 60_000;
 const TWITCH_TTL_MS = 5 * 60_000;
@@ -63,7 +57,13 @@ export interface RefreshCoordinatorDependencies {
     readonly gameSettings: GameSettings;
     readonly cache: Record<string, CachedData>;
   }) => Promise<"rising" | "alerting" | "stable">;
-  readonly updateBadge: (rising: number, alerting: number, favoriteAppid: string | undefined, cache: Record<string, CachedData>, gameSignals: ReadonlyMap<string, "rising" | "alerting" | "stable">) => void;
+  readonly updateBadge: (
+    rising: number,
+    alerting: number,
+    favoriteAppid: string | undefined,
+    cache: Record<string, CachedData>,
+    gameSignals: ReadonlyMap<string, "rising" | "alerting" | "stable">,
+  ) => void;
   readonly clearBadge: () => void;
   readonly now: () => number;
 }
@@ -102,10 +102,7 @@ export class RefreshCoordinator {
   private async runLiveCycle(): Promise<RefreshResult> {
     const attemptedAt = this.dependencies.now();
     await this.dependencies.setLastFetchAttemptTime(attemptedAt);
-    const [games, settings] = await Promise.all([
-      this.dependencies.getGames(),
-      this.dependencies.getSettings(),
-    ]);
+    const [games, settings] = await Promise.all([this.dependencies.getGames(), this.dependencies.getSettings()]);
     this.gameSignals.clear();
     if (games.length === 0) {
       this.dependencies.clearBadge();
@@ -113,9 +110,11 @@ export class RefreshCoordinator {
     }
 
     const settled = await Promise.allSettled(games.map((game) => this.refreshGame(game, settings, attemptedAt)));
-    const successfulAt = settled.flatMap((result) => result.status === "fulfilled" && result.value.published && result.value.acquiredAt !== undefined
-      ? [result.value.acquiredAt]
-      : []);
+    const successfulAt = settled.flatMap((result) =>
+      result.status === "fulfilled" && result.value.published && result.value.acquiredAt !== undefined
+        ? [result.value.acquiredAt]
+        : [],
+    );
     const count = successfulAt.length;
     if (count === 0) {
       return { ok: false, error: "No current player counts were available." };
@@ -124,8 +123,14 @@ export class RefreshCoordinator {
     return { ok: true };
   }
 
-  private async refreshGame(game: Game, settings: Settings, attemptedAt: number): Promise<{ readonly published: boolean; readonly acquiredAt?: number }> {
-    this.startSourceJob(`${game.appid}:history`, async () => { await this.dependencies.refreshHistory(game.appid); });
+  private async refreshGame(
+    game: Game,
+    settings: Settings,
+    attemptedAt: number,
+  ): Promise<{ readonly published: boolean; readonly acquiredAt?: number }> {
+    this.startSourceJob(`${game.appid}:history`, async () => {
+      await this.dependencies.refreshHistory(game.appid);
+    });
     this.startAuxiliary(game, attemptedAt);
     let current: number | null;
     try {
@@ -171,7 +176,14 @@ export class RefreshCoordinator {
         this.dependencies.getSnapshots(game.appid),
         this.dependencies.getGameSettings(game.appid),
       ]);
-      const signal = await this.dependencies.publishLiveResult({ game, current, snapshots, settings, gameSettings, cache: committed });
+      const signal = await this.dependencies.publishLiveResult({
+        game,
+        current,
+        snapshots,
+        settings,
+        gameSettings,
+        cache: committed,
+      });
       this.gameSignals.set(game.appid, signal);
       await this.enqueueWrite(async () => {
         const [latestCache, latestSettings] = await Promise.all([
@@ -179,7 +191,13 @@ export class RefreshCoordinator {
           this.dependencies.getSettings(),
         ]);
         const signals = [...this.gameSignals.values()];
-        this.dependencies.updateBadge(signals.filter((value) => value === "rising").length, signals.filter((value) => value === "alerting").length, latestSettings.badgeFavoriteAppid, latestCache, this.gameSignals);
+        this.dependencies.updateBadge(
+          signals.filter((value) => value === "rising").length,
+          signals.filter((value) => value === "alerting").length,
+          latestSettings.badgeFavoriteAppid,
+          latestCache,
+          this.gameSignals,
+        );
       });
     } catch (error: unknown) {
       console.warn(`[SteamWatch] Live signal publish failed for ${game.appid}: ${formatError(error)}`);
@@ -195,7 +213,9 @@ export class RefreshCoordinator {
         ...cache.freshness,
         current: this.freshness(
           "steam",
-          status === "error" ? { status: "error", error: "Current player count unavailable" } : { status: "unavailable" },
+          status === "error"
+            ? { status: "error", error: "Current player count unavailable" }
+            : { status: "unavailable" },
           attemptedAt,
           cache.freshness?.current,
         ),
@@ -226,13 +246,20 @@ export class RefreshCoordinator {
 
   private startSourceJob(key: string, job: () => Promise<void>): void {
     if (this.auxiliaryJobs.has(key)) return;
-    const pending = job().catch((error: unknown) => {
-      console.warn(`[SteamWatch] Background source ${key} failed: ${formatError(error)}`);
-    }).finally(() => this.auxiliaryJobs.delete(key));
+    const pending = job()
+      .catch((error: unknown) => {
+        console.warn(`[SteamWatch] Background source ${key} failed: ${formatError(error)}`);
+      })
+      .finally(() => this.auxiliaryJobs.delete(key));
     this.auxiliaryJobs.set(key, pending);
   }
 
-  private isDue(cache: CachedData | undefined, metric: "peak24h" | "allTimePeak" | "twitchViewers", ttl: number, now: number): boolean {
+  private isDue(
+    cache: CachedData | undefined,
+    metric: "peak24h" | "allTimePeak" | "twitchViewers",
+    ttl: number,
+    now: number,
+  ): boolean {
     const freshness = cache?.freshness?.[metric];
     if (!freshness) return true;
     const age = now - freshness.attemptedAt;
@@ -243,12 +270,28 @@ export class RefreshCoordinator {
     await this.updateMetadata(game.appid, (cache) => ({
       ...cache,
       ...(result.status === "ok" && result.value.peak24h !== undefined ? { peak24h: result.value.peak24h } : {}),
-      ...(result.status === "ok" && result.value.allTimePeak !== undefined ? { allTimePeak: result.value.allTimePeak } : {}),
-      ...(result.status === "ok" && result.value.allTimePeakLabel !== undefined ? { allTimePeakLabel: result.value.allTimePeakLabel } : {}),
+      ...(result.status === "ok" && result.value.allTimePeak !== undefined
+        ? { allTimePeak: result.value.allTimePeak }
+        : {}),
+      ...(result.status === "ok" && result.value.allTimePeakLabel !== undefined
+        ? { allTimePeakLabel: result.value.allTimePeakLabel }
+        : {}),
       freshness: {
         ...cache.freshness,
-        peak24h: this.metricFreshness("steamcharts", result, result.status === "ok" && result.value.peak24h !== undefined, attemptedAt, cache.freshness?.peak24h),
-        allTimePeak: this.metricFreshness("steamcharts", result, result.status === "ok" && result.value.allTimePeak !== undefined, attemptedAt, cache.freshness?.allTimePeak),
+        peak24h: this.metricFreshness(
+          "steamcharts",
+          result,
+          result.status === "ok" && result.value.peak24h !== undefined,
+          attemptedAt,
+          cache.freshness?.peak24h,
+        ),
+        allTimePeak: this.metricFreshness(
+          "steamcharts",
+          result,
+          result.status === "ok" && result.value.allTimePeak !== undefined,
+          attemptedAt,
+          cache.freshness?.allTimePeak,
+        ),
       },
     }));
   }
@@ -260,7 +303,18 @@ export class RefreshCoordinator {
         ? { allTimePeak: result.value.peak }
         : {}),
       ...(cache.allTimePeak === undefined
-        ? { freshness: { ...cache.freshness, allTimePeak: this.metricFreshness("steamspy", result, result.status === "ok" && result.value.peak > 0, attemptedAt, cache.freshness?.allTimePeak) } }
+        ? {
+            freshness: {
+              ...cache.freshness,
+              allTimePeak: this.metricFreshness(
+                "steamspy",
+                result,
+                result.status === "ok" && result.value.peak > 0,
+                attemptedAt,
+                cache.freshness?.allTimePeak,
+              ),
+            },
+          }
         : {}),
     }));
   }
@@ -271,33 +325,44 @@ export class RefreshCoordinator {
       return {
         ...(result.status === "unavailable" ? withoutViewers : cache),
         ...(result.status === "ok" ? { twitchViewers: result.value } : {}),
-        freshness: { ...cache.freshness, twitchViewers: this.freshness("twitch", result, attemptedAt, cache.freshness?.twitchViewers) },
+        freshness: {
+          ...cache.freshness,
+          twitchViewers: this.freshness("twitch", result, attemptedAt, cache.freshness?.twitchViewers),
+        },
       };
     });
   }
 
-  private freshness(source: FieldFreshness["source"], result: ProviderResult<unknown>, attemptedAt: number, previous?: FieldFreshness): FieldFreshness {
+  private freshness(
+    source: FieldFreshness["source"],
+    result: ProviderResult<unknown>,
+    attemptedAt: number,
+    previous?: FieldFreshness,
+  ): FieldFreshness {
     return result.status === "ok"
       ? { source, status: "ok", acquiredAt: attemptedAt, attemptedAt }
       : {
-        source: previous?.source ?? source,
-        status: result.status,
-        ...(previous?.acquiredAt !== undefined ? { acquiredAt: previous.acquiredAt } : {}),
-        attemptedAt,
-      };
+          source: previous?.source ?? source,
+          status: result.status,
+          ...(previous?.acquiredAt !== undefined ? { acquiredAt: previous.acquiredAt } : {}),
+          attemptedAt,
+        };
   }
 
-  private metricFreshness(source: FieldFreshness["source"], result: ProviderResult<unknown>, available: boolean, attemptedAt: number, previous?: FieldFreshness): FieldFreshness {
+  private metricFreshness(
+    source: FieldFreshness["source"],
+    result: ProviderResult<unknown>,
+    available: boolean,
+    attemptedAt: number,
+    previous?: FieldFreshness,
+  ): FieldFreshness {
     if (result.status !== "ok") return this.freshness(source, result, attemptedAt, previous);
     return available
       ? this.freshness(source, result, attemptedAt, previous)
       : this.freshness(source, { status: "unavailable" }, attemptedAt, previous);
   }
 
-  private async updateMetadata(
-    appid: string,
-    update: (cache: CachedData) => CachedData,
-  ): Promise<void> {
+  private async updateMetadata(appid: string, update: (cache: CachedData) => CachedData): Promise<void> {
     await this.enqueueWrite(async () => {
       const followed = await this.dependencies.getGames();
       if (!followed.some((game) => game.appid === appid)) return;
@@ -311,7 +376,9 @@ export class RefreshCoordinator {
   private async enqueueWrite<T>(work: () => Promise<T>): Promise<T> {
     const previous = this.writeTail;
     let release: (() => void) | undefined;
-    this.writeTail = new Promise<void>((resolve) => { release = resolve; });
+    this.writeTail = new Promise<void>((resolve) => {
+      release = resolve;
+    });
     await previous;
     try {
       return await work();

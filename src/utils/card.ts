@@ -10,13 +10,13 @@
 // No side effects. No I/O. Fully unit-testable.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import type { Game, CachedData, Snapshot, CardViewModel } from "../types/index.js";
+import type { CachedData, CardViewModel, Game, Snapshot } from "../types/index.js";
 import { buildEarlyActivity } from "./earlyActivity.js";
-import { computeLatestChangePctFromHourly, computeLocalPeak, computeWindowMin } from "./trend.js";
-import { buildAvailableGraphWindows, hasEnoughGraphHistory } from "./sparkline.js";
 import { formatError } from "./log.js";
-import { HOUR_MS, isQualifiedSnapshot, normalizeHourly } from "./series.js";
 import { analyzeLatestAvailableSeasonalTrendFromHourly } from "./seasonal.js";
+import { HOUR_MS, isQualifiedSnapshot, normalizeHourly } from "./series.js";
+import { buildAvailableGraphWindows, hasEnoughGraphHistory } from "./sparkline.js";
+import { computeLatestChangePctFromHourly, computeLocalPeak, computeWindowMin } from "./trend.js";
 
 /**
  * Build the complete view model for a single game card.
@@ -35,22 +35,27 @@ export function buildCardViewModel(
   retentionDays: number,
   now = Date.now(),
 ): CardViewModel {
-  const data      = cache[game.appid];
+  const data = cache[game.appid];
   const observations = snaps.filter((snapshot) => isQualifiedSnapshot(snapshot) && snapshot.ts <= now);
   const hourly = normalizeHourly(observations, now);
-  const current   = data?.current ?? null;
+  const current = data?.current ?? null;
   const observedPeak = computeLocalPeak(observations);
-  const allTimePeak = data?.freshness?.allTimePeak?.source === "steamcharts" && data.freshness.allTimePeak.acquiredAt !== undefined ? data.allTimePeak ?? null : null;
-  const peak24h    = data?.peak24h ?? null;
-  const availableGraphWindows = buildAvailableGraphWindows(retentionDays)
-    .filter((window) => hasEnoughGraphHistory(observations, window.windowMs, now));
-  const defaultGraphWindow = availableGraphWindows.find((w) => w.key !== "all")?.key ?? availableGraphWindows[0]?.key ?? null;
+  const allTimePeak =
+    data?.freshness?.allTimePeak?.source === "steamcharts" && data.freshness.allTimePeak.acquiredAt !== undefined
+      ? (data.allTimePeak ?? null)
+      : null;
+  const peak24h = data?.peak24h ?? null;
+  const availableGraphWindows = buildAvailableGraphWindows(retentionDays).filter((window) =>
+    hasEnoughGraphHistory(observations, window.windowMs, now),
+  );
+  const defaultGraphWindow =
+    availableGraphWindows.find((w) => w.key !== "all")?.key ?? availableGraphWindows[0]?.key ?? null;
   const seasonalAnalysis = analyzeLatestAvailableSeasonalTrendFromHourly(hourly, now);
   const trend = seasonalAnalysis.status === "ready" ? seasonalAnalysis.trend : null;
   const comparisonEnd = seasonalAnalysis.status === "ready" ? seasonalAnalysis.comparison?.endTs : undefined;
-  const trendAsOf = comparisonEnd !== undefined && comparisonEnd < Math.floor(now / HOUR_MS) * HOUR_MS
-    ? comparisonEnd : undefined;
-  const trendCls   = trend?.level.cls ?? "stable";
+  const trendAsOf =
+    comparisonEnd !== undefined && comparisonEnd < Math.floor(now / HOUR_MS) * HOUR_MS ? comparisonEnd : undefined;
+  const trendCls = trend?.level.cls ?? "stable";
   const latestChangePct = computeLatestChangePctFromHourly(hourly, now);
   const allTimeLow = computeWindowMin(observations);
 
@@ -129,7 +134,12 @@ export function weeklyDetail(vm: CardViewModel): string {
   if (analysis?.status !== "ready" || !analysis.comparison) return "";
   const { comparison } = analysis;
   const pct = vm.trend?.pct ?? 0;
-  const agree = pct >= 5 ? ` · ${comparison.risingDays}/7 days higher` : pct < -5 ? ` · ${comparison.fallingDays}/7 days lower` : "";
+  const agree =
+    pct >= 5
+      ? ` · ${comparison.risingDays}/7 days higher`
+      : pct < -5
+        ? ` · ${comparison.fallingDays}/7 days lower`
+        : "";
   const avg = (value: number) => Math.round(value).toLocaleString("en-US");
   return ` ${avg(comparison.recentMean)} vs ${avg(comparison.baselineMean)} average players${agree} · ${comparison.matchedHours}/168 matched hours.`;
 }

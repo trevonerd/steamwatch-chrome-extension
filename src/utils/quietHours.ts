@@ -4,7 +4,7 @@
 // No side effects, no I/O — every function takes a Date and returns a value.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import type { Settings, QuietDaysMask } from "../types/index.js";
+import type { QuietDaysMask, Settings } from "../types/index.js";
 
 // ── Core check ────────────────────────────────────────────────────────────────
 
@@ -27,7 +27,8 @@ export function isQuietNow(settings: Settings, now: Date = new Date()): boolean 
   if (!isInQuietWindow(settings.quietStart, settings.quietEnd, now.getHours(), now.getMinutes())) return false;
 
   // An overnight window belongs to the day it starts: Friday 23:00 → 07:00 covers Saturday morning.
-  const overnightTail = parseHHMM(settings.quietStart) > parseHHMM(settings.quietEnd) && nowMins < parseHHMM(settings.quietEnd);
+  const overnightTail =
+    parseHHMM(settings.quietStart) > parseHHMM(settings.quietEnd) && nowMins < parseHHMM(settings.quietEnd);
   const day = (now.getDay() + (overnightTail ? 6 : 0)) % 7; // Sunday = bit 0, Saturday = bit 6
   return (settings.quietDays & (1 << day)) !== 0;
 }
@@ -40,15 +41,10 @@ export function isQuietNow(settings: Settings, now: Date = new Date()): boolean 
  * @param h       Current hour (0–23)
  * @param m       Current minute (0–59)
  */
-export function isInQuietWindow(
-  start: string,
-  end: string,
-  h: number,
-  m: number
-): boolean {
+export function isInQuietWindow(start: string, end: string, h: number, m: number): boolean {
   const startMins = parseHHMM(start);
-  const endMins   = parseHHMM(end);
-  const nowMins   = h * 60 + m;
+  const endMins = parseHHMM(end);
+  const nowMins = h * 60 + m;
 
   if (startMins <= endMins) {
     // Same-day window: e.g. 08:00 → 18:00

@@ -1,37 +1,28 @@
 // tests/storage.test.ts
-import { beforeEach, describe, it, expect, vi, type MockInstance } from "vitest";
+import { beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
+import { AppDetailsSchema, type Game, MessageResponseSchema, type Snapshot } from "../src/types/index.js";
+import { _resetDbForTesting, idbGetSnapshots, idbSaveSnapshot } from "../src/utils/idb-storage.js";
 import {
-  getGames,
   addGame,
-  updateGameImage,
-  removeGame,
-  getSettings,
-  saveSettings,
-  getGameSettings,
-  saveGameSettings,
-  getCache,
-  getLastFetchAttemptTime,
-  setLastFetchAttemptTime,
-  getLastFetchTime,
-  setLastFetchTime,
-  setCache,
   clearAllData,
-  MAX_GAMES,
   DEFAULT_SETTINGS,
   FETCH_INTERVAL_MINUTES,
+  getCache,
+  getGameSettings,
+  getGames,
+  getLastFetchAttemptTime,
+  getLastFetchTime,
+  getSettings,
+  MAX_GAMES,
+  removeGame,
+  saveGameSettings,
+  saveSettings,
+  setCache,
+  setLastFetchAttemptTime,
+  setLastFetchTime,
   TRACKING_RETENTION_DAYS,
+  updateGameImage,
 } from "../src/utils/storage.js";
-import {
-  AppDetailsSchema,
-  MessageResponseSchema,
-  type Game,
-  type Snapshot,
-} from "../src/types/index.js";
-import {
-  _resetDbForTesting,
-  idbGetSnapshots,
-  idbSaveSnapshot,
-} from "../src/utils/idb-storage.js";
 
 describe("refresh freshness persistence", () => {
   it("keeps failed-attempt time separate from the last successful update", async () => {
@@ -42,14 +33,18 @@ describe("refresh freshness persistence", () => {
   });
 
   it("preserves valid counts when their freshness metadata is malformed", async () => {
-    await chrome.storage.local.set({ sw_cache: {
-      "570": { current: 123, fetchedAt: 100, freshness: { current: { status: "invented" } } },
-    } });
+    await chrome.storage.local.set({
+      sw_cache: {
+        "570": { current: 123, fetchedAt: 100, freshness: { current: { status: "invented" } } },
+      },
+    });
     expect((await getCache())["570"]).toMatchObject({ current: 123, fetchedAt: 100, freshness: {} });
   });
 
   it("preserves the acquisition time of failed cached fields", async () => {
-    const freshness = { current: { status: "error" as const, source: "steam" as const, acquiredAt: 100, attemptedAt: 200 } };
+    const freshness = {
+      current: { status: "error" as const, source: "steam" as const, acquiredAt: 100, attemptedAt: 200 },
+    };
     await setCache({ "570": { current: 123, fetchedAt: 100, freshness } });
     expect((await getCache())["570"]?.freshness).toEqual(freshness);
   });
@@ -107,17 +102,20 @@ describe("getGames", () => {
     expect((await chrome.storage.local.get("sw_games"))["sw_games"]).toEqual([valid]);
   });
 
-  it.each([null, "not an array", { appid: "1" }])("recovers from an invalid top-level games container: %p", async (raw) => {
-    // Given
-    await chrome.storage.local.set({ sw_games: raw });
+  it.each([null, "not an array", { appid: "1" }])(
+    "recovers from an invalid top-level games container: %p",
+    async (raw) => {
+      // Given
+      await chrome.storage.local.set({ sw_games: raw });
 
-    // When
-    const games = await getGames();
+      // When
+      const games = await getGames();
 
-    // Then
-    expect(games).toEqual([]);
-    expect((await chrome.storage.local.get("sw_games"))["sw_games"]).toEqual([]);
-  });
+      // Then
+      expect(games).toEqual([]);
+      expect((await chrome.storage.local.get("sw_games"))["sw_games"]).toEqual([]);
+    },
+  );
 });
 
 describe("addGame", () => {
@@ -208,7 +206,8 @@ describe("removeGame", () => {
   it("keeps cleanup durable after a failed deletion and reconciles it on the next read", async () => {
     await addGame(mockGame(1));
     await idbSaveSnapshot("1", mockSnap(100));
-    const deleteSpy = vi.spyOn(await import("../src/utils/idb-storage.js"), "idbDeleteGameData")
+    const deleteSpy = vi
+      .spyOn(await import("../src/utils/idb-storage.js"), "idbDeleteGameData")
       .mockRejectedValueOnce(new Error("database unavailable"));
 
     await expect(removeGame("1")).rejects.toThrow("database unavailable");
@@ -222,7 +221,9 @@ describe("removeGame", () => {
 
   it("removes a zombie game during reconciliation when the initial games write failed", async () => {
     await addGame(mockGame(1));
-    const storageSet = chrome.storage.local.set as unknown as MockInstance<(items: Record<string, unknown>) => Promise<void>>;
+    const storageSet = chrome.storage.local.set as unknown as MockInstance<
+      (items: Record<string, unknown>) => Promise<void>
+    >;
     const originalSet = storageSet.getMockImplementation();
     if (!originalSet) throw new Error("storage mock must expose its implementation");
     storageSet.mockImplementation(async (items) => {
@@ -426,17 +427,20 @@ describe("getGameSettings / saveGameSettings", () => {
     expect(settings).toEqual({});
   });
 
-  it.each([null, "not an object", []])("recovers from an invalid top-level per-game settings container: %p", async (raw) => {
-    // Given
-    await chrome.storage.local.set({ sw_gs_1: raw });
+  it.each([null, "not an object", []])(
+    "recovers from an invalid top-level per-game settings container: %p",
+    async (raw) => {
+      // Given
+      await chrome.storage.local.set({ sw_gs_1: raw });
 
-    // When
-    const settings = await getGameSettings("1");
+      // When
+      const settings = await getGameSettings("1");
 
-    // Then
-    expect(settings).toEqual({});
-    expect((await chrome.storage.local.get("sw_gs_1"))["sw_gs_1"]).toEqual({});
-  });
+      // Then
+      expect(settings).toEqual({});
+      expect((await chrome.storage.local.get("sw_gs_1"))["sw_gs_1"]).toEqual({});
+    },
+  );
 });
 
 // ── Cache ─────────────────────────────────────────────────────────────────────

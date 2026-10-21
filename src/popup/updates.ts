@@ -1,7 +1,11 @@
 import type { CachedData, Game } from "../types/index.js";
 import { formatError } from "../utils/log.js";
 
-export function shouldRefreshGames(games: readonly Game[], cache: Record<string, CachedData>, now = Date.now()): boolean {
+export function shouldRefreshGames(
+  games: readonly Game[],
+  cache: Record<string, CachedData>,
+  now = Date.now(),
+): boolean {
   return games.some((game) => {
     const timestamp = cache[game.appid]?.fetchedAt ?? 0;
     return timestamp <= 0 || timestamp > now || now - timestamp >= 60_000;
@@ -17,10 +21,16 @@ export function startPopupUpdates(refresh: () => Promise<void>, render: () => Pr
       console.error(`[SteamWatch popup] Update failed: ${formatError(error)}`);
     });
   };
-  const poll = (): void => { if (document.visibilityState === "visible") run(refresh); };
+  const poll = (): void => {
+    if (document.visibilityState === "visible") run(refresh);
+  };
   const timer = window.setInterval(poll, 60_000);
   const changed = (changes: Record<string, chrome.storage.StorageChange>, area: string): void => {
-    if (area !== "local" || !["sw_cache", "sw_games", "sw_settings", "sw_last_fetch", "sw_history_revision"].some((key) => key in changes)) return;
+    if (
+      area !== "local" ||
+      !["sw_cache", "sw_games", "sw_settings", "sw_last_fetch", "sw_history_revision"].some((key) => key in changes)
+    )
+      return;
     window.clearTimeout(pendingRender);
     pendingRender = window.setTimeout(() => run(render), 50);
   };

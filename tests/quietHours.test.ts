@@ -1,13 +1,7 @@
 // tests/quietHours.test.ts
-import { describe, it, expect } from "vitest";
-import {
-  isInQuietWindow,
-  isQuietNow,
-  buildDayMask,
-  maskToDays,
-  DAY_LABELS,
-} from "../src/utils/quietHours.js";
+import { describe, expect, it } from "vitest";
 import type { Settings } from "../src/types/index.js";
+import { buildDayMask, DAY_LABELS, isInQuietWindow, isQuietNow, maskToDays } from "../src/utils/quietHours.js";
 import { DEFAULT_SETTINGS } from "../src/utils/storage.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -25,7 +19,7 @@ function settingsWithQuiet(
   enabled: boolean,
   start: string,
   end: string,
-  days: number[] = [0, 1, 2, 3, 4, 5, 6]
+  days: number[] = [0, 1, 2, 3, 4, 5, 6],
 ): Settings {
   return {
     ...DEFAULT_SETTINGS,
@@ -118,8 +112,8 @@ describe("isQuietNow", () => {
 
   it("respects multi-day mask", () => {
     const s = settingsWithQuiet(true, "08:00", "18:00", [1, 3]); // Mon + Wed
-    expect(isQuietNow(s, dateAt(1, 12))).toBe(true);  // Monday noon — inside
-    expect(isQuietNow(s, dateAt(3, 12))).toBe(true);  // Wednesday noon — inside
+    expect(isQuietNow(s, dateAt(1, 12))).toBe(true); // Monday noon — inside
+    expect(isQuietNow(s, dateAt(3, 12))).toBe(true); // Wednesday noon — inside
     expect(isQuietNow(s, dateAt(2, 12))).toBe(false); // Tuesday noon — not in mask
   });
 });
@@ -132,13 +126,13 @@ describe("buildDayMask", () => {
   });
 
   it("sets correct bit for a single day", () => {
-    expect(buildDayMask([0])).toBe(1);  // Sunday = bit 0
-    expect(buildDayMask([1])).toBe(2);  // Monday = bit 1
+    expect(buildDayMask([0])).toBe(1); // Sunday = bit 0
+    expect(buildDayMask([1])).toBe(2); // Monday = bit 1
     expect(buildDayMask([6])).toBe(64); // Saturday = bit 6
   });
 
   it("sets all 7 bits for every day", () => {
-    expect(buildDayMask([0,1,2,3,4,5,6])).toBe(0b1111111);
+    expect(buildDayMask([0, 1, 2, 3, 4, 5, 6])).toBe(0b1111111);
   });
 });
 

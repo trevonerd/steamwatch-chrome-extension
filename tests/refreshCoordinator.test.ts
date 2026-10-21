@@ -1,8 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-
+import type { RefreshCoordinatorDependencies } from "../src/background/refreshCoordinator.js";
 import { RefreshCoordinator } from "../src/background/refreshCoordinator.js";
 import type { CachedData, Game, Settings } from "../src/types/index.js";
-import type { RefreshCoordinatorDependencies } from "../src/background/refreshCoordinator.js";
 
 const game: Game = { appid: "1", name: "Test Game", image: "https://example.test/1.jpg" };
 const settings: Settings = {
@@ -17,7 +16,9 @@ const settings: Settings = {
 
 function deferred<T>(): { readonly promise: Promise<T>; readonly resolve: (value: T) => void } {
   let resolvePromise: ((value: T) => void) | undefined;
-  const promise = new Promise<T>((resolve) => { resolvePromise = resolve; });
+  const promise = new Promise<T>((resolve) => {
+    resolvePromise = resolve;
+  });
   return {
     promise,
     resolve: (value) => {
@@ -41,9 +42,13 @@ function makeDependencies(overrides: Partial<RefreshCoordinatorDependencies> = {
     fetchSteamSpyResult: vi.fn().mockResolvedValue({ status: "unavailable" }),
     fetchTwitchResult: vi.fn().mockResolvedValue({ status: "unavailable" }),
     refreshHistory: vi.fn<(...args: [string]) => Promise<boolean>>().mockResolvedValue(false),
-    saveSnapshot: vi.fn<(...args: [string, import("../src/types/index.js").Snapshot]) => Promise<void>>().mockResolvedValue(undefined),
+    saveSnapshot: vi
+      .fn<(...args: [string, import("../src/types/index.js").Snapshot]) => Promise<void>>()
+      .mockResolvedValue(undefined),
     getSnapshots: vi.fn().mockResolvedValue([]),
-    publishLiveResult: vi.fn<(...args: [Parameters<RefreshCoordinatorDependencies["publishLiveResult"]>[0]]) => Promise<"stable">>().mockResolvedValue("stable"),
+    publishLiveResult: vi
+      .fn<(...args: [Parameters<RefreshCoordinatorDependencies["publishLiveResult"]>[0]]) => Promise<"stable">>()
+      .mockResolvedValue("stable"),
     updateBadge: vi.fn(),
     clearBadge: vi.fn(),
     now: vi.fn<(...args: []) => number>().mockReturnValue(1_000),
@@ -102,22 +107,25 @@ describe("RefreshCoordinator", () => {
     const slowSignal = deferred<"stable">();
     const firstBadge = deferred<void>();
     let cache: Record<string, CachedData> = {};
-    const updateBadge = vi.fn((
-      _rising: number,
-      _alerting: number,
-      _favorite: string | undefined,
-      latestCache: Record<string, CachedData>,
-    ) => {
-      if (updateBadge.mock.calls.length === 1) firstBadge.resolve(undefined);
-      return latestCache;
-    });
+    const updateBadge = vi.fn(
+      (_rising: number, _alerting: number, _favorite: string | undefined, latestCache: Record<string, CachedData>) => {
+        if (updateBadge.mock.calls.length === 1) firstBadge.resolve(undefined);
+        return latestCache;
+      },
+    );
     const dependencies = makeDependencies({
       getGames: vi.fn().mockResolvedValue([game, secondGame]),
       getSettings: vi.fn().mockResolvedValue({ ...settings, badgeFavoriteAppid: "2" }),
       getCache: vi.fn().mockImplementation(async () => cache),
-      setCache: vi.fn().mockImplementation(async (next: Record<string, CachedData>) => { cache = next; }),
-      fetchCurrentPlayers: vi.fn().mockImplementation(async (appid: string) => appid === "1" ? 100 : 200),
-      publishLiveResult: vi.fn().mockImplementation(async (input: { readonly game: Game }) => input.game.appid === "1" ? slowSignal.promise : "stable"),
+      setCache: vi.fn().mockImplementation(async (next: Record<string, CachedData>) => {
+        cache = next;
+      }),
+      fetchCurrentPlayers: vi.fn().mockImplementation(async (appid: string) => (appid === "1" ? 100 : 200)),
+      publishLiveResult: vi
+        .fn()
+        .mockImplementation(async (input: { readonly game: Game }) =>
+          input.game.appid === "1" ? slowSignal.promise : "stable",
+        ),
       updateBadge,
     });
     const coordinator = new RefreshCoordinator(dependencies);
@@ -136,7 +144,10 @@ describe("RefreshCoordinator", () => {
     const dependencies = makeDependencies({ fetchCurrentPlayers: vi.fn().mockResolvedValue(null) });
     const coordinator = new RefreshCoordinator(dependencies);
 
-    await expect(coordinator.refresh()).resolves.toEqual({ ok: false, error: "No current player counts were available." });
+    await expect(coordinator.refresh()).resolves.toEqual({
+      ok: false,
+      error: "No current player counts were available.",
+    });
 
     expect(dependencies.setLastFetchAttemptTime).toHaveBeenCalledWith(1_000);
     expect(dependencies.setLastFetchTime).not.toHaveBeenCalled();
@@ -156,14 +167,21 @@ describe("RefreshCoordinator", () => {
     const dependencies = makeDependencies({
       fetchCurrentPlayers: vi.fn().mockResolvedValue(null),
       getCache: vi.fn().mockImplementation(async () => cache),
-      setCache: vi.fn().mockImplementation(async (next: Record<string, CachedData>) => { cache = next; }),
+      setCache: vi.fn().mockImplementation(async (next: Record<string, CachedData>) => {
+        cache = next;
+      }),
     });
     const coordinator = new RefreshCoordinator(dependencies);
 
     await coordinator.refresh();
 
     expect(cache["1"]?.fetchedAt).toBe(400);
-    expect(cache["1"]?.freshness?.current).toEqual({ source: "steam", status: "error", acquiredAt: 400, attemptedAt: 1_000 });
+    expect(cache["1"]?.freshness?.current).toEqual({
+      source: "steam",
+      status: "error",
+      acquiredAt: 400,
+      attemptedAt: 1_000,
+    });
   });
 
   it("publishes current data without waiting for hung auxiliary sources", async () => {
@@ -185,7 +203,10 @@ describe("RefreshCoordinator", () => {
     });
     const coordinator = new RefreshCoordinator(dependencies);
 
-    await expect(coordinator.refresh()).resolves.toEqual({ ok: false, error: "No current player counts were available." });
+    await expect(coordinator.refresh()).resolves.toEqual({
+      ok: false,
+      error: "No current player counts were available.",
+    });
 
     expect(dependencies.saveSnapshot).not.toHaveBeenCalled();
     expect(dependencies.setCache).not.toHaveBeenCalled();
@@ -223,7 +244,9 @@ describe("RefreshCoordinator", () => {
     };
     const dependencies = makeDependencies({
       getCache: vi.fn().mockImplementation(async () => cache),
-      setCache: vi.fn().mockImplementation(async (next: Record<string, CachedData>) => { cache = next; }),
+      setCache: vi.fn().mockImplementation(async (next: Record<string, CachedData>) => {
+        cache = next;
+      }),
       fetchSteamChartsResult: vi.fn().mockResolvedValue({ status: "ok", value: { peak24h: 90 } }),
       now: vi.fn().mockReturnValue(4_000_000),
     });
@@ -233,7 +256,12 @@ describe("RefreshCoordinator", () => {
     await coordinator.auxiliaryIdle();
 
     expect(cache["1"]?.peak24h).toBe(90);
-    expect(cache["1"]?.freshness?.allTimePeak).toEqual({ source: "steamcharts", status: "unavailable", acquiredAt: 400, attemptedAt: 4_000_000 });
+    expect(cache["1"]?.freshness?.allTimePeak).toEqual({
+      source: "steamcharts",
+      status: "unavailable",
+      acquiredAt: 400,
+      attemptedAt: 4_000_000,
+    });
   });
 
   it("persists zero as a successful current sample", async () => {

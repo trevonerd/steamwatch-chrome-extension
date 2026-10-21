@@ -1,26 +1,37 @@
+import type { MessageRequest, MessageResponse } from "../types/index.js";
+import { CachedDataSchema } from "../types/index.js";
 import { compactSnapshots } from "../utils/compaction.js";
+import { formatError } from "../utils/log.js";
 import { migrateToIndexedDB } from "../utils/migrate.js";
 import { FETCH_INTERVAL_MINUTES, getCache, getGames, getSettings, TRACKING_RETENTION_DAYS } from "../utils/storage.js";
 import { createRefreshCoordinator } from "./refreshCoordinator.js";
 import { refreshBadgeFromCache } from "./signals.js";
-import { formatError } from "../utils/log.js";
-import { CachedDataSchema } from "../types/index.js";
-
-import type { MessageRequest, MessageResponse } from "../types/index.js";
 
 const ALARM_NAME = "sw_fetch";
 const COMPACTION_ALARM_NAME = "steamwatch-compaction";
 const refreshCoordinator = createRefreshCoordinator();
 
-chrome.runtime.onInstalled.addListener(() => void bootstrap(true).catch((error: unknown) => console.warn(`[SteamWatch] Install bootstrap failed: ${formatError(error)}`)));
-chrome.runtime.onStartup.addListener(() => void bootstrap().catch((error: unknown) => console.warn(`[SteamWatch] Startup bootstrap failed: ${formatError(error)}`)));
+chrome.runtime.onInstalled.addListener(
+  () =>
+    void bootstrap(true).catch((error: unknown) =>
+      console.warn(`[SteamWatch] Install bootstrap failed: ${formatError(error)}`),
+    ),
+);
+chrome.runtime.onStartup.addListener(
+  () =>
+    void bootstrap().catch((error: unknown) =>
+      console.warn(`[SteamWatch] Startup bootstrap failed: ${formatError(error)}`),
+    ),
+);
 
 // Alarms can vanish (extension disabled/re-enabled, Chrome cleanup) without onStartup firing.
 void ensureAlarms().catch((error: unknown) => console.warn(`[SteamWatch] Alarm check failed: ${formatError(error)}`));
 
 async function ensureAlarms(): Promise<void> {
-  if (!await chrome.alarms.get(ALARM_NAME)) chrome.alarms.create(ALARM_NAME, { periodInMinutes: FETCH_INTERVAL_MINUTES });
-  if (!await chrome.alarms.get(COMPACTION_ALARM_NAME)) chrome.alarms.create(COMPACTION_ALARM_NAME, { periodInMinutes: 24 * 60 });
+  if (!(await chrome.alarms.get(ALARM_NAME)))
+    chrome.alarms.create(ALARM_NAME, { periodInMinutes: FETCH_INTERVAL_MINUTES });
+  if (!(await chrome.alarms.get(COMPACTION_ALARM_NAME)))
+    chrome.alarms.create(COMPACTION_ALARM_NAME, { periodInMinutes: 24 * 60 });
 }
 
 chrome.notifications.onClicked.addListener((notificationId) => {
@@ -47,20 +58,29 @@ async function resetCompactionAlarm(): Promise<void> {
 }
 
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === ALARM_NAME) void refreshCoordinator.refresh().catch((error: unknown) => console.warn(`[SteamWatch] Fetch alarm failed: ${formatError(error)}`));
-  if (alarm.name === COMPACTION_ALARM_NAME) void runCompaction().catch((error: unknown) => console.warn(`[SteamWatch] Compaction alarm failed: ${formatError(error)}`));
+  if (alarm.name === ALARM_NAME)
+    void refreshCoordinator
+      .refresh()
+      .catch((error: unknown) => console.warn(`[SteamWatch] Fetch alarm failed: ${formatError(error)}`));
+  if (alarm.name === COMPACTION_ALARM_NAME)
+    void runCompaction().catch((error: unknown) =>
+      console.warn(`[SteamWatch] Compaction alarm failed: ${formatError(error)}`),
+    );
 });
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== "local") return;
   if (changes["sw_settings"] || changes["sw_games"]) {
-    void refreshFavoriteBadge().catch((error: unknown) => console.warn(`[SteamWatch] Badge refresh failed: ${formatError(error)}`));
+    void refreshFavoriteBadge().catch((error: unknown) =>
+      console.warn(`[SteamWatch] Badge refresh failed: ${formatError(error)}`),
+    );
     return;
   }
   const cacheChange = changes["sw_cache"];
   if (cacheChange) {
-    void refreshBadgeForCurrentChange(cacheChange.oldValue, cacheChange.newValue)
-      .catch((error: unknown) => console.warn(`[SteamWatch] Badge refresh failed: ${formatError(error)}`));
+    void refreshBadgeForCurrentChange(cacheChange.oldValue, cacheChange.newValue).catch((error: unknown) =>
+      console.warn(`[SteamWatch] Badge refresh failed: ${formatError(error)}`),
+    );
   }
 });
 
@@ -97,7 +117,8 @@ chrome.runtime.onMessage.addListener(
     sendResponse: (response: MessageResponse) => void,
   ): boolean => {
     if (message.type === "FETCH_NOW") {
-      refreshCoordinator.refresh(message.retryHistory === true)
+      refreshCoordinator
+        .refresh(message.retryHistory === true)
         .then(sendResponse)
         .catch((error: unknown) => sendResponse({ ok: false, error: String(error) }));
       return true;

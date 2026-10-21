@@ -1,12 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-import { compactSnapshots } from "../src/utils/compaction.js";
-import {
-  _resetDbForTesting,
-  idbGetSnapshots,
-  idbSaveSnapshot,
-} from "../src/utils/idb-storage.js";
 import type { Snapshot } from "../src/types/index.js";
+import { compactSnapshots } from "../src/utils/compaction.js";
+import { _resetDbForTesting, idbGetSnapshots, idbSaveSnapshot } from "../src/utils/idb-storage.js";
 
 const DAY_MS = 86_400_000;
 const FIXED_NOW = Date.UTC(2026, 2, 27, 12, 0, 0, 0);
@@ -166,7 +161,9 @@ describe("compactSnapshots", () => {
     await compactSnapshots(appId, 7);
     const compacted = await idbGetSnapshots(appId);
 
-    expect(compacted).toContainEqual(expect.objectContaining({ ts: startOfIsoWeekUtc(ts(2025, 11, 3, 10)), current: 50 }));
+    expect(compacted).toContainEqual(
+      expect.objectContaining({ ts: startOfIsoWeekUtc(ts(2025, 11, 3, 10)), current: 50 }),
+    );
   });
 
   it("is idempotent when run twice", async () => {

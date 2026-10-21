@@ -1,12 +1,6 @@
-import { openDB, type IDBPDatabase, type DBSchema } from "idb";
-
+import { type DBSchema, type IDBPDatabase, openDB } from "idb";
+import type { BootstrapLease, BootstrapStatus, Snapshot, SnapshotSource } from "../types/index.js";
 import { SnapshotSchema } from "../types/index.js";
-import type {
-  BootstrapLease,
-  BootstrapStatus,
-  Snapshot,
-  SnapshotSource,
-} from "../types/index.js";
 
 const DB_NAME = "steamwatch";
 const DB_VERSION = 5;
@@ -155,9 +149,11 @@ function measurementKind(snapshot: Snapshot): string {
 
 function selectPreferredSnapshots(snapshots: readonly Snapshot[]): Snapshot[] {
   const selected = new Map<string, Snapshot>();
-  const knownValues = new Set(snapshots
-    .filter((snapshot) => measurementKind(snapshot) !== "unknown")
-    .map((snapshot) => `${snapshot.ts}:${snapshot.current}`));
+  const knownValues = new Set(
+    snapshots
+      .filter((snapshot) => measurementKind(snapshot) !== "unknown")
+      .map((snapshot) => `${snapshot.ts}:${snapshot.current}`),
+  );
   for (const snapshot of snapshots) {
     const unknownKey = `unknown:${snapshot.ts}:${snapshot.current}`;
     const kind = measurementKind(snapshot);
@@ -209,10 +205,7 @@ export async function idbSaveSnapshot(appId: string, snap: Snapshot): Promise<vo
   await idbBulkSaveSnapshots(appId, [snap]);
 }
 
-export async function idbBulkSaveSnapshots(
-  appId: string,
-  snapshots: readonly Snapshot[],
-): Promise<void> {
+export async function idbBulkSaveSnapshots(appId: string, snapshots: readonly Snapshot[]): Promise<void> {
   const now = Date.now();
   const validSnapshots = snapshots.flatMap((snapshot) => {
     const parsed = toPersistableSnapshot(snapshot, now);
@@ -270,11 +263,7 @@ export async function idbGetSnapshots(appId: string): Promise<Snapshot[]> {
   });
 }
 
-export async function idbGetSnapshotsInRange(
-  appId: string,
-  startTs: number,
-  endTs: number,
-): Promise<Snapshot[]> {
+export async function idbGetSnapshotsInRange(appId: string, startTs: number, endTs: number): Promise<Snapshot[]> {
   const db = await getDB();
   const range = IDBKeyRange.bound([appId, startTs], [appId, endTs]);
   const rows = await db.getAllFromIndex("snapshots", "byAppTime", range);
@@ -334,11 +323,9 @@ export async function idbTransformSnapshotsAtomically(
 
 export async function idbClearAllData(): Promise<void> {
   const db = await getDB();
-  const tx = db.transaction(
-    ["snapshots", "cooldowns", "bootstrapStates", "gameTombstones"],
-    "readwrite",
-    { durability: "relaxed" },
-  );
+  const tx = db.transaction(["snapshots", "cooldowns", "bootstrapStates", "gameTombstones"], "readwrite", {
+    durability: "relaxed",
+  });
   await Promise.all([
     tx.objectStore("snapshots").clear(),
     tx.objectStore("cooldowns").clear(),
@@ -412,11 +399,7 @@ export async function idbCompleteBootstrapImport(
   snapshots: readonly Snapshot[],
 ): Promise<boolean> {
   const db = await getDB();
-  const tx = db.transaction(
-    ["snapshots", "bootstrapStates", "gameTombstones"],
-    "readwrite",
-    { durability: "relaxed" },
-  );
+  const tx = db.transaction(["snapshots", "bootstrapStates", "gameTombstones"], "readwrite", { durability: "relaxed" });
   const [tombstone, status] = await Promise.all([
     tx.objectStore("gameTombstones").get(lease.appId),
     tx.objectStore("bootstrapStates").get(lease.appId),
@@ -427,10 +410,12 @@ export async function idbCompleteBootstrapImport(
   }
 
   const now = Date.now();
-  const imported = selectPreferredSnapshots(snapshots.flatMap((snapshot) => {
-    const parsed = toPersistableSnapshot(snapshot, now);
-    return parsed ? [importedSnapshot(parsed)] : [];
-  }));
+  const imported = selectPreferredSnapshots(
+    snapshots.flatMap((snapshot) => {
+      const parsed = toPersistableSnapshot(snapshot, now);
+      return parsed ? [importedSnapshot(parsed)] : [];
+    }),
+  );
   if (imported.length === 0) {
     await tx.objectStore("bootstrapStates").put({
       appId: lease.appId,
@@ -444,10 +429,7 @@ export async function idbCompleteBootstrapImport(
   try {
     const store = tx.objectStore("snapshots");
     const index = store.index("byApp");
-    const [existingRows, existingKeys] = await Promise.all([
-      index.getAll(lease.appId),
-      index.getAllKeys(lease.appId),
-    ]);
+    const [existingRows, existingKeys] = await Promise.all([index.getAll(lease.appId), index.getAllKeys(lease.appId)]);
     const existing = existingRows.flatMap((row) => {
       const snapshot = toSnapshot(row);
       return snapshot ? [snapshot] : [];
@@ -478,7 +460,11 @@ export async function idbCompleteBootstrapImport(
 }
 
 /** Records a recoverable failure only when the caller still owns the lease. */
-export async function idbFailBootstrapLease(lease: BootstrapLease, retryAt: number, state: "retry" | "unavailable" = "retry"): Promise<boolean> {
+export async function idbFailBootstrapLease(
+  lease: BootstrapLease,
+  retryAt: number,
+  state: "retry" | "unavailable" = "retry",
+): Promise<boolean> {
   const db = await getDB();
   const tx = db.transaction("bootstrapStates", "readwrite", { durability: "relaxed" });
   const status = await tx.store.get(lease.appId);
@@ -510,11 +496,9 @@ export async function idbGetBootstrapStatus(appId: string): Promise<BootstrapSta
  */
 export async function idbDeleteGameData(appId: string): Promise<void> {
   const db = await getDB();
-  const tx = db.transaction(
-    ["snapshots", "cooldowns", "bootstrapStates", "gameTombstones"],
-    "readwrite",
-    { durability: "relaxed" },
-  );
+  const tx = db.transaction(["snapshots", "cooldowns", "bootstrapStates", "gameTombstones"], "readwrite", {
+    durability: "relaxed",
+  });
   const snapshots = tx.objectStore("snapshots");
   const cooldowns = tx.objectStore("cooldowns");
   const snapshotKeys = await snapshots.index("byApp").getAllKeys(appId);

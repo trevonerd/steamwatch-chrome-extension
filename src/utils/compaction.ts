@@ -32,17 +32,19 @@ function startOfWeek(ts: number): number {
 }
 
 function aggregateOf(snapshot: Snapshot): SnapshotAggregate {
-  return snapshot.aggregate ?? {
-    startTs: snapshot.ts,
-    endTs: snapshot.ts,
-    sampleCount: 1,
-    sum: snapshot.current,
-    min: snapshot.current,
-    max: snapshot.current,
-    minTs: snapshot.ts,
-    maxTs: snapshot.ts,
-    observedDurationMs: 0,
-  };
+  return (
+    snapshot.aggregate ?? {
+      startTs: snapshot.ts,
+      endTs: snapshot.ts,
+      sampleCount: 1,
+      sum: snapshot.current,
+      min: snapshot.current,
+      max: snapshot.current,
+      minTs: snapshot.ts,
+      maxTs: snapshot.ts,
+      observedDurationMs: 0,
+    }
+  );
 }
 
 function addToAccumulator(accumulator: AggregateAccumulator, snapshot: Snapshot): void {
@@ -75,9 +77,9 @@ function addObservedGap(accumulator: AggregateAccumulator, snapshot: Snapshot): 
   const source = snapshot.source ?? "legacy";
   const maxGap = maxObservedGap(snapshot.granularity);
   if (
-    accumulator.lastRawTs !== undefined
-    && accumulator.lastRawSource === source
-    && accumulator.lastRawGranularity === snapshot.granularity
+    accumulator.lastRawTs !== undefined &&
+    accumulator.lastRawSource === source &&
+    accumulator.lastRawGranularity === snapshot.granularity
   ) {
     const gap = snapshot.ts - accumulator.lastRawTs;
     if (gap > 0 && gap <= maxGap) accumulator.observedDurationMs += gap;
@@ -118,11 +120,13 @@ function groupSnapshots(
       endTs: aggregate.endTs,
       observedDurationMs: aggregate.observedDurationMs,
       sources: new Set([snapshot.source ?? "legacy"]),
-      ...(snapshot.aggregate ? {} : {
-        lastRawTs: snapshot.ts,
-        lastRawSource: snapshot.source ?? "legacy",
-        lastRawGranularity: snapshot.granularity,
-      }),
+      ...(snapshot.aggregate
+        ? {}
+        : {
+            lastRawTs: snapshot.ts,
+            lastRawSource: snapshot.source ?? "legacy",
+            lastRawGranularity: snapshot.granularity,
+          }),
     });
   }
 
@@ -147,19 +151,15 @@ function groupSnapshots(
     .sort((left, right) => left.ts - right.ts);
 }
 
-function compactSeries(
-  allSnapshots: readonly Snapshot[],
-  fullResolutionDays: number,
-  now: number,
-): Snapshot[] {
+function compactSeries(allSnapshots: readonly Snapshot[], fullResolutionDays: number, now: number): Snapshot[] {
   if (allSnapshots.length === 0) return [];
 
-  const opaqueSnapshots = allSnapshots.filter((snapshot) => (
-    snapshot.granularity === "monthly-peak" || snapshot.granularity === "unknown"
-  ));
-  const observations = allSnapshots.filter((snapshot) => (
-    snapshot.granularity !== "monthly-peak" && snapshot.granularity !== "unknown"
-  ));
+  const opaqueSnapshots = allSnapshots.filter(
+    (snapshot) => snapshot.granularity === "monthly-peak" || snapshot.granularity === "unknown",
+  );
+  const observations = allSnapshots.filter(
+    (snapshot) => snapshot.granularity !== "monthly-peak" && snapshot.granularity !== "unknown",
+  );
   if (observations.length === 0) return [...opaqueSnapshots];
 
   const mediumBoundary = now - fullResolutionDays * DAY_MS;

@@ -1,26 +1,31 @@
 // vexp-hint: per-prompt orientation + idle verification (fail-open). Managed by vexp.
-const VEXP_BIN = "/Users/m.trevisani/.vscode/extensions/vexp.vexp-vscode-3.1.3-darwin-arm64/binaries/vexp-core-darwin-arm64/vexp-core";
+const VEXP_BIN =
+  "/Users/m.trevisani/.vscode/extensions/vexp.vexp-vscode-3.1.3-darwin-arm64/binaries/vexp-core-darwin-arm64/vexp-core";
 export const VexpHint = async ({ directory, client }) => {
   const fs = await import("node:fs");
   const path = await import("node:path");
-  const taskFileFor = (sid) =>
-    path.join(directory, ".vexp", "task-" + String(sid || "unknown") + ".txt");
-  const gateMarker = (sid) =>
-    path.join(directory, ".vexp", "idle-gate-" + String(sid || "unknown") + ".done");
+  const taskFileFor = (sid) => path.join(directory, ".vexp", "task-" + String(sid || "unknown") + ".txt");
+  const gateMarker = (sid) => path.join(directory, ".vexp", "idle-gate-" + String(sid || "unknown") + ".done");
   // Never block the host: execFileSync freezes the editor's event loop for
   // as long as the child runs, so a busy daemon turned into an unresponsive
   // UI (Kilo field report, 2026-08 - the user had to kill the process). Same
   // budget, same fail-open contract, asynchronous.
   const runVexp = (args, opts) =>
     new Promise((resolve) => {
-      import("node:child_process").then(({ execFile }) => {
-        const child = execFile(VEXP_BIN, args, { ...opts, encoding: "utf8" }, (err, stdout) =>
-          resolve(err ? "" : String(stdout || ""))
-        );
-        if (opts && opts.input) {
-          try { child.stdin.end(opts.input); } catch (e) { resolve(""); }
-        }
-      }).catch(() => resolve(""));
+      import("node:child_process")
+        .then(({ execFile }) => {
+          const child = execFile(VEXP_BIN, args, { ...opts, encoding: "utf8" }, (err, stdout) =>
+            resolve(err ? "" : String(stdout || "")),
+          );
+          if (opts && opts.input) {
+            try {
+              child.stdin.end(opts.input);
+            } catch (e) {
+              resolve("");
+            }
+          }
+        })
+        .catch(() => resolve(""));
     });
   return {
     "chat.message": async (input, output) => {
@@ -38,7 +43,9 @@ export const VexpHint = async ({ directory, client }) => {
             fs.mkdirSync(path.dirname(tf), { recursive: true });
             fs.writeFileSync(tf, text);
           }
-        } catch (e) { /* fail open */ }
+        } catch (e) {
+          /* fail open */
+        }
         const out = await runVexp(["prompt-hint"], {
           input: JSON.stringify({ prompt: text, session_id: sid }),
           timeout: 4000,
@@ -53,13 +60,13 @@ export const VexpHint = async ({ directory, client }) => {
         // Kilo field report, 2026-08). Appending onto the user's own text part
         // rides its already-valid identity on every opencode/Kilo version.
         if (hint) {
-          const texts = (output.parts || []).filter(
-            (p) => p && p.type === "text" && typeof p.text === "string"
-          );
+          const texts = (output.parts || []).filter((p) => p && p.type === "text" && typeof p.text === "string");
           const target = texts[texts.length - 1];
           if (target) target.text = target.text + "\n\n" + hint;
         }
-      } catch (e) { /* fail open */ }
+      } catch (e) {
+        /* fail open */
+      }
     },
     event: async ({ event }) => {
       // Idle gate: the opencode twin of the Claude Stop hook. Runs the
@@ -86,18 +93,35 @@ export const VexpHint = async ({ directory, client }) => {
         for (const a of (rep.spec && rep.spec.artifacts_missing) || [])
           items.push("- the task asks for `" + a + "` and it does not exist yet");
         for (const b of (rep.broken_imports || []).slice(0, 8))
-          items.push("- " + b.file + ":" + b.line + " imports `" + b.imports + "` which no longer exists in " + b.from_changed_file);
+          items.push(
+            "- " +
+              b.file +
+              ":" +
+              b.line +
+              " imports `" +
+              b.imports +
+              "` which no longer exists in " +
+              b.from_changed_file,
+          );
         // Impacted tests (2.5.4): the run-or-update mandate, same split as
         // the Claude Stop gate. Helpers get UPDATE, real suites get RUN.
         for (const t of (rep.impacted_tests || []).filter((t) => !t.touched).slice(0, 6)) {
           if (t.runnable === false) {
-            items.push("- `" + t.file + "` is a shared test helper tied to changed code" +
-              (t.references && t.references.length ? " (references " + t.references.join(", ") + ")" : "") +
-              ": UPDATE it to match the changes");
+            items.push(
+              "- `" +
+                t.file +
+                "` is a shared test helper tied to changed code" +
+                (t.references && t.references.length ? " (references " + t.references.join(", ") + ")" : "") +
+                ": UPDATE it to match the changes",
+            );
           } else {
-            items.push("- `" + t.file + "` tests changed code" +
-              (t.references && t.references.length ? " (references " + t.references.join(", ") + ")" : "") +
-              ": RUN it and fix any failure before finishing");
+            items.push(
+              "- `" +
+                t.file +
+                "` tests changed code" +
+                (t.references && t.references.length ? " (references " + t.references.join(", ") + ")" : "") +
+                ": RUN it and fix any failure before finishing",
+            );
           }
         }
         if (!items.length) return;
@@ -105,12 +129,20 @@ export const VexpHint = async ({ directory, client }) => {
         await client.session.prompt({
           path: { id: sid },
           body: {
-            parts: [{ type: "text", text:
-              "vexp verify found mechanically checkable gaps between the session's work and the task:\n" +
-              items.join("\n") + "\nFix each item above. This check will not repeat." }],
+            parts: [
+              {
+                type: "text",
+                text:
+                  "vexp verify found mechanically checkable gaps between the session's work and the task:\n" +
+                  items.join("\n") +
+                  "\nFix each item above. This check will not repeat.",
+              },
+            ],
           },
         });
-      } catch (e) { /* fail open */ }
+      } catch (e) {
+        /* fail open */
+      }
     },
   };
 };

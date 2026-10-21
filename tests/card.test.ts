@@ -1,14 +1,14 @@
 // tests/card.test.ts
-import { describe, it, expect, vi } from "vitest";
-import { buildCardViewModel, buildAllViewModels, fallbackBadgeLabel } from "../src/utils/card.js";
+import { describe, expect, it, vi } from "vitest";
+import type { CachedData, CardViewModel, Game, Snapshot } from "../src/types/index.js";
+import { buildAllViewModels, buildCardViewModel, fallbackBadgeLabel } from "../src/utils/card.js";
 import { compute24hAvg } from "../src/utils/trend.js";
-import type { Game, CachedData, CardViewModel, Snapshot } from "../src/types/index.js";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
 const game: Game = {
   appid: "1245620",
-  name:  "Elden Ring",
+  name: "Elden Ring",
   image: "https://cdn.akamai.steamstatic.com/steam/apps/1245620/capsule_sm_120.jpg",
 };
 
@@ -41,8 +41,8 @@ function makeSnaps(values: number[], intervalMs = 60 * 60_000): Snapshot[] {
   return values.map((current, i) => chartSnapshot(base + i * intervalMs, current));
 }
 
-const snaps12 = makeSnaps([30000,31000,32000,33000,34000,35000,36000,37000,38000,39000,40000,41000]);
-const snaps5  = makeSnaps([1000, 2000, 3000, 4000, 5000]);
+const snaps12 = makeSnaps([30000, 31000, 32000, 33000, 34000, 35000, 36000, 37000, 38000, 39000, 40000, 41000]);
+const snaps5 = makeSnaps([1000, 2000, 3000, 4000, 5000]);
 const daySnaps = makeSnaps(Array.from({ length: 24 }, (_, hour) => 28_000 + hour));
 const retentionSnaps = makeSnaps(Array.from({ length: 72 }, (_, hour) => 26_000 + hour));
 const seasonalSnaps = makeSnaps(Array.from({ length: 35 * 24 }, (_, hour) => 20_000 + hour));
@@ -53,9 +53,13 @@ const emptySnaps: Snapshot[] = [];
 describe("buildCardViewModel", () => {
   it("keeps all graph filters usable with interrupted history without inventing complete-period statistics", () => {
     const now = Date.UTC(2026, 8, 16, 16);
-    const hourly = Array.from({ length: 60 * 24 }, (_, index) => chartSnapshot(now - (60 * 24 - index) * 3_600_000, 3000));
-    const snapshots: Snapshot[] = [...hourly.filter((point) => point.ts < now - 16 * 3_600_000),
-      { ts: now, current: 3100, source: "steam", granularity: "instant" }];
+    const hourly = Array.from({ length: 60 * 24 }, (_, index) =>
+      chartSnapshot(now - (60 * 24 - index) * 3_600_000, 3000),
+    );
+    const snapshots: Snapshot[] = [
+      ...hourly.filter((point) => point.ts < now - 16 * 3_600_000),
+      { ts: now, current: 3100, source: "steam", granularity: "instant" },
+    ];
     const vm = buildCardViewModel(game, cache, snapshots, 60, now);
     expect(vm.availableGraphWindows.map((window) => window.key)).toEqual(["24h", "3d", "7d", "15d", "1m", "all"]);
     expect(vm.defaultGraphWindow).toBe("24h");
@@ -66,10 +70,14 @@ describe("buildCardViewModel", () => {
 
   it("keeps filters enabled after live hourly tracking resumes while a historical gap remains", () => {
     const now = Date.UTC(2026, 8, 16, 16);
-    const past = Array.from({ length: 60 * 24 }, (_, index) => chartSnapshot(now - (60 * 24 - index) * 3_600_000, 3000))
-      .filter((point) => point.ts < now - 16 * 3_600_000);
+    const past = Array.from({ length: 60 * 24 }, (_, index) =>
+      chartSnapshot(now - (60 * 24 - index) * 3_600_000, 3000),
+    ).filter((point) => point.ts < now - 16 * 3_600_000);
     const live: Snapshot[] = Array.from({ length: 24 }, (_, index) => ({
-      ts: now - 2 * 3_600_000 + index * 5 * 60_000, current: 3100, source: "steam", granularity: "instant",
+      ts: now - 2 * 3_600_000 + index * 5 * 60_000,
+      current: 3100,
+      source: "steam",
+      granularity: "instant",
     }));
     const vm = buildCardViewModel(game, cache, [...past, ...live], 60, now);
     expect(vm.earlyActivity).toBeUndefined();
@@ -269,8 +277,8 @@ describe("buildCardViewModel — record lows", () => {
     ];
     const vm = buildCardViewModel(game, cache, snapsWithTimestamps, 7);
     expect(vm.allTimeLow?.value).toBe(10_000);
-   expect(vm.allTimeLow?.timestamp).toBe(snapsWithTimestamps[0]!.ts);
-   });
+    expect(vm.allTimeLow?.timestamp).toBe(snapsWithTimestamps[0]!.ts);
+  });
 });
 
 // ── buildAllViewModels ─────────────────────────────────────────────────────────
@@ -284,7 +292,10 @@ describe("buildAllViewModels", () => {
 
   it("builds view models for multiple games", async () => {
     const g2: Game = { appid: "570", name: "Dota 2", image: "" };
-    const c2 = { ...cache, "570": { current: 100_000, peak24h: 120_000, allTimePeak: 1_000_000, fetchedAt: Date.now() } };
+    const c2 = {
+      ...cache,
+      "570": { current: 100_000, peak24h: 120_000, allTimePeak: 1_000_000, fetchedAt: Date.now() },
+    };
     const vms = await buildAllViewModels([game, g2], c2, async () => snaps12, 7);
     expect(vms).toHaveLength(2);
     expect(vms[0]!.game.appid).toBe("1245620");
@@ -295,8 +306,11 @@ describe("buildAllViewModels", () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     try {
       const vms = await buildAllViewModels(
-        [game], cache,
-        async () => { throw new Error("storage unavailable"); },
+        [game],
+        cache,
+        async () => {
+          throw new Error("storage unavailable");
+        },
         7,
       );
       expect(vms).toHaveLength(1);
@@ -315,7 +329,10 @@ describe("buildAllViewModels", () => {
 
 describe("fallbackBadgeLabel", () => {
   it("labels low-player games instead of reporting incomplete history", () => {
-    const vm = { seasonalAnalysis: { status: "low-baseline", coverage: 1, reason: "" }, earlyActivity: { status: "insufficient", spanHours: 60 * 24 } } as unknown as CardViewModel;
+    const vm = {
+      seasonalAnalysis: { status: "low-baseline", coverage: 1, reason: "" },
+      earlyActivity: { status: "insufficient", spanHours: 60 * 24 },
+    } as unknown as CardViewModel;
     expect(fallbackBadgeLabel(vm)).toBe("Low activity");
   });
 });

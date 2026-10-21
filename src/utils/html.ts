@@ -31,19 +31,13 @@ export function clear(el: Element): void {
   el.replaceChildren();
 }
 
-export function h<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  options: HtmlOptions = {},
-): HTMLElementTagNameMap[K] {
+export function h<K extends keyof HTMLElementTagNameMap>(tag: K, options: HtmlOptions = {}): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
   applyHtmlOptions(node, options);
   return node;
 }
 
-export function s<K extends keyof SVGElementTagNameMap>(
-  tag: K,
-  options: SvgOptions = {},
-): SVGElementTagNameMap[K] {
+export function s<K extends keyof SVGElementTagNameMap>(tag: K, options: SvgOptions = {}): SVGElementTagNameMap[K] {
   const node = document.createElementNS("http://www.w3.org/2000/svg", tag);
   applySvgOptions(node, options);
   return node;
@@ -52,11 +46,7 @@ export function s<K extends keyof SVGElementTagNameMap>(
 export function append(parent: Node, ...children: readonly Child[]): void {
   for (const child of children) {
     if (child === null || child === undefined || child === false) continue;
-    parent.appendChild(
-      child instanceof Node
-        ? child
-        : document.createTextNode(String(child)),
-    );
+    parent.appendChild(child instanceof Node ? child : document.createTextNode(String(child)));
   }
 }
 
@@ -115,4 +105,3 @@ export function hide(el: HTMLElement): void {
   el.setAttribute("hidden", "");
   el.style.setProperty("display", "none", "important");
 }
-

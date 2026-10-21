@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { GraphWindowKey, GraphWindowOption, Snapshot } from "../types/index.js";
-import { HOUR_MS, hourlyCoverage, isQualifiedSnapshot, normalizeHourly, type HourlyPoint } from "./series.js";
+import { HOUR_MS, type HourlyPoint, hourlyCoverage, isQualifiedSnapshot, normalizeHourly } from "./series.js";
 
 export interface GraphSeriesPoint {
   readonly x: number;
@@ -46,9 +46,7 @@ export function mapToPoints(
   const range = max - min;
   return values.map((v, i) => ({
     x: padX + (i / (values.length - 1)) * (width - padX * 2),
-    y: range === 0
-      ? height / 2
-      : padY + ((max - v) / range) * (height - padY * 2),
+    y: range === 0 ? height / 2 : padY + ((max - v) / range) * (height - padY * 2),
   }));
 }
 
@@ -58,7 +56,7 @@ export const GRAPH_WINDOW_MS = {
   "7d": 7 * 86_400_000,
   "15d": 15 * 86_400_000,
   "1m": 30 * 86_400_000,
-  "all": 0,
+  all: 0,
 } as const;
 
 /**
@@ -68,10 +66,7 @@ export const GRAPH_WINDOW_MS = {
  * - Returns 0 for empty arrays (safe default).
  * - Clamps to the first/last index when `mouseX` is out of range.
  */
-export function findNearestPointIndex(
-  mouseX: number,
-  points: ReadonlyArray<{ x: number; y: number }>,
-): number {
+export function findNearestPointIndex(mouseX: number, points: ReadonlyArray<{ x: number; y: number }>): number {
   if (points.length === 0) return 0;
   if (points.length === 1) return 0;
 
@@ -97,7 +92,6 @@ export function findNearestPointIndex(
   return distLo <= distHi ? lo : hi;
 }
 
-
 export function filterSnapshotsByWindow(
   snapshots: readonly Snapshot[],
   windowMs: number,
@@ -107,14 +101,9 @@ export function filterSnapshotsByWindow(
   return snapshots.filter((snapshot) => snapshot.ts >= cutoff && snapshot.ts <= now);
 }
 
-export function hasEnoughGraphHistory(
-  snapshots: readonly Snapshot[],
-  windowMs: number,
-  now = Date.now(),
-): boolean {
+export function hasEnoughGraphHistory(snapshots: readonly Snapshot[], windowMs: number, now = Date.now()): boolean {
   const start = windowMs === 0 ? Number.NEGATIVE_INFINITY : now - windowMs;
-  return snapshots.some((point) => point.ts >= start && point.ts <= now
-    && isQualifiedSnapshot(point));
+  return snapshots.some((point) => point.ts >= start && point.ts <= now && isQualifiedSnapshot(point));
 }
 
 export function buildGraphSeries(
@@ -126,13 +115,18 @@ export function buildGraphSeries(
   maxPoints = 200,
 ): GraphSeries {
   const qualified = deduplicateGraphSnapshots(snapshots, now);
-  const endTs = windowMs === 0 ? qualified.at(-1)?.ts ?? now : now;
-  const startTs = windowMs === 0 ? qualified[0]?.ts ?? now : now - windowMs;
+  const endTs = windowMs === 0 ? (qualified.at(-1)?.ts ?? now) : now;
+  const startTs = windowMs === 0 ? (qualified[0]?.ts ?? now) : now - windowMs;
   const window = qualified.filter((snapshot) => snapshot.ts >= startTs && snapshot.ts <= endTs);
   const normalized = normalizeHourly(window, now);
-  const coverage = windowMs === 0
-    ? hourlyCoverage(normalized, Math.floor(startTs / HOUR_MS) * HOUR_MS, Math.floor(endTs / HOUR_MS) * HOUR_MS + HOUR_MS)
-    : hourlyCoverage(normalized, Math.floor(startTs / HOUR_MS) * HOUR_MS, Math.floor(endTs / HOUR_MS) * HOUR_MS);
+  const coverage =
+    windowMs === 0
+      ? hourlyCoverage(
+          normalized,
+          Math.floor(startTs / HOUR_MS) * HOUR_MS,
+          Math.floor(endTs / HOUR_MS) * HOUR_MS + HOUR_MS,
+        )
+      : hourlyCoverage(normalized, Math.floor(startTs / HOUR_MS) * HOUR_MS, Math.floor(endTs / HOUR_MS) * HOUR_MS);
   const segments = downsampleSegments(splitGaps(window), maxPoints);
   const values = window.map((snapshot) => snapshot.current);
   const min = Math.min(...values);
@@ -143,12 +137,14 @@ export function buildGraphSeries(
     startTs,
     endTs,
     coverage,
-    segments: segments.map((segment) => ({ points: segment.map((snapshot) => ({
-      ts: snapshot.ts,
-      current: snapshot.current,
-      x: ((snapshot.ts - startTs) / span) * width,
-      y: range === 0 ? height / 2 : ((max - snapshot.current) / range) * height,
-    })) })),
+    segments: segments.map((segment) => ({
+      points: segment.map((snapshot) => ({
+        ts: snapshot.ts,
+        current: snapshot.current,
+        x: ((snapshot.ts - startTs) / span) * width,
+        y: range === 0 ? height / 2 : ((max - snapshot.current) / range) * height,
+      })),
+    })),
   };
 }
 
@@ -219,7 +215,8 @@ function deduplicateGraphSnapshots(snapshots: readonly Snapshot[], now: number):
   for (const snapshot of snapshots) {
     if (snapshot.ts > now || snapshot.aggregate !== undefined || !isQualifiedSnapshot(snapshot)) continue;
     const previous = byTimestamp.get(snapshot.ts);
-    if (previous === undefined || (snapshot.source === "steam" && previous.source !== "steam")) byTimestamp.set(snapshot.ts, snapshot);
+    if (previous === undefined || (snapshot.source === "steam" && previous.source !== "steam"))
+      byTimestamp.set(snapshot.ts, snapshot);
   }
   return [...byTimestamp.values()].sort((left, right) => left.ts - right.ts);
 }
@@ -236,7 +233,9 @@ function splitGaps(snapshots: readonly Snapshot[]): Snapshot[][] {
 }
 
 function downsampleSegments(segments: readonly (readonly Snapshot[])[], maxPoints: number): Snapshot[][] {
-  const entries = segments.flatMap((segment, segmentIndex) => segment.map((snapshot, index) => ({ snapshot, segmentIndex, index })));
+  const entries = segments.flatMap((segment, segmentIndex) =>
+    segment.map((snapshot, index) => ({ snapshot, segmentIndex, index })),
+  );
   const limit = Math.max(0, Math.floor(maxPoints));
   if (entries.length <= limit) return segments.map((segment) => [...segment]);
   if (limit === 0) return [];
@@ -245,22 +244,39 @@ function downsampleSegments(segments: readonly (readonly Snapshot[])[], maxPoint
   const last = entries.at(-1);
   if (first) selected.add(0);
   if (last && limit > 1) selected.add(entries.length - 1);
-  const minimum = entries.reduce((best, entry, index) => entry.snapshot.current < (entries[best]?.snapshot.current ?? entry.snapshot.current) ? index : best, 0);
-  const maximum = entries.reduce((best, entry, index) => entry.snapshot.current > (entries[best]?.snapshot.current ?? entry.snapshot.current) ? index : best, 0);
+  const minimum = entries.reduce(
+    (best, entry, index) =>
+      entry.snapshot.current < (entries[best]?.snapshot.current ?? entry.snapshot.current) ? index : best,
+    0,
+  );
+  const maximum = entries.reduce(
+    (best, entry, index) =>
+      entry.snapshot.current > (entries[best]?.snapshot.current ?? entry.snapshot.current) ? index : best,
+    0,
+  );
   for (const index of [minimum, maximum]) {
     if (selected.size < limit) selected.add(index);
   }
   const buckets = Math.floor((limit - selected.size) / 2);
   for (let bucket = 0; bucket < buckets; bucket += 1) {
-    const start = Math.floor(bucket * entries.length / buckets);
-    const end = Math.max(start + 1, Math.floor((bucket + 1) * entries.length / buckets));
+    const start = Math.floor((bucket * entries.length) / buckets);
+    const end = Math.max(start + 1, Math.floor(((bucket + 1) * entries.length) / buckets));
     const range = entries.slice(start, end);
-    const low = range.reduce((best, entry, offset) => entry.snapshot.current < (range[best]?.snapshot.current ?? entry.snapshot.current) ? offset : best, 0);
-    const high = range.reduce((best, entry, offset) => entry.snapshot.current > (range[best]?.snapshot.current ?? entry.snapshot.current) ? offset : best, 0);
+    const low = range.reduce(
+      (best, entry, offset) =>
+        entry.snapshot.current < (range[best]?.snapshot.current ?? entry.snapshot.current) ? offset : best,
+      0,
+    );
+    const high = range.reduce(
+      (best, entry, offset) =>
+        entry.snapshot.current > (range[best]?.snapshot.current ?? entry.snapshot.current) ? offset : best,
+      0,
+    );
     if (selected.size < limit) selected.add(start + low);
     if (selected.size < limit) selected.add(start + high);
   }
-  for (let index = 0; selected.size < limit && index < entries.length; index += 1) selected.add(Math.floor(index * entries.length / limit));
+  for (let index = 0; selected.size < limit && index < entries.length; index += 1)
+    selected.add(Math.floor((index * entries.length) / limit));
   const result = new Map<number, Snapshot[]>();
   for (const index of [...selected].sort((left, right) => left - right)) {
     const entry = entries[index];

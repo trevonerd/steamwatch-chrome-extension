@@ -1,13 +1,13 @@
 // tests/graph-windows.test.ts
 // TDD for expanding GraphWindowKey from 3 to 6 time filter values.
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
+import type { GraphWindowKey, Snapshot } from "../src/types/index.js";
 import {
   buildAvailableGraphWindows,
   filterSnapshotsByWindow,
-  hasEnoughGraphHistory,
   GRAPH_WINDOW_MS,
+  hasEnoughGraphHistory,
 } from "../src/utils/sparkline.js";
-import type { GraphWindowKey, Snapshot } from "../src/types/index.js";
 
 function snaps(values: number[]): Snapshot[] {
   return values.map((current, i) => ({ ts: Date.now() - (values.length - i) * 60_000, current }));
@@ -70,9 +70,9 @@ describe("filterSnapshotsByWindow with windowMs = 0 (all window)", () => {
     const now = Date.now();
     const data: Snapshot[] = [
       { ts: now - 100 * 86_400_000, current: 100 }, // 100 days ago
-      { ts: now - 50 * 86_400_000, current: 200 },  // 50 days ago
-      { ts: now - 1 * 86_400_000, current: 300 },   // 1 day ago
-      { ts: now - 60_000, current: 400 },           // 1 minute ago
+      { ts: now - 50 * 86_400_000, current: 200 }, // 50 days ago
+      { ts: now - 1 * 86_400_000, current: 300 }, // 1 day ago
+      { ts: now - 60_000, current: 400 }, // 1 minute ago
     ];
     const result = filterSnapshotsByWindow(data, 0);
     expect(result).toHaveLength(4);
@@ -92,9 +92,9 @@ describe("filterSnapshotsByWindow with non-zero windows", () => {
     const now = Date.now();
     const data: Snapshot[] = [
       { ts: now - 10 * 86_400_000, current: 100 }, // 10 days ago (out)
-      { ts: now - 6 * 86_400_000, current: 200 },  // 6 days ago (in)
-      { ts: now - 3 * 86_400_000, current: 300 },  // 3 days ago (in)
-      { ts: now - 60_000, current: 400 },          // 1 minute ago (in)
+      { ts: now - 6 * 86_400_000, current: 200 }, // 6 days ago (in)
+      { ts: now - 3 * 86_400_000, current: 300 }, // 3 days ago (in)
+      { ts: now - 60_000, current: 400 }, // 1 minute ago (in)
     ];
     const result = filterSnapshotsByWindow(data, 604_800_000);
     expect(result).toHaveLength(3);
@@ -106,7 +106,7 @@ describe("filterSnapshotsByWindow with non-zero windows", () => {
     const data: Snapshot[] = [
       { ts: now - 2 * 86_400_000, current: 100 }, // 2 days ago (out)
       { ts: now - 12 * 3_600_000, current: 200 }, // 12 hours ago (in)
-      { ts: now - 60_000, current: 300 },         // 1 minute ago (in)
+      { ts: now - 60_000, current: 300 }, // 1 minute ago (in)
     ];
     const result = filterSnapshotsByWindow(data, 86_400_000);
     expect(result).toHaveLength(2);

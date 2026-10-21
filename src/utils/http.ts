@@ -64,19 +64,22 @@ async function runAttemptWithRetry<T>(request: HttpRequest<T>, origin: string): 
   return publicResult(second);
 }
 
-type AttemptResult<T> = {
-  readonly kind: "response";
-  readonly status: number;
-  readonly value: T;
-} | {
-  readonly kind: "http-error";
-  readonly status: number;
-  readonly retryAfter: string | null;
-} | {
-  readonly kind: "error";
-  readonly error: string;
-  readonly retryable: boolean;
-};
+type AttemptResult<T> =
+  | {
+      readonly kind: "response";
+      readonly status: number;
+      readonly value: T;
+    }
+  | {
+      readonly kind: "http-error";
+      readonly status: number;
+      readonly retryAfter: string | null;
+    }
+  | {
+      readonly kind: "error";
+      readonly error: string;
+      readonly retryable: boolean;
+    };
 
 async function runAttempt<T>(request: HttpRequest<T>): Promise<AttemptResult<T>> {
   const controller = new AbortController();

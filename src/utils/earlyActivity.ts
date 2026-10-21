@@ -1,8 +1,12 @@
 import type { EarlyActivity, Snapshot } from "../types/index.js";
-import { HOUR_MS, isQualifiedSnapshot, type HourlyPoint } from "./series.js";
+import { HOUR_MS, type HourlyPoint, isQualifiedSnapshot } from "./series.js";
 
 /** Descriptive context for limited history; never an input to trend alerts. */
-export function buildEarlyActivity(snapshots: readonly Snapshot[], hourly: readonly HourlyPoint[], now: number): EarlyActivity {
+export function buildEarlyActivity(
+  snapshots: readonly Snapshot[],
+  hourly: readonly HourlyPoint[],
+  now: number,
+): EarlyActivity {
   const valid = snapshots.filter((point) => point.ts <= now && isQualifiedSnapshot(point));
   const timestamps = valid.map((point) => point.ts);
   const latest = timestamps.length ? Math.max(...timestamps) : 0;
@@ -13,12 +17,22 @@ export function buildEarlyActivity(snapshots: readonly Snapshot[], hourly: reado
     minimum: valid.length ? Math.min(...valid.map((point) => point.current)) : null,
     maximum: valid.length ? Math.max(...valid.map((point) => point.current)) : null,
   };
-  if (!valid.length) return { ...base, status: "collecting", reason: "Waiting for history. Current players are shown separately when available." };
+  if (!valid.length)
+    return {
+      ...base,
+      status: "collecting",
+      reason: "Waiting for history. Current players are shown separately when available.",
+    };
   const end = Math.floor(now / HOUR_MS) * HOUR_MS;
   const completed = hourly.filter((point) => point.observedAt <= now && point.hour < end);
   const latestCompleted = completed.reduce((last, point) => Math.max(last, point.observedAt), 0);
   if (now - (latestCompleted || latest) > 2 * HOUR_MS) {
-    return { ...base, status: "stale", reason: "Hourly history is behind the live count. Refresh checks for newer history; comparisons resume when enough recent hours are available." };
+    return {
+      ...base,
+      status: "stale",
+      reason:
+        "Hourly history is behind the live count. Refresh checks for newer history; comparisons resume when enough recent hours are available.",
+    };
   }
   const start = end - 24 * HOUR_MS;
   const byHour = new Map(completed.map((point) => [point.hour, point]));
@@ -30,14 +44,26 @@ export function buildEarlyActivity(snapshots: readonly Snapshot[], hourly: reado
   }
   const endpoint = byHour.get(end - HOUR_MS);
   if (pairs.length < 20 || !endpoint || now - endpoint.observedAt > 2 * HOUR_MS || !byHour.has(end - 25 * HOUR_MS)) {
-    return { ...base, status: "collecting", reason: "Building a baseline. A preliminary daily comparison needs two days with at least 20 matched hours; a weekly trend needs two weeks." };
+    return {
+      ...base,
+      status: "collecting",
+      reason:
+        "Building a baseline. A preliminary daily comparison needs two days with at least 20 matched hours; a weekly trend needs two weeks.",
+    };
   }
   const recentMean = pairs.reduce((sum, point) => sum + point.recent, 0) / pairs.length;
   const baselineMean = pairs.reduce((sum, point) => sum + point.baseline, 0) / pairs.length;
   return {
-    ...base, status: "preliminary",
-    reason: "Preliminary daily activity only. Launch effects and weekday/weekend differences are not established; this does not trigger trend alerts.",
-    comparison: { startTs: start, endTs: end, recentMean, baselineMean, matchedHours: pairs.length,
+    ...base,
+    status: "preliminary",
+    reason:
+      "Preliminary daily activity only. Launch effects and weekday/weekend differences are not established; this does not trigger trend alerts.",
+    comparison: {
+      startTs: start,
+      endTs: end,
+      recentMean,
+      baselineMean,
+      matchedHours: pairs.length,
       pct: baselineMean >= 10 ? Math.round((recentMean / baselineMean - 1) * 1000) / 10 : null,
       delta: Math.round(recentMean - baselineMean),
     },

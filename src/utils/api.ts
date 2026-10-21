@@ -4,6 +4,7 @@
 // Every response is validated with Zod before use.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import type { ProviderResult, SearchResult, Snapshot, SteamChartsData, SteamSpyData } from "../types/index.js";
 import {
   AppDetailsSchema,
   ChartDataSchema,
@@ -13,9 +14,8 @@ import {
   StoreSearchSchema,
   TwitchGqlSchema,
 } from "../types/index.js";
-import type { ProviderResult, SearchResult, SteamChartsData, SteamSpyData, Snapshot } from "../types/index.js";
-import { formatError } from "./log.js";
 import { requestWithPolicy } from "./http.js";
+import { formatError } from "./log.js";
 
 const HISTORY_RETENTION_MS = 60 * 86_400_000;
 
@@ -141,7 +141,9 @@ export async function fetchSteamChartsHistoryResult(appid: string): Promise<Prov
     read: (response) => response.json(),
   });
   if (result.kind === "http-error") {
-    return result.status === 404 ? { status: "unavailable" } : { status: "error", error: `SteamCharts HTTP ${result.status}` };
+    return result.status === 404
+      ? { status: "unavailable" }
+      : { status: "error", error: `SteamCharts HTTP ${result.status}` };
   }
   if (result.kind === "error") {
     return { status: "error", error: result.error };
@@ -152,27 +154,34 @@ export async function fetchSteamChartsHistoryResult(appid: string): Promise<Prov
   }
   if (parsed.data.length === 0) return { status: "unavailable" };
   const now = Date.now();
-  const entries = [...new Map(parsed.data
-    .filter(([ts, players]) => Number.isSafeInteger(ts) && ts > 0 && ts <= now && players >= 0)
-    .map(([ts, players]) => [ts, players] as const)).entries()]
-    .sort(([left], [right]) => left - right);
-  const snapshots = entries.map(([ts, players], index): Snapshot => {
-    const previous = entries[index - 1]?.[0];
-    const next = entries[index + 1]?.[0];
-    const hourly = (previous !== undefined && ts - previous <= 2 * 3_600_000)
-      || (next !== undefined && next - ts <= 2 * 3_600_000);
-    const date = new Date(ts);
-    const monthBoundary = date.getUTCDate() === 1
-      && ts === Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1);
-    return {
-      ts,
-      current: Math.round(players),
-      source: "steamcharts",
-      granularity: hourly ? "hourly" : monthBoundary ? "monthly-peak" : "unknown",
-    };
-  // Hourly rows past retention would sit beside compacted aggregates and be counted twice.
-  }).filter((snapshot) => snapshot.granularity !== "hourly" || snapshot.ts >= now - HISTORY_RETENTION_MS);
-  return snapshots.length > 0 ? { status: "ok", value: snapshots } : { status: "error", error: "No valid historical observations" };
+  const entries = [
+    ...new Map(
+      parsed.data
+        .filter(([ts, players]) => Number.isSafeInteger(ts) && ts > 0 && ts <= now && players >= 0)
+        .map(([ts, players]) => [ts, players] as const),
+    ).entries(),
+  ].sort(([left], [right]) => left - right);
+  const snapshots = entries
+    .map(([ts, players], index): Snapshot => {
+      const previous = entries[index - 1]?.[0];
+      const next = entries[index + 1]?.[0];
+      const hourly =
+        (previous !== undefined && ts - previous <= 2 * 3_600_000) ||
+        (next !== undefined && next - ts <= 2 * 3_600_000);
+      const date = new Date(ts);
+      const monthBoundary = date.getUTCDate() === 1 && ts === Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1);
+      return {
+        ts,
+        current: Math.round(players),
+        source: "steamcharts",
+        granularity: hourly ? "hourly" : monthBoundary ? "monthly-peak" : "unknown",
+      };
+      // Hourly rows past retention would sit beside compacted aggregates and be counted twice.
+    })
+    .filter((snapshot) => snapshot.granularity !== "hourly" || snapshot.ts >= now - HISTORY_RETENTION_MS);
+  return snapshots.length > 0
+    ? { status: "ok", value: snapshots }
+    : { status: "error", error: "No valid historical observations" };
 }
 
 const GAMES_POPULARITY_MAX_PAGES = 2;
@@ -212,7 +221,8 @@ export async function fetchGamesPopularityHistoryResult(appid: string): Promise<
     for (const record of parsed.data.history) {
       const ts = parseGamesPopularityTimestamp(record.added);
       if (ts === null || ts > now || !Number.isFinite(record.players) || record.players < 0) continue;
-      oldestValidTimestamp = oldestValidTimestamp === undefined || ts < oldestValidTimestamp ? ts : oldestValidTimestamp;
+      oldestValidTimestamp =
+        oldestValidTimestamp === undefined || ts < oldestValidTimestamp ? ts : oldestValidTimestamp;
       if (ts < cutoff) continue;
       rows.push({ ts, current: Math.round(record.players) });
     }
@@ -232,9 +242,7 @@ export async function fetchGamesPopularityHistoryResult(appid: string): Promise<
   const snapshots = [...new Map(rows.map((row) => [row.ts, row.current])).entries()]
     .sort(([left], [right]) => left - right)
     .map(([ts, current]): Snapshot => ({ ts, current, source: "games-popularity", granularity: "hourly" }));
-  return snapshots.length > 0
-    ? { status: "ok", value: snapshots }
-    : { status: "unavailable" };
+  return snapshots.length > 0 ? { status: "ok", value: snapshots } : { status: "unavailable" };
 }
 
 /** Prefer SteamCharts where available and use Games Popularity only as history fallback. */
@@ -261,10 +269,12 @@ export async function fetchTwitchViewers(gameName: string): Promise<number | nul
 export async function fetchTwitchResult(gameName: string): Promise<ProviderResult<number>> {
   let error: string | undefined;
   for (const candidate of buildTwitchNameCandidates(gameName)) {
-    const body = JSON.stringify([{
-      query: "query($name:String!){game(name:$name){viewersCount}}",
-      variables: { name: candidate },
-    }]);
+    const body = JSON.stringify([
+      {
+        query: "query($name:String!){game(name:$name){viewersCount}}",
+        variables: { name: candidate },
+      },
+    ]);
     const result = await requestWithPolicy({
       url: "https://gql.twitch.tv/gql",
       init: {
@@ -332,7 +342,10 @@ function parseAllTimePeakLabel(html: string, allTimePeak: number): string | unde
     .filter(Boolean);
 
   for (const row of rowText) {
-    const cols = row.split("\t").map((part) => part.trim()).filter(Boolean);
+    const cols = row
+      .split("\t")
+      .map((part) => part.trim())
+      .filter(Boolean);
     if (cols.length < 2) continue;
     const monthLabel = cols[0]!;
     if (/last 30 days/i.test(monthLabel)) continue;
@@ -356,14 +369,8 @@ function formatMonthDistance(label: string): string | undefined {
 
 function buildTwitchNameCandidates(gameName: string): string[] {
   const trimmed = gameName.trim();
-  const normalized = trimmed
-    .replace(/[®™©]/g, "")
-    .replace(/[‘’]/g, "'")
-    .replace(/\s+/g, " ")
-    .trim();
-  const withoutSubtitle = normalized
-    .replace(/\s*[:\-–|].*$/, "")
-    .trim();
+  const normalized = trimmed.replace(/[®™©]/g, "").replace(/[‘’]/g, "'").replace(/\s+/g, " ").trim();
+  const withoutSubtitle = normalized.replace(/\s*[:\-–|].*$/, "").trim();
   const alnumOnly = normalized
     .replace(/[^A-Za-z0-9 ]+/g, " ")
     .replace(/\s+/g, " ")

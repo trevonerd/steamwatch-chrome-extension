@@ -1,9 +1,5 @@
 import { fetchPlayerHistoryResult } from "../utils/api.js";
-import {
-  idbAcquireBootstrapLease,
-  idbCompleteBootstrapImport,
-  idbFailBootstrapLease,
-} from "../utils/idb-storage.js";
+import { idbAcquireBootstrapLease, idbCompleteBootstrapImport, idbFailBootstrapLease } from "../utils/idb-storage.js";
 import { formatError } from "../utils/log.js";
 
 /** A lease survives worker restarts and makes overlapping history requests harmless. */
@@ -29,7 +25,8 @@ export async function refreshHistory(appId: string, retryFailed = false): Promis
         return true;
       }
     }
-    if (result.status === "error") console.warn(`[SteamWatch] History request failed for appid ${appId}: ${result.error}`);
+    if (result.status === "error")
+      console.warn(`[SteamWatch] History request failed for appid ${appId}: ${result.error}`);
   } catch (error: unknown) {
     console.warn(`[SteamWatch] History import failed for appid ${appId}: ${formatError(error)}`);
   }

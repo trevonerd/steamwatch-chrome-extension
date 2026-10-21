@@ -1,29 +1,28 @@
 // SteamWatch — src/popup/main.ts
-import {
-  getGames,
-  removeGame,
-  getSettings,
-  saveSettings,
-  getCache,
-  getLastFetchTime,
-  TRACKING_RETENTION_DAYS,
-  MAX_GAMES,
-} from "../utils/storage.js";
-import { idbGetSnapshots } from "../utils/idb-storage.js";
-import { fmtNumber, fmtPct, fmtTimeAgo } from "../utils/trend.js";
-import { populatePanel, renderSparkline, freshnessTitle } from "./graphs.js";
+
+
+import type { CardViewModel } from "../types/index.js";
 import { buildAllViewModels, buildCardViewModel, fallbackBadgeLabel, weeklyDetail } from "../utils/card.js";
-import { buildShareText, renderShareCanvas } from "../utils/share.js";
-import { append, clear, h, mustGet, s, show, hide } from "../utils/html.js";
+import { append, clear, h, hide, mustGet, s, show } from "../utils/html.js";
+import { idbGetSnapshots } from "../utils/idb-storage.js";
 import { formatError } from "../utils/log.js";
 import { requestRefresh } from "../utils/messages.js";
+import { buildShareText, renderShareCanvas } from "../utils/share.js";
+import {
+  getCache,
+  getGames,
+  getLastFetchTime,
+  getSettings,
+  MAX_GAMES,
+  removeGame,
+  saveSettings,
+  TRACKING_RETENTION_DAYS,
+} from "../utils/storage.js";
+import { fmtNumber, fmtPct, fmtTimeAgo } from "../utils/trend.js";
+import { freshnessTitle, populatePanel, renderSparkline } from "./graphs.js";
 import { bindGlobalShareBarClose } from "./shareBar.js";
 import { thumbColor, wireThumbFallback } from "./thumb.js";
 import { shouldRefreshGames, startPopupUpdates } from "./updates.js";
-
-import type {
-  CardViewModel,
-} from "../types/index.js";
 
 const loadingEl = mustGet<HTMLDivElement>("loading");
 const errorStateEl = mustGet<HTMLDivElement>("errorState");
@@ -48,11 +47,7 @@ async function init(refreshOnOpen = false): Promise<void> {
   if (gamesListEl.children.length === 0) showState("loading");
 
   try {
-    const [games, cache, settings] = await Promise.all([
-      getGames(),
-      getCache(),
-      getSettings(),
-    ]);
+    const [games, cache, settings] = await Promise.all([getGames(), getCache(), getSettings()]);
 
     if (revision !== renderRevision) return;
     if (games.length === 0) {
@@ -61,7 +56,10 @@ async function init(refreshOnOpen = false): Promise<void> {
     }
 
     if (gamesListEl.children.length === 0) {
-      const initial = games.map((game) => ({ ...buildCardViewModel(game, cache, [], TRACKING_RETENTION_DAYS), historyLoading: true }));
+      const initial = games.map((game) => ({
+        ...buildCardViewModel(game, cache, [], TRACKING_RETENTION_DAYS),
+        historyLoading: true,
+      }));
       initial.sort((a, b) => (b.current ?? -1) - (a.current ?? -1));
       renderGames(initial, settings.badgeFavoriteAppid);
       showState("list");
@@ -94,7 +92,9 @@ function renderGames(vms: CardViewModel[], favoriteAppid?: string): void {
     if (appId && item.classList.contains("expanded")) {
       expanded.set(appId, item.querySelector<HTMLElement>(".graph-pill--active")?.dataset["window"]);
     }
-    const graph = item.querySelector<HTMLDivElement>(".panel-sparkline") as (HTMLDivElement & { hoverCleanup?: () => void }) | null;
+    const graph = item.querySelector<HTMLDivElement>(".panel-sparkline") as
+      | (HTMLDivElement & { hoverCleanup?: () => void })
+      | null;
     graph?.hoverCleanup?.();
   }
   clear(gamesListEl);
@@ -105,8 +105,9 @@ function renderGames(vms: CardViewModel[], favoriteAppid?: string): void {
     if (expanded.has(vm.game.appid)) {
       item.querySelector<HTMLButtonElement>(".btn-expand")?.click();
       const selected = expanded.get(vm.game.appid);
-      const button = Array.from(item.querySelectorAll<HTMLButtonElement>(".graph-pill"))
-        .find((pill) => pill.dataset["window"] === selected && !pill.disabled);
+      const button = Array.from(item.querySelectorAll<HTMLButtonElement>(".graph-pill")).find(
+        (pill) => pill.dataset["window"] === selected && !pill.disabled,
+      );
       button?.click();
     }
     if (index < vms.length - 1) {
@@ -115,15 +116,18 @@ function renderGames(vms: CardViewModel[], favoriteAppid?: string): void {
   });
   if (focusedLabel) {
     Array.from(gamesListEl.querySelectorAll<HTMLButtonElement>("button"))
-      .find((button) => button.getAttribute("aria-label") === focusedLabel)?.focus({ preventScroll: true });
+      .find((button) => button.getAttribute("aria-label") === focusedLabel)
+      ?.focus({ preventScroll: true });
   }
 
   if (vms.length >= MAX_GAMES) {
-    gamesListEl.appendChild(h("li", {
-      className: "max-badge",
-      text: `Max ${MAX_GAMES} games - remove one to add another`,
-      attrs: { role: "status" },
-    }));
+    gamesListEl.appendChild(
+      h("li", {
+        className: "max-badge",
+        text: `Max ${MAX_GAMES} games - remove one to add another`,
+        attrs: { role: "status" },
+      }),
+    );
   }
 }
 
@@ -178,23 +182,42 @@ function buildGameItem(vm: CardViewModel, isTop: boolean, favoriteAppid?: string
       className: "stat-meta",
       children: [
         statRow("24H PK", `24-hour peak · ${freshnessTitle(vm.freshness?.peak24h)}`, peak24h),
-        statRow(allTimePeak !== null ? "ATH" : "OBS PK", allTimePeak !== null ? `SteamCharts record${vm.allTimePeakLabel ? ` (${vm.allTimePeakLabel})` : ""} · ${freshnessTitle(vm.freshness?.allTimePeak)}` : "Maximum in available observations; not an all-time record", allTimePeak ?? vm.observedPeak ?? null),
+        statRow(
+          allTimePeak !== null ? "ATH" : "OBS PK",
+          allTimePeak !== null
+            ? `SteamCharts record${vm.allTimePeakLabel ? ` (${vm.allTimePeakLabel})` : ""} · ${freshnessTitle(vm.freshness?.allTimePeak)}`
+            : "Maximum in available observations; not an all-time record",
+          allTimePeak ?? vm.observedPeak ?? null,
+        ),
       ],
     }),
   );
   if (displayTrendPct != null) {
-    stats.appendChild(h("span", {
-      className: `trend-badge ${displayTrendCls}`,
-      text: `${displayTrendIcon ? `${displayTrendIcon} ` : ""}${fmtPct(displayTrendPct)} 7d${vm.trendAsOf !== undefined ? ` · ${fmtTimeAgo(vm.trendAsOf, vm.evaluatedAt)}` : ""}`,
-      attrs: { "aria-label": `${fmtPct(displayTrendPct)} average players: 7 days vs previous 7 days${vm.trendAsOf !== undefined ? `, through ${new Date(vm.trendAsOf).toISOString()}` : ""}`, title: `${vm.trend?.level.label ?? "Weekly activity"}. ${vm.seasonalAnalysis?.reason ?? "Last 7 days vs previous 7 days."}${weeklyDetail(vm)}${vm.trendAsOf !== undefined ? ` Historical comparison through ${new Date(vm.trendAsOf).toISOString()}; newer history is incomplete.` : ""}` },
-    }));
+    stats.appendChild(
+      h("span", {
+        className: `trend-badge ${displayTrendCls}`,
+        text: `${displayTrendIcon ? `${displayTrendIcon} ` : ""}${fmtPct(displayTrendPct)} 7d${vm.trendAsOf !== undefined ? ` · ${fmtTimeAgo(vm.trendAsOf, vm.evaluatedAt)}` : ""}`,
+        attrs: {
+          "aria-label": `${fmtPct(displayTrendPct)} average players: 7 days vs previous 7 days${vm.trendAsOf !== undefined ? `, through ${new Date(vm.trendAsOf).toISOString()}` : ""}`,
+          title: `${vm.trend?.level.label ?? "Weekly activity"}. ${vm.seasonalAnalysis?.reason ?? "Last 7 days vs previous 7 days."}${weeklyDetail(vm)}${vm.trendAsOf !== undefined ? ` Historical comparison through ${new Date(vm.trendAsOf).toISOString()}; newer history is incomplete.` : ""}`,
+        },
+      }),
+    );
   } else {
     const early = vm.earlyActivity;
     const pct = early?.comparison?.pct;
-    stats.appendChild(h("span", { className: "trend-badge stable",
-      text: early?.status === "preliminary" ? pct != null ? `~${fmtPct(pct)} 24h` : "24h activity" : fallbackBadgeLabel(vm),
-      attrs: { title: early?.reason ?? vm.seasonalAnalysis?.reason ?? "Not enough comparable history" },
-    }));
+    stats.appendChild(
+      h("span", {
+        className: "trend-badge stable",
+        text:
+          early?.status === "preliminary"
+            ? pct != null
+              ? `~${fmtPct(pct)} 24h`
+              : "24h activity"
+            : fallbackBadgeLabel(vm),
+        attrs: { title: early?.reason ?? vm.seasonalAnalysis?.reason ?? "Not enough comparable history" },
+      }),
+    );
   }
 
   append(
@@ -211,11 +234,13 @@ function buildGameItem(vm: CardViewModel, isTop: boolean, favoriteAppid?: string
     maxPoints: 48,
   });
   if (cardSparkline) {
-    card.appendChild(h("div", {
-      className: "card-bottom",
-      attrs: { "aria-hidden": "true" },
-      children: [h("div", { className: "sparkline", children: [cardSparkline.svg] })],
-    }));
+    card.appendChild(
+      h("div", {
+        className: "card-bottom",
+        attrs: { "aria-hidden": "true" },
+        children: [h("div", { className: "sparkline", children: [cardSparkline.svg] })],
+      }),
+    );
   }
 
   const panel = h("div", {
@@ -280,8 +305,16 @@ function buildCardControls(gameName: string, favorite: boolean): HTMLDivElement 
     className: "card-controls",
     children: [
       controlButton("btn-share", `Share ${gameName}`, "Share", shareIcon()),
-      controlButton("btn-star", favorite ? "Remove from badge" : "Show on badge", "Show on badge", starIcon(favorite), favorite),
-      controlButton("btn-expand", `Expand details for ${gameName}`, "Details", chevronIcon(), false, { "aria-expanded": "false" }),
+      controlButton(
+        "btn-star",
+        favorite ? "Remove from badge" : "Show on badge",
+        "Show on badge",
+        starIcon(favorite),
+        favorite,
+      ),
+      controlButton("btn-expand", `Expand details for ${gameName}`, "Details", chevronIcon(), false, {
+        "aria-expanded": "false",
+      }),
       controlButton("btn-remove", `Remove ${gameName}`, "Remove", removeIcon()),
     ],
   });
@@ -440,7 +473,6 @@ async function handleToggleFavorite(appid: string, clickedBtn: HTMLButtonElement
     });
 
     clickedBtn.blur();
-
   } catch (err) {
     console.error(`[SteamWatch] Toggle favorite failed: ${formatError(err)}`);
   }

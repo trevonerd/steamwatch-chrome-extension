@@ -6,23 +6,9 @@
 
 import { z } from "zod";
 import { deleteNotificationState } from "../background/notificationState.js";
-import {
-  CachedDataSchema,
-  GameSchema,
-  GameSettingsSchema,
-  SettingsSchema,
-} from "../types/index.js";
-import type {
-  Game,
-  CachedData,
-  Settings,
-  GameSettings,
-} from "../types/index.js";
-import {
-  idbClearAllData,
-  idbClearGameTombstone,
-  idbDeleteGameData,
-} from "./idb-storage.js";
+import type { CachedData, Game, GameSettings, Settings } from "../types/index.js";
+import { CachedDataSchema, GameSchema, GameSettingsSchema, SettingsSchema } from "../types/index.js";
+import { idbClearAllData, idbClearGameTombstone, idbDeleteGameData } from "./idb-storage.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -89,8 +75,10 @@ function isEquivalent(left: unknown, right: unknown): boolean {
 
   const leftEntries = Object.entries(leftRecord);
   const rightEntries = Object.entries(rightRecord);
-  return leftEntries.length === rightEntries.length
-    && leftEntries.every(([key, value]) => key in rightRecord && isEquivalent(value, rightRecord[key]));
+  return (
+    leftEntries.length === rightEntries.length &&
+    leftEntries.every(([key, value]) => key in rightRecord && isEquivalent(value, rightRecord[key]))
+  );
 }
 
 function parseCachedData(raw: unknown): CachedData | undefined {
@@ -139,9 +127,9 @@ function parseGames(raw: unknown): Game[] {
   const parsed = z.array(z.unknown()).safeParse(raw);
   return parsed.success
     ? parsed.data.flatMap((item) => {
-      const game = GameSchema.safeParse(item);
-      return game.success ? [game.data] : [];
-    })
+        const game = GameSchema.safeParse(item);
+        return game.success ? [game.data] : [];
+      })
     : [];
 }
 
@@ -199,10 +187,7 @@ async function removePendingGameCleanup(appid: string): Promise<void> {
 async function cleanupGameData(appid: string): Promise<void> {
   await idbDeleteGameData(appid);
   await deleteNotificationState(appid);
-  await chrome.storage.local.remove([
-    `${KEYS.gameSettingsPrefix}${appid}`,
-    `${KEYS.legacySnapshotsPrefix}${appid}`,
-  ]);
+  await chrome.storage.local.remove([`${KEYS.gameSettingsPrefix}${appid}`, `${KEYS.legacySnapshotsPrefix}${appid}`]);
 
   const rawCache = toRecord(await get<unknown>(KEYS.cache));
   if (rawCache && appid in rawCache) {
@@ -256,9 +241,7 @@ async function resumePendingGameCleanupsOnce(): Promise<void> {
 
 export async function updateGameImage(appid: string, imageUrl: string): Promise<void> {
   const games = await getGames();
-  const updated = games.map((g) =>
-    g.appid === appid ? { ...g, image: imageUrl } : g,
-  );
+  const updated = games.map((g) => (g.appid === appid ? { ...g, image: imageUrl } : g));
   const changed = updated.some((g, i) => g.image !== games[i]?.image);
   if (!changed) return;
   await set(KEYS.games, updated);
@@ -337,10 +320,14 @@ export async function getGameSettings(appid: string): Promise<GameSettings> {
 
   const normalized: GameSettings = {};
   const thresholdUp = GameSettingsSchema.shape.thresholdUp.safeParse(stored["thresholdUp"]);
-  if (thresholdUp.success && thresholdUp.data !== undefined) normalized.thresholdUp = Math.max(5, Math.min(100, thresholdUp.data));
+  if (thresholdUp.success && thresholdUp.data !== undefined)
+    normalized.thresholdUp = Math.max(5, Math.min(100, thresholdUp.data));
   const thresholdDown = GameSettingsSchema.shape.thresholdDown.safeParse(stored["thresholdDown"]);
-  if (thresholdDown.success && thresholdDown.data !== undefined) normalized.thresholdDown = -Math.max(5, Math.min(90, Math.abs(thresholdDown.data)));
-  const notifyThresholdPlayers = GameSettingsSchema.shape.notifyThresholdPlayers.safeParse(stored["notifyThresholdPlayers"]);
+  if (thresholdDown.success && thresholdDown.data !== undefined)
+    normalized.thresholdDown = -Math.max(5, Math.min(90, Math.abs(thresholdDown.data)));
+  const notifyThresholdPlayers = GameSettingsSchema.shape.notifyThresholdPlayers.safeParse(
+    stored["notifyThresholdPlayers"],
+  );
   if (notifyThresholdPlayers.success && notifyThresholdPlayers.data !== undefined) {
     normalized.notifyThresholdPlayers = notifyThresholdPlayers.data;
   }
@@ -415,6 +402,10 @@ export async function setLastFetchAttemptTime(ts: number): Promise<void> {
 }
 
 export async function getLastFetchAttemptTime(): Promise<number> {
-  const parsed = z.number().finite().nonnegative().safeParse(await get<unknown>(KEYS.lastFetchAttempt));
+  const parsed = z
+    .number()
+    .finite()
+    .nonnegative()
+    .safeParse(await get<unknown>(KEYS.lastFetchAttempt));
   return parsed.success ? parsed.data : 0;
 }

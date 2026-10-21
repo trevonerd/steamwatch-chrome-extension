@@ -1,19 +1,19 @@
 // tests/api.test.ts
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  fetchCurrentPlayers,
+  ChartDataSchema,
   fetchAppDetails,
+  fetchCurrentPlayers,
+  fetchSteamChartsBootstrap,
   fetchSteamChartsData,
+  fetchSteamChartsResult,
   fetchSteamSpyData,
   fetchSteamSpyResult,
-  fetchSteamChartsResult,
   fetchTwitchResult,
   fetchTwitchViewers,
   parseSteamChartsData,
-  searchGames,
   STEAM_CAPSULE_URL,
-  fetchSteamChartsBootstrap,
-  ChartDataSchema,
+  searchGames,
 } from "../src/utils/api.js";
 
 // ── Mock fetch ────────────────────────────────────────────────────────────────
@@ -45,10 +45,16 @@ afterEach(() => {
 
 describe("fetchAppDetails", () => {
   it("returns details for the requested app and prefers the capsule when the response is valid", async () => {
-    mockFetch({ "570": { success: true, data: {
-      name: "Dota 2", header_image: "https://example.com/header.jpg",
-      capsule_image: "https://example.com/capsule.jpg",
-    } } });
+    mockFetch({
+      "570": {
+        success: true,
+        data: {
+          name: "Dota 2",
+          header_image: "https://example.com/header.jpg",
+          capsule_image: "https://example.com/capsule.jpg",
+        },
+      },
+    });
     expect(await fetchAppDetails("570")).toEqual({ name: "Dota 2", image: "https://example.com/capsule.jpg" });
   });
 
@@ -63,8 +69,11 @@ describe("fetchAppDetails", () => {
   });
 
   it.each([
-    null, {}, { "730": { success: true, data: { name: "Counter-Strike" } } },
-    { "570": { success: false } }, { "570": { success: true } },
+    null,
+    {},
+    { "730": { success: true, data: { name: "Counter-Strike" } } },
+    { "570": { success: false } },
+    { "570": { success: true } },
     { "570": { success: true, data: { name: 42 } } },
   ])("returns null when details are unavailable or malformed: %j", async (body) => {
     mockFetch(body);
@@ -163,36 +172,54 @@ describe("provider result adapters", () => {
   });
 
   it("reports an empty SteamCharts page as unavailable", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, text: async () => "<main />" })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, status: 200, text: async () => "<main />" })),
+    );
 
     expect(await fetchSteamChartsResult("570")).toEqual({ status: "unavailable" });
   });
 
   it("reports a missing Twitch game as unavailable", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => ({
-      ok: true,
-      status: 200,
-      json: async () => [{ data: { game: null } }],
-    })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => [{ data: { game: null } }],
+      })),
+    );
 
     expect(await fetchTwitchResult("Marathon")).toEqual({ status: "unavailable" });
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
   });
 
   it("reports SteamSpy server failures as errors instead of missing data", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => createJsonResponse({}, false, 503)));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => createJsonResponse({}, false, 503)),
+    );
 
     await expect(fetchSteamSpyResult("570")).resolves.toMatchObject({ status: "error", error: "SteamSpy HTTP 503" });
   });
 
   it("reports SteamCharts rate limits as errors instead of missing data", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => createJsonResponse({}, false, 429)));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => createJsonResponse({}, false, 429)),
+    );
 
-    await expect(fetchSteamChartsResult("570")).resolves.toMatchObject({ status: "error", error: "SteamCharts HTTP 429" });
+    await expect(fetchSteamChartsResult("570")).resolves.toMatchObject({
+      status: "error",
+      error: "SteamCharts HTTP 429",
+    });
   });
 
   it("reports Twitch rate limits as errors instead of an absent category", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => createJsonResponse({}, false, 429)));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => createJsonResponse({}, false, 429)),
+    );
 
     await expect(fetchTwitchResult("Marathon")).resolves.toMatchObject({ status: "error", error: "Twitch HTTP 429" });
   });
@@ -218,14 +245,17 @@ describe("parseSteamChartsData", () => {
 
 describe("fetchSteamChartsData", () => {
   it("returns parsed chart data from page HTML", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => ({
-      ok: true,
-      text: async () => `
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        text: async () => `
         <div>11 playing 7 min ago</div>
         <div>23 24-hour peak</div>
         <div>97,249 all-time peak</div>
       `,
-    })));
+      })),
+    );
     const data = await fetchSteamChartsData("570");
     expect(data.current).toBe(11);
     expect(data.peak24h).toBe(23);
@@ -238,8 +268,8 @@ describe("fetchSteamChartsData", () => {
 describe("searchGames", () => {
   const validResponse = {
     items: [
-      { id: 1245620, name: "Elden Ring",   small_capsule_image: "https://cdn.example.com/er.jpg" },
-      { id: 570,     name: "Dota 2",       small_capsule_image: "https://cdn.example.com/d2.jpg" },
+      { id: 1245620, name: "Elden Ring", small_capsule_image: "https://cdn.example.com/er.jpg" },
+      { id: 570, name: "Dota 2", small_capsule_image: "https://cdn.example.com/d2.jpg" },
     ],
   };
 
@@ -261,7 +291,8 @@ describe("searchGames", () => {
 
   it("limits to 8 results", async () => {
     const items = Array.from({ length: 15 }, (_, i) => ({
-      id: i + 1, name: `Game ${i + 1}`,
+      id: i + 1,
+      name: `Game ${i + 1}`,
     }));
     mockFetch({ items });
     const results = await searchGames("game");
@@ -297,17 +328,20 @@ describe("searchGames", () => {
 describe("STEAM_CAPSULE_URL", () => {
   it("generates correct CDN URL", () => {
     expect(STEAM_CAPSULE_URL("1245620")).toBe(
-      "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1245620/header.jpg"
+      "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1245620/header.jpg",
     );
   });
 });
 
 describe("fetchTwitchViewers", () => {
   it("returns viewer count on valid GQL response", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => ({
-      ok: true,
-      json: async () => [{ data: { game: { viewersCount: 233893 } } }],
-    })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => [{ data: { game: { viewersCount: 233893 } } }],
+      })),
+    );
     expect(await fetchTwitchViewers("Marathon")).toBe(233893);
   });
 });
@@ -316,7 +350,10 @@ describe("fetchTwitchViewers", () => {
 
 describe("ChartDataSchema", () => {
   it("validates array of [timestamp, players] tuples", () => {
-    const valid = [[1341100800000, 25123.4], [1343779200000, 0]];
+    const valid = [
+      [1341100800000, 25123.4],
+      [1343779200000, 0],
+    ];
     const result = ChartDataSchema.safeParse(valid);
     expect(result.success).toBe(true);
   });
@@ -351,11 +388,14 @@ describe("fetchSteamChartsBootstrap", () => {
   it("converts valid response to Snapshot[] with rounding", async () => {
     globalThis.fetch = vi.fn().mockResolvedValueOnce({
       ok: true,
-      json: async () => [[1341100800000, 25123.4], [1343779200000, 0]],
+      json: async () => [
+        [1341100800000, 25123.4],
+        [1343779200000, 0],
+      ],
     } as Response);
-    
+
     const result = await fetchSteamChartsBootstrap("570");
-    
+
     expect(result).toHaveLength(2);
     expect(result[0]).toMatchObject({ ts: 1341100800000, current: 25123 });
     expect(result[1]).toMatchObject({ ts: 1343779200000, current: 0 });
@@ -367,7 +407,13 @@ describe("fetchSteamChartsBootstrap", () => {
     const recent = Date.now() - 2 * hour;
     globalThis.fetch = vi.fn().mockResolvedValueOnce({
       ok: true,
-      json: async () => [[Date.UTC(2020, 0, 1), 500], [old, 10], [old + hour, 11], [recent, 20], [recent + hour, 21]],
+      json: async () => [
+        [Date.UTC(2020, 0, 1), 500],
+        [old, 10],
+        [old + hour, 11],
+        [recent, 20],
+        [recent + hour, 21],
+      ],
     } as Response);
 
     const result = await fetchSteamChartsBootstrap("570");
@@ -378,11 +424,15 @@ describe("fetchSteamChartsBootstrap", () => {
   it("filters out entries where timestamp <= 0", async () => {
     globalThis.fetch = vi.fn().mockResolvedValueOnce({
       ok: true,
-      json: async () => [[0, 100], [1341100800000, 200], [-1, 300]],
+      json: async () => [
+        [0, 100],
+        [1341100800000, 200],
+        [-1, 300],
+      ],
     } as Response);
-    
+
     const result = await fetchSteamChartsBootstrap("570");
-    
+
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({ ts: 1341100800000, current: 200 });
   });
@@ -390,11 +440,14 @@ describe("fetchSteamChartsBootstrap", () => {
   it("sorts snapshots by timestamp ascending", async () => {
     globalThis.fetch = vi.fn().mockResolvedValueOnce({
       ok: true,
-      json: async () => [[1343779200000, 100], [1341100800000, 200]],
+      json: async () => [
+        [1343779200000, 100],
+        [1341100800000, 200],
+      ],
     } as Response);
-    
+
     const result = await fetchSteamChartsBootstrap("570");
-    
+
     expect(result[0]!.ts).toBe(1341100800000);
     expect(result[1]!.ts).toBe(1343779200000);
   });
@@ -404,17 +457,17 @@ describe("fetchSteamChartsBootstrap", () => {
       ok: false,
       status: 404,
     } as Response);
-    
+
     const result = await fetchSteamChartsBootstrap("570");
-    
+
     expect(result).toEqual([]);
   });
 
   it("returns empty array on network error and logs console.warn", async () => {
     globalThis.fetch = vi.fn().mockRejectedValueOnce(new Error("Network error"));
-    
+
     const result = await fetchSteamChartsBootstrap("570");
-    
+
     expect(result).toEqual([]);
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("[SteamWatch] History failed for 570"));
     expect(errorSpy).not.toHaveBeenCalled();
@@ -423,11 +476,13 @@ describe("fetchSteamChartsBootstrap", () => {
   it("returns empty array on malformed JSON and logs console.warn", async () => {
     globalThis.fetch = vi.fn().mockResolvedValueOnce({
       ok: true,
-      json: async () => { throw new Error("Invalid JSON"); },
+      json: async () => {
+        throw new Error("Invalid JSON");
+      },
     } as unknown as Response);
-    
+
     const result = await fetchSteamChartsBootstrap("570");
-    
+
     expect(result).toEqual([]);
     expect(warnSpy).toHaveBeenCalled();
     expect(errorSpy).not.toHaveBeenCalled();
@@ -438,9 +493,9 @@ describe("fetchSteamChartsBootstrap", () => {
       ok: true,
       json: async () => [{ invalid: "shape" }],
     } as Response);
-    
+
     const result = await fetchSteamChartsBootstrap("570");
-    
+
     expect(result).toEqual([]);
     expect(warnSpy).toHaveBeenCalled();
     expect(errorSpy).not.toHaveBeenCalled();
@@ -451,9 +506,9 @@ describe("fetchSteamChartsBootstrap", () => {
       ok: true,
       json: async () => [],
     } as Response);
-    
+
     const result = await fetchSteamChartsBootstrap("570");
-    
+
     expect(result).toEqual([]);
   });
 
@@ -462,9 +517,9 @@ describe("fetchSteamChartsBootstrap", () => {
       ok: true,
       json: async () => [[1341100800000, -50.5]],
     } as Response);
-    
+
     const result = await fetchSteamChartsBootstrap("570");
-    
+
     expect(result).toEqual([]);
   });
 
@@ -472,7 +527,11 @@ describe("fetchSteamChartsBootstrap", () => {
     const ts = Date.now() - 3_600_000;
     globalThis.fetch = vi.fn().mockResolvedValueOnce({
       ok: true,
-      json: async () => [[ts, 100], [ts, 100], [Date.now() + 86_400_000, 200]],
+      json: async () => [
+        [ts, 100],
+        [ts, 100],
+        [Date.now() + 86_400_000, 200],
+      ],
     });
     const result = await fetchSteamChartsBootstrap("570");
     expect(result).toHaveLength(1);
@@ -485,14 +544,17 @@ describe("fetchSteamChartsBootstrap", () => {
     const hourly = Date.now() - 5 * 86_400_000 + 60_000;
     globalThis.fetch = vi.fn().mockResolvedValueOnce({
       ok: true,
-      json: async () => [[monthly, 900], [hourly, 150], [hourly + 3_600_000, 200]],
+      json: async () => [
+        [monthly, 900],
+        [hourly, 150],
+        [hourly + 3_600_000, 200],
+      ],
     });
     const result = await fetchSteamChartsBootstrap("570");
     expect(result[0]).toMatchObject({ current: 900, granularity: "monthly-peak" });
     expect(result[1]).toMatchObject({ current: 150, granularity: "hourly" });
   });
 });
-
 
 describe("Twitch Steam title normalization", () => {
   it.each([
@@ -501,7 +563,9 @@ describe("Twitch Steam title normalization", () => {
   ])("resolves the actual Twitch category for %s", async (steamName, twitchName) => {
     vi.mocked(fetch).mockImplementation(async (_input, init) => {
       const matched = typeof init?.body === "string" && init.body.includes(JSON.stringify(twitchName));
-      return new Response(JSON.stringify([{ data: { game: matched ? { viewersCount: 171 } : null } }]), { status: 200 });
+      return new Response(JSON.stringify([{ data: { game: matched ? { viewersCount: 171 } : null } }]), {
+        status: 200,
+      });
     });
     expect(await fetchTwitchResult(steamName)).toEqual({ status: "ok", value: 171 });
   });

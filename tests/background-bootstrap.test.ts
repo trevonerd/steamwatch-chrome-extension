@@ -104,7 +104,8 @@ describe("background lifecycle", () => {
   it("keeps existing alarms untouched on worker load", async () => {
     mocks.getAlarm.mockResolvedValue({ name: "sw_fetch" });
     await loadListeners();
-    await Promise.resolve(); await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
     expect(mocks.createAlarm).not.toHaveBeenCalled();
   });
 
@@ -149,19 +150,30 @@ describe("background lifecycle", () => {
     const listener = mocks.addStorageListener.mock.calls[0]?.[0];
     if (!listener) throw new Error("Background did not register a storage listener");
     listener({ sw_settings: { newValue: {} } }, "local");
-    await vi.waitFor(() => expect(mocks.refreshBadge).toHaveBeenCalledWith("1", { "1": { current: 10, fetchedAt: 1 } }));
+    await vi.waitFor(() =>
+      expect(mocks.refreshBadge).toHaveBeenCalledWith("1", { "1": { current: 10, fetchedAt: 1 } }),
+    );
   });
 
   it("refreshes for a favorite current-freshness cache change", async () => {
     await loadListeners();
     const listener = mocks.addStorageListener.mock.calls[0]?.[0];
     if (!listener) throw new Error("Background did not register a storage listener");
-    listener({
-      sw_cache: {
-        oldValue: { "1": { current: 10, fetchedAt: 1 } },
-        newValue: { "1": { current: 10, fetchedAt: 1, freshness: { current: { source: "steam", status: "error", attemptedAt: 2 } } } },
+    listener(
+      {
+        sw_cache: {
+          oldValue: { "1": { current: 10, fetchedAt: 1 } },
+          newValue: {
+            "1": {
+              current: 10,
+              fetchedAt: 1,
+              freshness: { current: { source: "steam", status: "error", attemptedAt: 2 } },
+            },
+          },
+        },
       },
-    }, "local");
+      "local",
+    );
     await vi.waitFor(() => expect(mocks.refreshBadge).toHaveBeenCalledTimes(1));
   });
 
@@ -169,7 +181,15 @@ describe("background lifecycle", () => {
     await loadListeners();
     const listener = mocks.addStorageListener.mock.calls[0]?.[0];
     if (!listener) throw new Error("Background did not register a storage listener");
-    listener({ sw_cache: { oldValue: { "1": { current: 10, fetchedAt: 1, peak24h: 20 } }, newValue: { "1": { current: 10, fetchedAt: 1, peak24h: 30 } } } }, "local");
+    listener(
+      {
+        sw_cache: {
+          oldValue: { "1": { current: 10, fetchedAt: 1, peak24h: 20 } },
+          newValue: { "1": { current: 10, fetchedAt: 1, peak24h: 30 } },
+        },
+      },
+      "local",
+    );
     await Promise.resolve();
     expect(mocks.refreshBadge).not.toHaveBeenCalled();
   });

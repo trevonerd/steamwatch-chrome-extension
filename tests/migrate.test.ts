@@ -1,11 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Game, Snapshot } from "../src/types/index.js";
-import {
-  _resetDbForTesting,
-  idbGetSnapshots,
-  idbSaveSnapshot,
-} from "../src/utils/idb-storage.js";
+import { _resetDbForTesting, idbGetSnapshots, idbSaveSnapshot } from "../src/utils/idb-storage.js";
 import { migrateToIndexedDB } from "../src/utils/migrate.js";
 
 function legacySnapshots(snapshots: readonly Snapshot[]): Snapshot[] {
@@ -107,12 +103,7 @@ describe("migrateToIndexedDB", () => {
     const games: Game[] = [{ appid: "100", name: "Game A", image: "a.jpg" }];
     await chrome.storage.local.set({
       sw_games: games,
-      sw_snaps_100: [
-        { ts: 1_000, current: 10 },
-        { ts: "bad", current: 20 },
-        { ts: 2_000 },
-        { current: 30 },
-      ],
+      sw_snaps_100: [{ ts: 1_000, current: 10 }, { ts: "bad", current: 20 }, { ts: 2_000 }, { current: 30 }],
     });
 
     const result = await migrateToIndexedDB();
@@ -195,7 +186,8 @@ describe("migrateToIndexedDB", () => {
       sw_games: games,
       sw_snaps_100: [{ ts: 1_000, current: 10 }],
     });
-    const saveSpy = vi.spyOn(await import("../src/utils/idb-storage.js"), "idbSaveSnapshot")
+    const saveSpy = vi
+      .spyOn(await import("../src/utils/idb-storage.js"), "idbSaveSnapshot")
       .mockRejectedValueOnce(new Error("write failed"));
 
     const result = await migrateToIndexedDB();

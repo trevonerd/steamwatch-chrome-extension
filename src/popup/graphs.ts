@@ -1,8 +1,13 @@
 import type { CardViewModel, FieldFreshness, GraphWindowKey, Snapshot } from "../types/index.js";
 import { append, clear, h, s } from "../utils/html.js";
-import { fmtNumber, fmtTimeAgo, computeRetentionAvgFromHourly, computeRetentionGainFromHourly } from "../utils/trend.js";
-import { buildGraphSeries, colorGraphSegments, findNearestPointIndex } from "../utils/sparkline.js";
 import { HOUR_MS, normalizeHourly } from "../utils/series.js";
+import { buildGraphSeries, colorGraphSegments, findNearestPointIndex } from "../utils/sparkline.js";
+import {
+  computeRetentionAvgFromHourly,
+  computeRetentionGainFromHourly,
+  fmtNumber,
+  fmtTimeAgo,
+} from "../utils/trend.js";
 
 const WINDOW_MS: Readonly<Record<GraphWindowKey, number>> = {
   "24h": 86_400_000,
@@ -10,19 +15,11 @@ const WINDOW_MS: Readonly<Record<GraphWindowKey, number>> = {
   "7d": 7 * 86_400_000,
   "15d": 15 * 86_400_000,
   "1m": 30 * 86_400_000,
-  "all": 0,
+  all: 0,
 };
 
 export function populatePanel(panel: HTMLDivElement, vm: CardViewModel): void {
-  const {
-    game,
-    current,
-    peak24h,
-    allTimePeak,
-    twitchViewers,
-    availableGraphWindows,
-    defaultGraphWindow,
-  } = vm;
+  const { game, current, peak24h, allTimePeak, twitchViewers, availableGraphWindows, defaultGraphWindow } = vm;
 
   clear(panel);
   const availableKeys = new Set(availableGraphWindows.map((window) => window.key));
@@ -37,8 +34,16 @@ export function populatePanel(panel: HTMLDivElement, vm: CardViewModel): void {
       children: [
         panelStat("Current", fmtNumber(current), vm.freshness?.current),
         panelStat("24h peak", fmtNumber(peak24h), vm.freshness?.peak24h),
-        panelStat(allTimePeak === null ? "Observed peak" : "All-time peak", fmtNumber(allTimePeak ?? vm.observedPeak ?? null), allTimePeak === null ? undefined : athTitle(vm)),
-        panelStat("Twitch viewers", twitchViewers != null ? fmtNumber(twitchViewers) : "—", vm.freshness?.twitchViewers),
+        panelStat(
+          allTimePeak === null ? "Observed peak" : "All-time peak",
+          fmtNumber(allTimePeak ?? vm.observedPeak ?? null),
+          allTimePeak === null ? undefined : athTitle(vm),
+        ),
+        panelStat(
+          "Twitch viewers",
+          twitchViewers != null ? fmtNumber(twitchViewers) : "—",
+          vm.freshness?.twitchViewers,
+        ),
       ],
     }),
     h("div", {
@@ -96,7 +101,8 @@ function buildGraphPills(
 export function freshnessTitle(freshness: FieldFreshness | undefined): string {
   if (!freshness) return "Source update time unknown";
   if (freshness.status === "unavailable") return `Not available from ${freshness.source}`;
-  const acquired = freshness.acquiredAt === undefined ? "Update time unknown" : `Acquired ${fmtTimeAgo(freshness.acquiredAt)}`;
+  const acquired =
+    freshness.acquiredAt === undefined ? "Update time unknown" : `Acquired ${fmtTimeAgo(freshness.acquiredAt)}`;
   return `${freshness.source} · ${acquired}${freshness.status === "error" ? " · Latest request failed" : ""}`;
 }
 
@@ -105,7 +111,11 @@ function panelStat(label: string, value: string, context?: FieldFreshness | stri
     className: "panel-stat",
     children: [
       h("dt", { className: "panel-stat-label", text: label }),
-      h("dd", { className: "panel-stat-value", text: value, attrs: { title: typeof context === "string" ? context : context ? freshnessTitle(context) : undefined } }),
+      h("dd", {
+        className: "panel-stat-value",
+        text: value,
+        attrs: { title: typeof context === "string" ? context : context ? freshnessTitle(context) : undefined },
+      }),
     ],
   });
 }
@@ -150,13 +160,14 @@ function renderPanelGraph(panel: HTMLDivElement, vm: CardViewModel, key: GraphWi
   const completed = hourly.filter((point) => point.hour >= windowStart && point.hour < completedHour);
   const first = completed[0];
   const last = completed.at(-1);
-  const availableSummary = first && last && completed.length >= 2
-    && completed.length / ((last.hour - first.hour) / HOUR_MS + 1) >= 0.8
-    ? {
-      average: Math.round(completed.reduce((sum, point) => sum + point.value, 0) / completed.length),
-      change: last.value - first.value,
-      title: `Available observed hours. Missing hours excluded. First observation: ${new Date(first.observedAt).toISOString()} · Last observation: ${new Date(last.observedAt).toISOString()} (UTC).`,
-    } : null;
+  const availableSummary =
+    first && last && completed.length >= 2 && completed.length / ((last.hour - first.hour) / HOUR_MS + 1) >= 0.8
+      ? {
+          average: Math.round(completed.reduce((sum, point) => sum + point.value, 0) / completed.length),
+          change: last.value - first.value,
+          title: `Available observed hours. Missing hours excluded. First observation: ${new Date(first.observedAt).toISOString()} · Last observation: ${new Date(last.observedAt).toISOString()} (UTC).`,
+        }
+      : null;
   const days = windowMs / 86_400_000;
   const avg = windowMs === 0 ? availableSummary?.average : computeRetentionAvgFromHourly(hourly, days, now);
   const gain = windowMs === 0 ? availableSummary?.change : computeRetentionGainFromHourly(hourly, days, now);
@@ -172,7 +183,8 @@ function renderPanelGraph(panel: HTMLDivElement, vm: CardViewModel, key: GraphWi
   const values = completed.map((point) => Math.round(point.value));
   const low = values.length ? Math.min(...values) : null;
   const peak = values.length ? Math.max(...values) : null;
-  append(stats,
+  append(
+    stats,
     panelStat(`${label} average`, avg == null ? "—" : fmtNumber(avg), summaryTitle),
     panelStat(`${label} change`, gain == null ? "—" : fmtSignedPlayers(gain), summaryTitle),
     panelStat(`${label} minimum`, fmtNumber(low), lowTitle(vm)),
@@ -221,8 +233,8 @@ function attachSparklineHover(
 
     const point = points[index]!;
     const outer = container.getBoundingClientRect();
-    const pctX = ((rect.left - outer.left + point.x / viewW * rect.width) / outer.width) * 100;
-    const pctY = ((rect.top - outer.top + point.y / viewH * rect.height) / outer.height) * 100;
+    const pctX = ((rect.left - outer.left + (point.x / viewW) * rect.width) / outer.width) * 100;
+    const pctY = ((rect.top - outer.top + (point.y / viewH) * rect.height) / outer.height) * 100;
 
     tooltip.textContent = `${fmtNumber(snap.current)} · ${new Date(snap.ts).toLocaleString()}`;
     tooltip.hidden = false;
@@ -262,17 +274,46 @@ export function renderSparkline(
   snapshots: readonly Snapshot[],
   opts: { width: number; height: number; maxPoints: number; windowMs?: number; now?: number },
 ) {
-  const series = buildGraphSeries(snapshots, opts.windowMs ?? WINDOW_MS["24h"], opts.now ?? Date.now(), opts.width, opts.height, opts.maxPoints);
+  const series = buildGraphSeries(
+    snapshots,
+    opts.windowMs ?? WINDOW_MS["24h"],
+    opts.now ?? Date.now(),
+    opts.width,
+    opts.height,
+    opts.maxPoints,
+  );
   const points = series.segments.flatMap((segment) => [...segment.points]);
   if (!points.length) return null;
-  const svg = s("svg", { attrs: { viewBox: `0 0 ${opts.width} ${opts.height}`, preserveAspectRatio: "none", role: "img", "aria-label": "Steam player observations; gaps indicate missing data" } });
-  svg.appendChild(s("title", { text: "Player counts: green rises, red falls, cyan changes under 2% between plotted observations. Gaps mean missing data. Seasonal trend is shown separately in the badge." }));
+  const svg = s("svg", {
+    attrs: {
+      viewBox: `0 0 ${opts.width} ${opts.height}`,
+      preserveAspectRatio: "none",
+      role: "img",
+      "aria-label": "Steam player observations; gaps indicate missing data",
+    },
+  });
+  svg.appendChild(
+    s("title", {
+      text: "Player counts: green rises, red falls, cyan changes under 2% between plotted observations. Gaps mean missing data. Seasonal trend is shown separately in the badge.",
+    }),
+  );
   for (const segment of colorGraphSegments(series)) {
     if (segment.points.length === 1) {
       const point = segment.points[0]!;
       svg.appendChild(s("circle", { attrs: { cx: point.x, cy: point.y, r: 1.5, fill: segment.color } }));
     } else {
-      svg.appendChild(s("polyline", { attrs: { points: segment.points.map((point) => `${point.x},${point.y}`).join(" "), fill: "none", stroke: segment.color, "stroke-width": 1.8, "stroke-linejoin": "round", "stroke-linecap": "round" } }));
+      svg.appendChild(
+        s("polyline", {
+          attrs: {
+            points: segment.points.map((point) => `${point.x},${point.y}`).join(" "),
+            fill: "none",
+            stroke: segment.color,
+            "stroke-width": 1.8,
+            "stroke-linejoin": "round",
+            "stroke-linecap": "round",
+          },
+        }),
+      );
     }
   }
   return { svg, points, startTs: series.startTs, endTs: series.endTs, coverage: series.coverage };

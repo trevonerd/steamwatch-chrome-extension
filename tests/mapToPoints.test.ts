@@ -2,7 +2,7 @@
 // Tests for the shared SVG/Canvas coordinate mapper.
 // This function is the bridge between both renderers — its correctness
 // is load-bearing for both the sparkline SVG and the share canvas PNG.
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { mapToPoints } from "../src/utils/sparkline.js";
 
 // ── Guard conditions ──────────────────────────────────────────────────────────
@@ -108,7 +108,7 @@ describe("mapToPoints — dimension handling", () => {
     expect(pts[0]!.x).toBeCloseTo(0);
     expect(pts[1]!.x).toBeCloseTo(320);
     expect(pts[0]!.y).toBeCloseTo(64); // min → bottom
-    expect(pts[1]!.y).toBeCloseTo(0);  // max → top
+    expect(pts[1]!.y).toBeCloseTo(0); // max → top
   });
 
   it("works with very small dimensions", () => {

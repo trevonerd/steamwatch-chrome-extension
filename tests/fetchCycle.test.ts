@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  buildCachedData,
-  mergeCycleCache,
-} from "../src/background/fetchCycle.js";
+import { buildCachedData, mergeCycleCache } from "../src/background/fetchCycle.js";
 
 describe("buildCachedData", () => {
   it("preserves previous fallback fields when upstream data is missing", () => {

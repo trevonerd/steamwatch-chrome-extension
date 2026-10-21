@@ -25,13 +25,7 @@ export interface Game {
 export type SnapshotSource = "steam" | "steamcharts" | "games-popularity" | "legacy";
 
 /** Resolution of a persisted player-count value. */
-type SnapshotGranularity =
-  | "instant"
-  | "hourly"
-  | "monthly-peak"
-  | "daily"
-  | "weekly"
-  | "unknown";
+type SnapshotGranularity = "instant" | "hourly" | "monthly-peak" | "daily" | "weekly" | "unknown";
 
 const SnapshotSourceSchema = z.enum(["steam", "steamcharts", "games-popularity", "legacy"]);
 
@@ -40,14 +34,7 @@ export const GamesPopularityHistorySchema = z.object({
   history: z.array(z.object({ players: z.number().finite().nonnegative(), added: z.string() })).max(1000),
   nextCursor: z.string().nullable().optional(),
 });
-const SnapshotGranularitySchema = z.enum([
-  "instant",
-  "hourly",
-  "monthly-peak",
-  "daily",
-  "weekly",
-  "unknown",
-]);
+const SnapshotGranularitySchema = z.enum(["instant", "hourly", "monthly-peak", "daily", "weekly", "unknown"]);
 
 /** Statistics retained when multiple observations are compacted into one row. */
 export interface SnapshotAggregate {
@@ -62,23 +49,25 @@ export interface SnapshotAggregate {
   readonly observedDurationMs: number;
 }
 
-const SnapshotAggregateSchema = z.object({
-  startTs: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-  endTs: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-  sampleCount: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
-  sum: z.number().finite().nonnegative(),
-  min: z.number().finite().nonnegative(),
-  max: z.number().finite().nonnegative(),
-  minTs: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-  maxTs: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-  observedDurationMs: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-}).refine((aggregate) => aggregate.startTs <= aggregate.endTs, {
-  message: "aggregate start must not be after end",
-});
+const SnapshotAggregateSchema = z
+  .object({
+    startTs: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    endTs: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    sampleCount: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    sum: z.number().finite().nonnegative(),
+    min: z.number().finite().nonnegative(),
+    max: z.number().finite().nonnegative(),
+    minTs: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    maxTs: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    observedDurationMs: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  })
+  .refine((aggregate) => aggregate.startTs <= aggregate.endTs, {
+    message: "aggregate start must not be after end",
+  });
 
 /** A single player-count sample stored over time. */
 export interface Snapshot {
-  readonly ts: number;      // Unix ms timestamp
+  readonly ts: number; // Unix ms timestamp
   readonly current: number; // Concurrent players at this moment
   /** Absent only before a legacy row is normalized on read. */
   readonly source?: SnapshotSource;
@@ -153,31 +142,33 @@ export interface CachedData {
 }
 
 /** Validates cache entries restored from chrome.storage.local. */
-export const CachedDataSchema = z.object({
-  current: z.number().finite().nonnegative(),
-  peak: z.number().finite().nonnegative().optional(),
-  peak24h: z.number().finite().nonnegative().optional(),
-  allTimePeak: z.number().finite().nonnegative().optional(),
-  allTimePeakLabel: z.string().optional(),
-  localAllTimePeak: z.number().finite().nonnegative().optional(),
-  fetchedAt: z.number().finite().nonnegative(),
-  twitchViewers: z.number().finite().nonnegative().optional(),
-  freshness: MetricFreshnessSchema.catch({}).optional(),
-}).loose();
+export const CachedDataSchema = z
+  .object({
+    current: z.number().finite().nonnegative(),
+    peak: z.number().finite().nonnegative().optional(),
+    peak24h: z.number().finite().nonnegative().optional(),
+    allTimePeak: z.number().finite().nonnegative().optional(),
+    allTimePeakLabel: z.string().optional(),
+    localAllTimePeak: z.number().finite().nonnegative().optional(),
+    fetchedAt: z.number().finite().nonnegative(),
+    twitchViewers: z.number().finite().nonnegative().optional(),
+    freshness: MetricFreshnessSchema.catch({}).optional(),
+  })
+  .loose();
 
 // ── Settings ─────────────────────────────────────────────────────────────────
 
 export interface Settings {
   notificationsEnabled: boolean;
-  globalThresholdUp: number;    // positive %, e.g. 30
-  globalThresholdDown: number;  // negative %, e.g. -25
+  globalThresholdUp: number; // positive %, e.g. 30
+  globalThresholdDown: number; // negative %, e.g. -25
   // Quiet hours
   quietHoursEnabled: boolean;
-  quietStart: string;           // "HH:MM" 24h local time, e.g. "23:00"
-  quietEnd: string;             // "HH:MM" 24h local time, e.g. "07:00"
-  quietDays: QuietDaysMask;     // bitmask; 0b1111111 = every day
+  quietStart: string; // "HH:MM" 24h local time, e.g. "23:00"
+  quietEnd: string; // "HH:MM" 24h local time, e.g. "07:00"
+  quietDays: QuietDaysMask; // bitmask; 0b1111111 = every day
   // Badge favorite
-  badgeFavoriteAppid?: string;  // appid of the game whose count shows on the badge
+  badgeFavoriteAppid?: string; // appid of the game whose count shows on the badge
 }
 
 /** Per-game overrides. Undefined fields fall back to global Settings. */
@@ -190,37 +181,35 @@ export interface GameSettings {
 }
 
 /** Validates individual per-game notification overrides from local storage. */
-export const GameSettingsSchema = z.object({
-  thresholdUp: z.number().finite().positive().optional(),
-  thresholdDown: z.number().finite().negative().optional(),
-  notifyThresholdPlayers: z.number().finite().nonnegative().optional(),
-  notifyBelowPlayers: z.number().finite().nonnegative().optional(),
-  notificationsEnabled: z.boolean().optional(),
-}).strip();
+export const GameSettingsSchema = z
+  .object({
+    thresholdUp: z.number().finite().positive().optional(),
+    thresholdDown: z.number().finite().negative().optional(),
+    notifyThresholdPlayers: z.number().finite().nonnegative().optional(),
+    notifyBelowPlayers: z.number().finite().nonnegative().optional(),
+    notificationsEnabled: z.boolean().optional(),
+  })
+  .strip();
 
 const QuietTimeSchema = z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/);
 
 /** Parses stored global settings field by field during controlled recovery. */
-export const SettingsSchema = z.object({
-  notificationsEnabled: z.boolean().optional(),
-  globalThresholdUp: z.number().finite().optional(),
-  globalThresholdDown: z.number().finite().optional(),
-  quietHoursEnabled: z.boolean().optional(),
-  quietStart: QuietTimeSchema.optional(),
-  quietEnd: QuietTimeSchema.optional(),
-  quietDays: z.number().int().optional(),
-  badgeFavoriteAppid: z.string().min(1).optional(),
-}).strip();
+export const SettingsSchema = z
+  .object({
+    notificationsEnabled: z.boolean().optional(),
+    globalThresholdUp: z.number().finite().optional(),
+    globalThresholdDown: z.number().finite().optional(),
+    quietHoursEnabled: z.boolean().optional(),
+    quietStart: QuietTimeSchema.optional(),
+    quietEnd: QuietTimeSchema.optional(),
+    quietDays: z.number().int().optional(),
+    badgeFavoriteAppid: z.string().min(1).optional(),
+  })
+  .strip();
 
 // ── Trend ────────────────────────────────────────────────────────────────────
 
-type TrendKey =
-  | "EXPLOSION"
-  | "STRONG_UP"
-  | "UP"
-  | "STABLE"
-  | "DOWN"
-  | "STRONG_DOWN";
+type TrendKey = "EXPLOSION" | "STRONG_UP" | "UP" | "STABLE" | "DOWN" | "STRONG_DOWN";
 
 export interface TrendLevel {
   readonly key: TrendKey;
@@ -233,7 +222,7 @@ export interface TrendLevel {
 
 export interface TrendResult {
   readonly level: TrendLevel;
-  readonly pct: number;   // rounded to 1 decimal
+  readonly pct: number; // rounded to 1 decimal
   readonly delta: number; // absolute player count delta
   readonly sustained?: boolean;
 }
@@ -256,14 +245,19 @@ export const MessageResponseSchema = z.object({
 
 // ── API data ──────────────────────────────────────────────────────────────────
 
-export const AppDetailsSchema = z.record(z.string(), z.object({
-  success: z.boolean(),
-  data: z.object({
-    name: z.string(),
-    header_image: z.string().optional(),
-    capsule_image: z.string().optional(),
-  }).optional(),
-}));
+export const AppDetailsSchema = z.record(
+  z.string(),
+  z.object({
+    success: z.boolean(),
+    data: z
+      .object({
+        name: z.string(),
+        header_image: z.string().optional(),
+        capsule_image: z.string().optional(),
+      })
+      .optional(),
+  }),
+);
 
 export interface SearchResult {
   readonly appid: string;
@@ -352,12 +346,16 @@ export const PlayerCountSchema = z.object({
 });
 
 export const StoreSearchSchema = z.object({
-  items: z.array(z.object({
-    id: z.number(),
-    name: z.string(),
-    tiny_image: z.string().optional(),
-    small_capsule_image: z.string().optional(),
-  })).default([]),
+  items: z
+    .array(
+      z.object({
+        id: z.number(),
+        name: z.string(),
+        tiny_image: z.string().optional(),
+        small_capsule_image: z.string().optional(),
+      }),
+    )
+    .default([]),
 });
 
 export const SteamSpySchema = z.object({
@@ -365,11 +363,15 @@ export const SteamSpySchema = z.object({
   name: z.string().default(""),
 });
 
-export const TwitchGqlSchema = z.array(z.object({
-  data: z.object({
-    game: z.object({ viewersCount: z.number().int().nonnegative() }).nullable(),
-  }).optional(),
-}));
+export const TwitchGqlSchema = z.array(
+  z.object({
+    data: z
+      .object({
+        game: z.object({ viewersCount: z.number().int().nonnegative() }).nullable(),
+      })
+      .optional(),
+  }),
+);
 
 interface WeeklyComparison {
   readonly startTs: number;
@@ -401,5 +403,11 @@ export interface EarlyActivity {
 }
 
 export type SeasonalTrendAnalysis =
-  | { readonly status: "ready"; readonly trend: TrendResult; readonly coverage: number; readonly reason: string; readonly comparison?: WeeklyComparison }
+  | {
+      readonly status: "ready";
+      readonly trend: TrendResult;
+      readonly coverage: number;
+      readonly reason: string;
+      readonly comparison?: WeeklyComparison;
+    }
   | { readonly status: "insufficient" | "stale" | "low-baseline"; readonly coverage: number; readonly reason: string };

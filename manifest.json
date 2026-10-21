@@ -6,12 +6,7 @@
   "version_name": "2.0.0-beta.14",
   "description": "Track Steam games with live player counts, local trend history, Twitch viewers, and alerts.",
   "author": "trevonerd / TREVISOFT",
-  "permissions": [
-    "storage",
-    "alarms",
-    "notifications",
-    "unlimitedStorage"
-  ],
+  "permissions": ["storage", "alarms", "notifications", "unlimitedStorage"],
   "host_permissions": [
     "https://api.steampowered.com/*",
     "https://store.steampowered.com/*",

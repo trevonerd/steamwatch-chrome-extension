@@ -1,7 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { analyzeSeasonalTrend, compute24hAvg, compute24hAvgFromHourly, computeLatestChangePct, computeLatestChangePctFromHourly, computeLocalPeak, computeRetentionAvg, computeRetentionAvgFromHourly, computeTrend, computeWindowMin, fmtBadge, fmtNumber, fmtPct, fmtTimeAgo } from "../src/utils/trend.js";
 import type { Snapshot } from "../src/types/index.js";
 import { normalizeHourly } from "../src/utils/series.js";
+import {
+  analyzeSeasonalTrend,
+  compute24hAvg,
+  compute24hAvgFromHourly,
+  computeLatestChangePct,
+  computeLatestChangePctFromHourly,
+  computeLocalPeak,
+  computeRetentionAvg,
+  computeRetentionAvgFromHourly,
+  computeTrend,
+  computeWindowMin,
+  fmtBadge,
+  fmtNumber,
+  fmtPct,
+  fmtTimeAgo,
+} from "../src/utils/trend.js";
 
 const NOW = Date.UTC(2026, 0, 31, 12);
 const HOUR = 3_600_000;
@@ -11,29 +26,58 @@ function history(recent: (hour: number) => number): Snapshot[] {
   return Array.from({ length: 35 * 24 }, (_, index) => {
     const ts = end - (35 * 24 - index) * HOUR;
     const base = 100 + (new Date(ts).getUTCDay() >= 5 ? 40 : 0);
-    return { ts, current: ts >= end - 7 * 24 * HOUR ? recent(base) : base, source: "steamcharts", granularity: "hourly" };
+    return {
+      ts,
+      current: ts >= end - 7 * 24 * HOUR ? recent(base) : base,
+      source: "steamcharts",
+      granularity: "hourly",
+    };
   });
 }
 
 describe("seasonal trend", () => {
   it("keeps a weekday/weekend seasonal pattern stable", () => {
-    expect(computeTrend(history((base) => base), NOW)?.level.key).toBe("STABLE");
+    expect(
+      computeTrend(
+        history((base) => base),
+        NOW,
+      )?.level.key,
+    ).toBe("STABLE");
   });
 
   it("detects a sustained 20 percent loss", () => {
-    expect(computeTrend(history((base) => base * 0.8), NOW)?.pct).toBe(-20);
+    expect(
+      computeTrend(
+        history((base) => base * 0.8),
+        NOW,
+      )?.pct,
+    ).toBe(-20);
   });
 
   it("does not treat a one-day event as a permanent trend", () => {
     const snapshots = history((base) => base);
     const eventStart = NOW - 2 * 24 * HOUR;
-    const event = snapshots.map((snapshot) => snapshot.ts >= eventStart && snapshot.ts < eventStart + 24 * HOUR ? { ...snapshot, current: snapshot.current * 4 } : snapshot);
+    const event = snapshots.map((snapshot) =>
+      snapshot.ts >= eventStart && snapshot.ts < eventStart + 24 * HOUR
+        ? { ...snapshot, current: snapshot.current * 4 }
+        : snapshot,
+    );
     expect(computeTrend(event, NOW)?.level.key).toBe("STABLE");
   });
 
   it("returns low-baseline for small populations and accepts a zero recent value", () => {
-    expect(analyzeSeasonalTrend(history(() => 0).map((snapshot) => ({ ...snapshot, current: snapshot.current / 20 })), NOW).status).toBe("low-baseline");
-    expect(computeTrend(history(() => 0), NOW)?.pct).toBe(-100);
+    expect(
+      analyzeSeasonalTrend(
+        history(() => 0).map((snapshot) => ({ ...snapshot, current: snapshot.current / 20 })),
+        NOW,
+      ).status,
+    ).toBe("low-baseline");
+    expect(
+      computeTrend(
+        history(() => 0),
+        NOW,
+      )?.pct,
+    ).toBe(-100);
   });
 
   it("reports stale and incomplete source data without a fallback trend", () => {
@@ -56,16 +100,28 @@ describe("coverage-bound metrics", () => {
     expect(compute24hAvg(history((base) => base).slice(-24), NOW)).toBe(140);
     expect(compute24hAvg([{ ts: NOW - HOUR, current: 100, source: "legacy", granularity: "unknown" }], NOW)).toBeNull();
     expect(computeWindowMin([{ ts: NOW, current: 1, source: "steamcharts", granularity: "monthly-peak" }])).toBeNull();
-    expect(computeLocalPeak([{ ts: NOW, current: 999, source: "steamcharts", granularity: "monthly-peak" }])).toBeNull();
+    expect(
+      computeLocalPeak([{ ts: NOW, current: 999, source: "steamcharts", granularity: "monthly-peak" }]),
+    ).toBeNull();
     expect(computeWindowMin([{ ts: NOW, current: 1 }])).toBeNull();
   });
 
   it("rejects windows with stale endpoints, gaps, and non-adjacent latest changes", () => {
     const sparse = history((base) => base).slice(-20);
     expect(compute24hAvg(sparse, NOW)).toBeNull();
-    const gapped = history((base) => base).slice(-24).filter((_, index) => index < 10 || index > 12);
+    const gapped = history((base) => base)
+      .slice(-24)
+      .filter((_, index) => index < 10 || index > 12);
     expect(compute24hAvg(gapped, NOW)).toBeNull();
-    expect(computeLatestChangePct([{ ts: NOW - 4 * HOUR, current: 100, source: "steamcharts", granularity: "hourly" }, { ts: NOW - HOUR, current: 110, source: "steamcharts", granularity: "hourly" }], NOW)).toBeNull();
+    expect(
+      computeLatestChangePct(
+        [
+          { ts: NOW - 4 * HOUR, current: 100, source: "steamcharts", granularity: "hourly" },
+          { ts: NOW - HOUR, current: 110, source: "steamcharts", granularity: "hourly" },
+        ],
+        NOW,
+      ),
+    ).toBeNull();
   });
 });
 
@@ -89,7 +145,12 @@ describe("formatting regressions", () => {
 describe("computeLatestChangePct completed hours", () => {
   it("ignores the hour still in progress", () => {
     const now = Date.UTC(2026, 8, 11, 12, 30);
-    const at = (h: number, current: number) => ({ ts: Date.UTC(2026, 8, 11, h), current, source: "steamcharts" as const, granularity: "hourly" as const });
+    const at = (h: number, current: number) => ({
+      ts: Date.UTC(2026, 8, 11, h),
+      current,
+      source: "steamcharts" as const,
+      granularity: "hourly" as const,
+    });
     expect(computeLatestChangePct([at(10, 100), at(11, 110), at(12, 10)], now)).toBe(10);
   });
 });

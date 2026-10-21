@@ -1,11 +1,18 @@
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { refreshHistory } from "../src/background/historyBootstrap.js";
-import { _resetDbForTesting, idbClearAllData, idbGetBootstrapStatus, idbGetSnapshots } from "../src/utils/idb-storage.js";
+import {
+  _resetDbForTesting,
+  idbClearAllData,
+  idbGetBootstrapStatus,
+  idbGetSnapshots,
+} from "../src/utils/idb-storage.js";
 import { buildAvailableGraphWindows, hasEnoughGraphHistory } from "../src/utils/sparkline.js";
 
 // Public SteamCharts response for app 242050, recorded 2026-09-11.
-const response: unknown = JSON.parse(readFileSync(new URL("./fixtures/black-flag-history.json", import.meta.url), "utf8"));
+const response: unknown = JSON.parse(
+  readFileSync(new URL("./fixtures/black-flag-history.json", import.meta.url), "utf8"),
+);
 const now = Date.UTC(2026, 8, 11, 9, 50);
 
 beforeEach(async () => {

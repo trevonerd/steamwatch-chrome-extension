@@ -22,7 +22,10 @@ beforeEach(() => {
   vi.stubGlobal("chrome", { storage: { local: { set: mocks.storageSet } } });
   mocks.acquireLease.mockResolvedValue({ appId: "1", token: "lease", expiresAt: 1, attempt: 1 });
   mocks.completeImport.mockResolvedValue(true);
-  mocks.fetchBootstrap.mockResolvedValue({ status: "ok", value: [{ ts: 1, current: 50, source: "steamcharts", granularity: "hourly" }] });
+  mocks.fetchBootstrap.mockResolvedValue({
+    status: "ok",
+    value: [{ ts: 1, current: 50, source: "steamcharts", granularity: "hourly" }],
+  });
   mocks.storageSet.mockResolvedValue(undefined);
 });
 

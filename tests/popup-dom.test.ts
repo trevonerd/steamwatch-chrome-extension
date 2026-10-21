@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   bindGlobalShareBarClose,
   closeOpenShareBars,
@@ -16,7 +16,8 @@ const mockUpdateGameImage = vi.fn();
 
 vi.mock("../src/utils/api.js", () => ({
   fetchAppDetails: (appid: string) => mockFetchAppDetails(appid),
-  STEAM_CAPSULE_URL: (appid: string) => `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appid}/header.jpg`,
+  STEAM_CAPSULE_URL: (appid: string) =>
+    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appid}/header.jpg`,
 }));
 
 vi.mock("../src/utils/storage.js", () => ({
@@ -207,9 +208,8 @@ describe("sparkline container styling", () => {
 
     const panelSparklineMatch = cssContent.match(/\.panel-sparkline\s*\{[^}]*\}/gs);
 
-    const hasOverflowHidden = panelSparklineMatch?.some((rule) =>
-      rule.includes("overflow:") && rule.includes("hidden")
-    ) ?? false;
+    const hasOverflowHidden =
+      panelSparklineMatch?.some((rule) => rule.includes("overflow:") && rule.includes("hidden")) ?? false;
 
     expect(hasOverflowHidden).toBe(false);
   });

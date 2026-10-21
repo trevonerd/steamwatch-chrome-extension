@@ -9,7 +9,10 @@ export interface HourlyPoint {
   readonly source: "steam" | "steamcharts" | "games-popularity";
 }
 
-export function normalizeHourly(snapshots: readonly Snapshot[], now = Number.POSITIVE_INFINITY): readonly HourlyPoint[] {
+export function normalizeHourly(
+  snapshots: readonly Snapshot[],
+  now = Number.POSITIVE_INFINITY,
+): readonly HourlyPoint[] {
   const groups = new Map<number, Snapshot[]>();
   for (const snapshot of snapshots) {
     if (snapshot.ts > now || !isQualifiedSnapshot(snapshot)) continue;
@@ -18,7 +21,9 @@ export function normalizeHourly(snapshots: readonly Snapshot[], now = Number.POS
     group.push(snapshot);
     groups.set(hour, group);
   }
-  return [...groups.entries()].sort(([left], [right]) => left - right).flatMap(([hour, samples]) => selectHour(hour, samples));
+  return [...groups.entries()]
+    .sort(([left], [right]) => left - right)
+    .flatMap(([hour, samples]) => selectHour(hour, samples));
 }
 
 export function hourlyCoverage(points: readonly HourlyPoint[], start: number, end: number): number {
@@ -29,20 +34,30 @@ export function hourlyCoverage(points: readonly HourlyPoint[], start: number, en
 }
 
 export function isQualifiedSnapshot(snapshot: Snapshot): boolean {
-  return (snapshot.source === "steam" && snapshot.granularity === "instant")
-    || ((snapshot.source === "steamcharts" || snapshot.source === "games-popularity") && snapshot.granularity === "hourly");
+  return (
+    (snapshot.source === "steam" && snapshot.granularity === "instant") ||
+    ((snapshot.source === "steamcharts" || snapshot.source === "games-popularity") && snapshot.granularity === "hourly")
+  );
 }
 
 function selectHour(hour: number, samples: readonly Snapshot[]): readonly HourlyPoint[] {
   const steam = samples.filter((sample) => sample.source === "steam" && sample.granularity === "instant");
   if (steam.length > 0 && hasLocalSupport(steam)) {
-    return [{ hour, value: median(steam.map((sample) => sample.current)), observedAt: Math.max(...steam.map((sample) => sample.ts)), source: "steam" }];
+    return [
+      {
+        hour,
+        value: median(steam.map((sample) => sample.current)),
+        observedAt: Math.max(...steam.map((sample) => sample.ts)),
+        source: "steam",
+      },
+    ];
   }
   const source = samples.some((sample) => sample.source === "steamcharts" && sample.granularity === "hourly")
-    ? "steamcharts" : "games-popularity";
+    ? "steamcharts"
+    : "games-popularity";
   const charts = samples.filter((sample) => sample.source === source && sample.granularity === "hourly");
   if (charts.length === 0) return [];
-  const latest = charts.reduce((current, sample) => sample.ts > current.ts ? sample : current);
+  const latest = charts.reduce((current, sample) => (sample.ts > current.ts ? sample : current));
   return [{ hour, value: latest.current, observedAt: latest.ts, source }];
 }
 
@@ -52,14 +67,14 @@ function hasLocalSupport(samples: readonly Snapshot[]): boolean {
   const first = ordered[0]?.ts ?? 0;
   const last = ordered.at(-1)?.ts ?? 0;
   if (last - first < 45 * 60_000) return false;
-  return ordered.every((sample, index) => index === 0 || sample.ts - (ordered[index - 1]?.ts ?? sample.ts) <= 15 * 60_000);
+  return ordered.every(
+    (sample, index) => index === 0 || sample.ts - (ordered[index - 1]?.ts ?? sample.ts) <= 15 * 60_000,
+  );
 }
 
 function median(values: readonly number[]): number {
   const ordered = [...values].sort((left, right) => left - right);
   const middle = Math.floor(ordered.length / 2);
   if (ordered.length === 0) return 0;
-  return ordered.length % 2 === 0
-    ? ((ordered[middle - 1] ?? 0) + (ordered[middle] ?? 0)) / 2
-    : ordered[middle] ?? 0;
+  return ordered.length % 2 === 0 ? ((ordered[middle - 1] ?? 0) + (ordered[middle] ?? 0)) / 2 : (ordered[middle] ?? 0);
 }

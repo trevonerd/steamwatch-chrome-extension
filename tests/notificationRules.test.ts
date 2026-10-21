@@ -11,8 +11,19 @@ function stateOrThrow(state: ReturnType<typeof evaluateRule>["state"]) {
 
 describe("evaluateRule", () => {
   it("reprimes pending alerts from the previous trend algorithm", () => {
-    const result = evaluateRule({ key: "trendDown", threshold: -20, value: -25, now: 500000,
-      previous: { fingerprint: "trendDown:-20", lastValue: -46, lastObservedAt: 400000, armed: true, observations: 3, pendingId: "old-alert" },
+    const result = evaluateRule({
+      key: "trendDown",
+      threshold: -20,
+      value: -25,
+      now: 500000,
+      previous: {
+        fingerprint: "trendDown:-20",
+        lastValue: -46,
+        lastObservedAt: 400000,
+        armed: true,
+        observations: 3,
+        pendingId: "old-alert",
+      },
     });
     expect(result.eventId).toBeUndefined();
     expect(result.state?.fingerprint).toBe("trendDown:weekly-v2:-20");
@@ -30,10 +41,25 @@ describe("evaluateRule", () => {
 
   it("uses inverse crossing and hysteresis for below rules", () => {
     const initial = evaluateRule({ key: "below", threshold: 100, value: 110, now: 0 });
-    const crossing = evaluateRule({ key: "below", threshold: 100, value: 100, now: 60_000, previous: stateOrThrow(initial.state) });
-    const ready = evaluateRule({ key: "below", threshold: 100, value: 90, now: 360_000, previous: stateOrThrow(crossing.state) });
+    const crossing = evaluateRule({
+      key: "below",
+      threshold: 100,
+      value: 100,
+      now: 60_000,
+      previous: stateOrThrow(initial.state),
+    });
+    const ready = evaluateRule({
+      key: "below",
+      threshold: 100,
+      value: 90,
+      now: 360_000,
+      previous: stateOrThrow(crossing.state),
+    });
     expect(ready.eventId).toBe("below_60000");
-    expect(evaluateRule({ key: "below", threshold: 100, value: 101, now: 420_000, previous: stateOrThrow(ready.state) }).state?.armed).toBe(true);
+    expect(
+      evaluateRule({ key: "below", threshold: 100, value: 101, now: 420_000, previous: stateOrThrow(ready.state) })
+        .state?.armed,
+    ).toBe(true);
   });
 
   it("ignores missing, duplicate, stale-gap, and threshold-changed observations", () => {
@@ -43,7 +69,10 @@ describe("evaluateRule", () => {
     const crossing = step(100, 60_000, initial.state);
     const gap = step(110, 1_000_000, crossing.state);
     expect(gap.eventId).toBeUndefined();
-    expect(evaluateRule({ key: "above", threshold: 200, value: 210, now: 1_060_000, previous: stateOrThrow(gap.state) }).eventId).toBeUndefined();
+    expect(
+      evaluateRule({ key: "above", threshold: 200, value: 210, now: 1_060_000, previous: stateOrThrow(gap.state) })
+        .eventId,
+    ).toBeUndefined();
   });
 
   it("does not repeat after acknowledgement until hysteresis recovery", () => {

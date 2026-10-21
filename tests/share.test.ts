@@ -1,14 +1,14 @@
 // tests/share.test.ts
-import { describe, it, expect } from "vitest";
-import { buildShareGraphSeries, buildShareText } from "../src/utils/share.js";
-import type { CardViewModel, Game, CachedData, Snapshot } from "../src/types/index.js";
+import { describe, expect, it } from "vitest";
+import type { CachedData, CardViewModel, Game, Snapshot } from "../src/types/index.js";
 import { buildCardViewModel } from "../src/utils/card.js";
+import { buildShareGraphSeries, buildShareText } from "../src/utils/share.js";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
 const game: Game = {
   appid: "1245620",
-  name:  "Elden Ring",
+  name: "Elden Ring",
   image: "https://cdn.akamai.steamstatic.com/steam/apps/1245620/capsule_sm_120.jpg",
 };
 
@@ -22,8 +22,11 @@ function makeSnaps(values: number[], intervalMs = 60 * 60_000): Snapshot[] {
   }));
 }
 
-function makeVM(overrides: Partial<{ snaps: Snapshot[]; allTimePeak: number; peak24h: number; fetchedAt: number }>): CardViewModel {
-  const snaps = overrides.snaps ?? makeSnaps([30000,31000,32000,33000,34000,35000,36000,37000,38000,39000,40000,41000]);
+function makeVM(
+  overrides: Partial<{ snaps: Snapshot[]; allTimePeak: number; peak24h: number; fetchedAt: number }>,
+): CardViewModel {
+  const snaps =
+    overrides.snaps ?? makeSnaps([30000, 31000, 32000, 33000, 34000, 35000, 36000, 37000, 38000, 39000, 40000, 41000]);
   const fetchedAt = overrides.fetchedAt ?? Date.now() - 60_000;
   const allTimePeak = overrides.allTimePeak ?? 953_271;
   const peak24h = overrides.peak24h ?? 40_000;
@@ -34,7 +37,9 @@ function makeVM(overrides: Partial<{ snaps: Snapshot[]; allTimePeak: number; pea
       allTimePeak,
       allTimePeakLabel: "2 months ago",
       fetchedAt,
-      freshness: { allTimePeak: { source: "steamcharts", status: "ok", acquiredAt: fetchedAt, attemptedAt: fetchedAt } },
+      freshness: {
+        allTimePeak: { source: "steamcharts", status: "ok", acquiredAt: fetchedAt, attemptedAt: fetchedAt },
+      },
     },
   };
   return buildCardViewModel(game, cache, snaps, 7);
@@ -85,7 +90,7 @@ describe("buildShareText — structure", () => {
 describe("buildShareText — players", () => {
   it("includes the current player count", () => {
     const text = buildShareText(makeVM({}));
-    expect(text).toContain("35");   // formatted as "35k"
+    expect(text).toContain("35"); // formatted as "35k"
   });
 
   it("includes the all-time peak count", () => {
@@ -164,7 +169,9 @@ describe("buildShareText — edge cases", () => {
         peak24h: 200,
         allTimePeak: 1000,
         fetchedAt: now,
-        freshness: { allTimePeak: { source: "steamcharts" as const, status: "ok" as const, acquiredAt: now, attemptedAt: now } },
+        freshness: {
+          allTimePeak: { source: "steamcharts" as const, status: "ok" as const, acquiredAt: now, attemptedAt: now },
+        },
       },
     };
     const vm = buildCardViewModel(specialGame, cache, makeSnaps([100, 200, 300]), 7);
@@ -180,15 +187,21 @@ describe("buildShareText — edge cases", () => {
 
   it("labels provider ATH and observed peak separately, including zero values", () => {
     const now = Date.now();
-    const vm = buildCardViewModel(game, {
-      [game.appid]: {
-        current: 0,
-        peak24h: 0,
-        allTimePeak: 0,
-        fetchedAt: now,
-        freshness: { allTimePeak: { source: "steamcharts", status: "ok", acquiredAt: now, attemptedAt: now } },
+    const vm = buildCardViewModel(
+      game,
+      {
+        [game.appid]: {
+          current: 0,
+          peak24h: 0,
+          allTimePeak: 0,
+          fetchedAt: now,
+          freshness: { allTimePeak: { source: "steamcharts", status: "ok", acquiredAt: now, attemptedAt: now } },
+        },
       },
-    }, makeSnaps([0, 0]), 7, now);
+      makeSnaps([0, 0]),
+      7,
+      now,
+    );
     const text = buildShareText(vm);
     expect(text).toContain("24h peak: 0");
     expect(text).toContain("Provider ATH: 0");
@@ -199,16 +212,24 @@ describe("buildShareText — edge cases", () => {
 describe("buildShareGraphSeries", () => {
   it("uses only qualified 24-hour observations and preserves gaps as segments", () => {
     const now = 1_700_000_000_000;
-    const series = buildShareGraphSeries({
-      snaps: [
-        { ts: now - 23 * 60 * 60_000, current: 10, source: "legacy", granularity: "unknown" },
-        { ts: now - 8 * 60 * 60_000, current: 20, source: "steamcharts", granularity: "hourly" },
-        { ts: now - 7 * 60 * 60_000, current: 30, source: "steamcharts", granularity: "hourly" },
-        { ts: now - 3 * 60 * 60_000, current: 40, source: "steamcharts", granularity: "hourly" },
-        { ts: now - 2 * 60 * 60_000, current: 50, source: "steamcharts", granularity: "hourly" },
-      ],
-    }, now, 340, 36);
+    const series = buildShareGraphSeries(
+      {
+        snaps: [
+          { ts: now - 23 * 60 * 60_000, current: 10, source: "legacy", granularity: "unknown" },
+          { ts: now - 8 * 60 * 60_000, current: 20, source: "steamcharts", granularity: "hourly" },
+          { ts: now - 7 * 60 * 60_000, current: 30, source: "steamcharts", granularity: "hourly" },
+          { ts: now - 3 * 60 * 60_000, current: 40, source: "steamcharts", granularity: "hourly" },
+          { ts: now - 2 * 60 * 60_000, current: 50, source: "steamcharts", granularity: "hourly" },
+        ],
+      },
+      now,
+      340,
+      36,
+    );
     expect(series.segments).toHaveLength(2);
-    expect(series.segments.map((segment) => segment.points.map((point) => point.current))).toEqual([[20, 30], [40, 50]]);
+    expect(series.segments.map((segment) => segment.points.map((point) => point.current))).toEqual([
+      [20, 30],
+      [40, 50],
+    ]);
   });
 });

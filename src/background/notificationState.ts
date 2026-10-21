@@ -27,13 +27,16 @@ export async function getNotificationState(appid: string): Promise<NotificationS
   const state: NotificationState = {};
   for (const key of ["above", "below", "trendUp", "trendDown"] as const) {
     const value = parsed.data[key];
-    if (value) state[key] = {
-      fingerprint: value.fingerprint, lastValue: value.lastValue,
-      lastObservedAt: value.lastObservedAt, armed: value.armed,
-      observations: value.observations,
-      ...(value.crossedAt !== undefined ? { crossedAt: value.crossedAt } : {}),
-      ...(value.pendingId !== undefined ? { pendingId: value.pendingId } : {}),
-    };
+    if (value)
+      state[key] = {
+        fingerprint: value.fingerprint,
+        lastValue: value.lastValue,
+        lastObservedAt: value.lastObservedAt,
+        armed: value.armed,
+        observations: value.observations,
+        ...(value.crossedAt !== undefined ? { crossedAt: value.crossedAt } : {}),
+        ...(value.pendingId !== undefined ? { pendingId: value.pendingId } : {}),
+      };
   }
   return state;
 }
@@ -47,13 +50,20 @@ export async function withNotificationState(
   appid: string,
   operation: (state: NotificationState, save: (next: NotificationState) => Promise<void>) => Promise<void>,
 ): Promise<void> {
-  const run = async (): Promise<void> => operation(await getNotificationState(appid), (next) => setNotificationState(appid, next));
+  const run = async (): Promise<void> =>
+    operation(await getNotificationState(appid), (next) => setNotificationState(appid, next));
   const previous = operations.get(appid) ?? Promise.resolve();
   const pending = previous.then(run, run);
   operations.set(appid, pending);
-  try { await pending; } finally { if (operations.get(appid) === pending) operations.delete(appid); }
+  try {
+    await pending;
+  } finally {
+    if (operations.get(appid) === pending) operations.delete(appid);
+  }
 }
 
 export async function deleteNotificationState(appid: string): Promise<void> {
-  await withNotificationState(appid, async () => { await chrome.storage.local.remove(`${PREFIX}${appid}`); });
+  await withNotificationState(appid, async () => {
+    await chrome.storage.local.remove(`${PREFIX}${appid}`);
+  });
 }
