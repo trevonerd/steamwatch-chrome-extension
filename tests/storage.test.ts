@@ -99,7 +99,7 @@ describe("getGames", () => {
 
     // Then
     expect(games).toEqual([valid]);
-    expect((await chrome.storage.local.get("sw_games"))["sw_games"]).toEqual([valid]);
+    expect((await chrome.storage.local.get("sw_games")).sw_games).toEqual([valid]);
   });
 
   it.each([null, "not an array", { appid: "1" }])(
@@ -113,7 +113,7 @@ describe("getGames", () => {
 
       // Then
       expect(games).toEqual([]);
-      expect((await chrome.storage.local.get("sw_games"))["sw_games"]).toEqual([]);
+      expect((await chrome.storage.local.get("sw_games")).sw_games).toEqual([]);
     },
   );
 });
@@ -200,7 +200,7 @@ describe("removeGame", () => {
 
     const stored = await chrome.storage.local.get(["sw_snaps_1", "sw_settings"]);
     expect(stored.sw_snaps_1).toBeUndefined();
-    expect((stored.sw_settings as Record<string, unknown>)["badgeFavoriteAppid"]).toBeUndefined();
+    expect((stored.sw_settings as Record<string, unknown>).badgeFavoriteAppid).toBeUndefined();
   });
 
   it("keeps cleanup durable after a failed deletion and reconciles it on the next read", async () => {
@@ -349,10 +349,10 @@ describe("saveSettings", () => {
     expect(s.notificationsEnabled).toBe(false);
 
     const stored = await chrome.storage.local.get("sw_settings");
-    expect(stored["sw_settings"]).not.toHaveProperty(legacyTrendKey);
-    expect(stored["sw_settings"]).not.toHaveProperty(legacyRetentionKey);
-    expect(stored["sw_settings"]).not.toHaveProperty(legacyIntervalKey);
-    expect(stored["sw_settings"]).not.toHaveProperty(legacyRankKey);
+    expect(stored.sw_settings).not.toHaveProperty(legacyTrendKey);
+    expect(stored.sw_settings).not.toHaveProperty(legacyRetentionKey);
+    expect(stored.sw_settings).not.toHaveProperty(legacyIntervalKey);
+    expect(stored.sw_settings).not.toHaveProperty(legacyRankKey);
   });
 
   it("clamps global notification thresholds", async () => {
@@ -438,7 +438,7 @@ describe("getGameSettings / saveGameSettings", () => {
 
       // Then
       expect(settings).toEqual({});
-      expect((await chrome.storage.local.get("sw_gs_1"))["sw_gs_1"]).toEqual({});
+      expect((await chrome.storage.local.get("sw_gs_1")).sw_gs_1).toEqual({});
     },
   );
 });
@@ -483,7 +483,7 @@ describe("getCache / setCache", () => {
     // Then
     expect(cache["1"]).toMatchObject(valid);
     expect(cache["2"]).toBeUndefined();
-    expect((await chrome.storage.local.get("sw_cache"))["sw_cache"]).toEqual({ "1": valid });
+    expect((await chrome.storage.local.get("sw_cache")).sw_cache).toEqual({ "1": valid });
   });
 
   it("drops a cache entry whose legacy peak is malformed", async () => {
@@ -497,7 +497,7 @@ describe("getCache / setCache", () => {
 
     // Then
     expect(cache["1"]).toBeUndefined();
-    expect((await chrome.storage.local.get("sw_cache"))["sw_cache"]).toEqual({});
+    expect((await chrome.storage.local.get("sw_cache")).sw_cache).toEqual({});
   });
 
   it.each([null, "not an object", []])("recovers from an invalid top-level cache container: %p", async (raw) => {
@@ -509,7 +509,7 @@ describe("getCache / setCache", () => {
 
     // Then
     expect(cache).toEqual({});
-    expect((await chrome.storage.local.get("sw_cache"))["sw_cache"]).toEqual({});
+    expect((await chrome.storage.local.get("sw_cache")).sw_cache).toEqual({});
   });
 
   it("does not rewrite already normalized storage values", async () => {

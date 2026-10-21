@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { RefreshCoordinatorDependencies } from "../src/background/refreshCoordinator.js";
 import { RefreshCoordinator } from "../src/background/refreshCoordinator.js";
-import type { CachedData, Game, Settings } from "../src/types/index.js";
+import type { CachedData, Game, GameSettings, Settings } from "../src/types/index.js";
 
 const game: Game = { appid: "1", name: "Test Game", image: "https://example.test/1.jpg" };
 const settings: Settings = {
@@ -32,7 +32,7 @@ function makeDependencies(overrides: Partial<RefreshCoordinatorDependencies> = {
   return {
     getGames: vi.fn<(...args: []) => Promise<Game[]>>().mockResolvedValue([game]),
     getSettings: vi.fn<(...args: []) => Promise<Settings>>().mockResolvedValue(settings),
-    getGameSettings: vi.fn<(...args: [string]) => Promise<{}>>().mockResolvedValue({}),
+    getGameSettings: vi.fn<(...args: [string]) => Promise<GameSettings>>().mockResolvedValue({}),
     getCache: vi.fn<(...args: []) => Promise<Record<string, CachedData>>>().mockResolvedValue({}),
     setCache: vi.fn<(...args: [Record<string, CachedData>]) => Promise<void>>().mockResolvedValue(undefined),
     setLastFetchTime: vi.fn<(...args: [number]) => Promise<void>>().mockResolvedValue(undefined),

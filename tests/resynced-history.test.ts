@@ -22,6 +22,6 @@ describe("Resynced unavailable provider history", () => {
     );
     await refreshHistory("3751950");
     expect((await idbGetBootstrapStatus("3751950"))?.state).toBe("unavailable");
-    expect((await chrome.storage.local.get("sw_history_revision"))["sw_history_revision"]).toBeGreaterThan(0);
+    expect((await chrome.storage.local.get("sw_history_revision")).sw_history_revision).toBeGreaterThan(0);
   });
 });

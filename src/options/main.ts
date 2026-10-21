@@ -21,6 +21,11 @@ import {
 
 const gameSearchEl = mustGet<HTMLInputElement>("gameSearch");
 const acListEl = mustGet<HTMLUListElement>("autocompleteList");
+// Keeps the combobox state in sync wherever the list is shown or hidden.
+new MutationObserver(() => gameSearchEl.setAttribute("aria-expanded", String(!acListEl.hidden))).observe(acListEl, {
+  attributes: true,
+  attributeFilter: ["hidden"],
+});
 const gamesRowsEl = mustGet<HTMLUListElement>("gamesRows");
 const noGamesHint = mustGet<HTMLLIElement>("noGamesHint");
 const countBadge = mustGet<HTMLSpanElement>("gameCountBadge");
@@ -28,7 +33,7 @@ const countBadge = mustGet<HTMLSpanElement>("gameCountBadge");
 function setupNavigation(): void {
   document.querySelectorAll<HTMLButtonElement>(".nav-item").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const section = btn.dataset["section"];
+      const section = btn.dataset.section;
       if (!section) return;
 
       document.querySelectorAll(".nav-item").forEach((navItem) => {
@@ -56,7 +61,7 @@ async function renderGames(): Promise<void> {
   const games = await getGames();
   countBadge.textContent = `${games.length} / ${MAX_GAMES}`;
 
-  gamesRowsEl.querySelectorAll(".game-row").forEach((row) => row.remove());
+  for (const row of gamesRowsEl.querySelectorAll(".game-row")) row.remove();
 
   if (games.length === 0) {
     show(noGamesHint);
@@ -65,7 +70,7 @@ async function renderGames(): Promise<void> {
 
   hide(noGamesHint);
   const rows = await Promise.all(games.map(async (game) => buildGameRow(game, await getGameSettings(game.appid))));
-  rows.forEach((row) => gamesRowsEl.appendChild(row));
+  gamesRowsEl.append(...rows);
 }
 
 function buildGameRow(game: Game, gs: GameSettings): HTMLLIElement {
@@ -482,7 +487,7 @@ function setupNotificationSave(): void {
     try {
       const activeDays = Array.from(document.querySelectorAll<HTMLButtonElement>(".day-btn"))
         .filter((btn) => btn.classList.contains("active"))
-        .map((btn) => Number(btn.dataset["day"] ?? 0));
+        .map((btn) => Number(btn.dataset.day ?? 0));
 
       await saveSettings({
         notificationsEnabled: mustGet<HTMLInputElement>("notificationsEnabled").checked,
@@ -539,7 +544,7 @@ function flashSaveButton(btn: HTMLButtonElement): void {
 }
 
 function firstGameInitial(name: string): string {
-  return (name.match(/[A-Za-z0-9]/) ?? ["?"])[0]!.toUpperCase();
+  return (name.match(/[A-Za-z0-9]/)?.[0] ?? "?").toUpperCase();
 }
 
 function chevronIcon(): SVGSVGElement {

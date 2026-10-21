@@ -132,7 +132,8 @@ export async function renderShareCanvas(vm: CardViewModel): Promise<Blob> {
   const canvas = document.createElement("canvas");
   canvas.width = CANVAS_W;
   canvas.height = CANVAS_H;
-  const ctx = canvas.getContext("2d")!;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas 2D context unavailable");
 
   // ── Background ─────────────────────────────────────────────────────────────
   ctx.fillStyle = "#080c15";

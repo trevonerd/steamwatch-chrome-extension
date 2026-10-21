@@ -70,13 +70,13 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== "local") return;
-  if (changes["sw_settings"] || changes["sw_games"]) {
+  if (changes.sw_settings || changes.sw_games) {
     void refreshFavoriteBadge().catch((error: unknown) =>
       console.warn(`[SteamWatch] Badge refresh failed: ${formatError(error)}`),
     );
     return;
   }
-  const cacheChange = changes["sw_cache"];
+  const cacheChange = changes.sw_cache;
   if (cacheChange) {
     void refreshBadgeForCurrentChange(cacheChange.oldValue, cacheChange.newValue).catch((error: unknown) =>
       console.warn(`[SteamWatch] Badge refresh failed: ${formatError(error)}`),

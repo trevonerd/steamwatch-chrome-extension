@@ -100,7 +100,7 @@ function rulesFor(
 
 async function isFollowed(appid: string): Promise<boolean> {
   const raw = await chrome.storage.local.get("sw_games");
-  const parsed = GameSchema.array().safeParse(raw["sw_games"]);
+  const parsed = GameSchema.array().safeParse(raw.sw_games);
   return parsed.success && parsed.data.some((game) => game.appid === appid);
 }
 

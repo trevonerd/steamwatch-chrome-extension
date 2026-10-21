@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { GraphWindowKey, GraphWindowOption, Snapshot } from "../types/index.js";
-import { HOUR_MS, type HourlyPoint, hourlyCoverage, isQualifiedSnapshot, normalizeHourly } from "./series.js";
+import { HOUR_MS, hourlyCoverage, isQualifiedSnapshot, normalizeHourly } from "./series.js";
 
 export interface GraphSeriesPoint {
   readonly x: number;
@@ -74,12 +74,12 @@ export function findNearestPointIndex(mouseX: number, points: ReadonlyArray<{ x:
   let hi = points.length - 1;
 
   // Clamp
-  if (mouseX <= points[0]!.x) return 0;
-  if (mouseX >= points[hi]!.x) return hi;
+  if (mouseX <= (points[0]?.x ?? 0)) return 0;
+  if (mouseX >= (points[hi]?.x ?? 0)) return hi;
 
   while (lo + 1 < hi) {
     const mid = (lo + hi) >>> 1;
-    if (points[mid]!.x <= mouseX) {
+    if ((points[mid]?.x ?? 0) <= mouseX) {
       lo = mid;
     } else {
       hi = mid;
@@ -87,8 +87,8 @@ export function findNearestPointIndex(mouseX: number, points: ReadonlyArray<{ x:
   }
 
   // lo and hi are adjacent — pick nearest
-  const distLo = Math.abs(points[lo]!.x - mouseX);
-  const distHi = Math.abs(points[hi]!.x - mouseX);
+  const distLo = Math.abs((points[lo]?.x ?? 0) - mouseX);
+  const distHi = Math.abs((points[hi]?.x ?? 0) - mouseX);
   return distLo <= distHi ? lo : hi;
 }
 
@@ -196,9 +196,9 @@ export function colorGraphSegments(series: GraphSeries): Array<{ points: GraphSe
       continue;
     }
     let run: { points: GraphSeriesPoint[]; color: string } | undefined;
-    for (let index = 1; index < segment.points.length; index++) {
-      const previous = segment.points[index - 1]!;
-      const point = segment.points[index]!;
+    for (const [index, point] of segment.points.entries()) {
+      const previous = segment.points[index - 1];
+      if (!previous) continue;
       const color = segmentColor(previous.current, point.current);
       if (run?.color === color) run.points.push(point);
       else {

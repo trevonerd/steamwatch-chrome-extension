@@ -77,6 +77,6 @@ function parseHHMM(hhmm: string): number {
   const [hStr, mStr] = hhmm.split(":");
   const h = parseInt(hStr ?? "0", 10);
   const m = parseInt(mStr ?? "0", 10);
-  if (isNaN(h) || isNaN(m)) return 0;
+  if (Number.isNaN(h) || Number.isNaN(m)) return 0;
   return h * 60 + m;
 }

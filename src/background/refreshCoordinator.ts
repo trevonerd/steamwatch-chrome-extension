@@ -375,7 +375,8 @@ export class RefreshCoordinator {
 
   private async enqueueWrite<T>(work: () => Promise<T>): Promise<T> {
     const previous = this.writeTail;
-    let release: (() => void) | undefined;
+    // The executor runs synchronously, so release is always the real resolver below.
+    let release = (): void => undefined;
     this.writeTail = new Promise<void>((resolve) => {
       release = resolve;
     });
@@ -383,7 +384,6 @@ export class RefreshCoordinator {
     try {
       return await work();
     } finally {
-      if (!release) throw new Error("Write release was not initialized");
       release();
     }
   }

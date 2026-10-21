@@ -30,5 +30,5 @@ if (pkg.version === manifestVersion) {
 }
 
 pkg.version = manifestVersion;
-writeFileSync(packagePath, JSON.stringify(pkg, null, 2) + "\n", "utf-8");
+writeFileSync(packagePath, `${JSON.stringify(pkg, null, 2)}\n`, "utf-8");
 console.log(`Synced package.json version → ${manifestVersion}`);

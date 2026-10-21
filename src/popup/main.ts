@@ -1,6 +1,5 @@
 // SteamWatch — src/popup/main.ts
 
-
 import type { CardViewModel } from "../types/index.js";
 import { buildAllViewModels, buildCardViewModel, fallbackBadgeLabel, weeklyDetail } from "../utils/card.js";
 import { append, clear, h, hide, mustGet, s, show } from "../utils/html.js";
@@ -88,9 +87,9 @@ function renderGames(vms: CardViewModel[], favoriteAppid?: string): void {
   const expanded = new Map<string, string | undefined>();
   const focusedLabel = document.activeElement?.getAttribute("aria-label");
   for (const item of Array.from(gamesListEl.querySelectorAll<HTMLElement>(".game-item"))) {
-    const appId = item.querySelector<HTMLElement>(".game-card")?.dataset["appid"];
+    const appId = item.querySelector<HTMLElement>(".game-card")?.dataset.appid;
     if (appId && item.classList.contains("expanded")) {
-      expanded.set(appId, item.querySelector<HTMLElement>(".graph-pill--active")?.dataset["window"]);
+      expanded.set(appId, item.querySelector<HTMLElement>(".graph-pill--active")?.dataset.window);
     }
     const graph = item.querySelector<HTMLDivElement>(".panel-sparkline") as
       | (HTMLDivElement & { hoverCleanup?: () => void })
@@ -106,7 +105,7 @@ function renderGames(vms: CardViewModel[], favoriteAppid?: string): void {
       item.querySelector<HTMLButtonElement>(".btn-expand")?.click();
       const selected = expanded.get(vm.game.appid);
       const button = Array.from(item.querySelectorAll<HTMLButtonElement>(".graph-pill")).find(
-        (pill) => pill.dataset["window"] === selected && !pill.disabled,
+        (pill) => pill.dataset.window === selected && !pill.disabled,
       );
       button?.click();
     }
@@ -379,8 +378,8 @@ function togglePanel(li: HTMLLIElement, panel: HTMLDivElement, btn: HTMLButtonEl
   btn.setAttribute("aria-expanded", String(opening));
   li.classList.toggle("expanded", opening);
 
-  if (opening && !panel.dataset["loaded"]) {
-    panel.dataset["loaded"] = "1";
+  if (opening && !panel.dataset.loaded) {
+    panel.dataset.loaded = "1";
     populatePanel(panel, vm);
   }
 }
@@ -463,7 +462,7 @@ async function handleToggleFavorite(appid: string, clickedBtn: HTMLButtonElement
 
     document.querySelectorAll<HTMLButtonElement>(".btn-star").forEach((btn) => {
       const card = btn.closest<HTMLDivElement>(".game-card");
-      const cardAppid = card?.dataset["appid"];
+      const cardAppid = card?.dataset.appid;
       const active = cardAppid === newFavorite;
       btn.classList.toggle("active", active);
       btn.setAttribute("aria-pressed", String(active));
@@ -540,7 +539,7 @@ function showError(message: string): void {
 }
 
 function firstGameInitial(name: string): string {
-  return (name.match(/[A-Za-z0-9]/) ?? ["?"])[0]!.toUpperCase();
+  return (name.match(/[A-Za-z0-9]/)?.[0] ?? "?").toUpperCase();
 }
 
 function svgIcon(children: SVGElement[]): SVGSVGElement {
@@ -555,7 +554,7 @@ function svgIcon(children: SVGElement[]): SVGSVGElement {
       "aria-hidden": "true",
     },
   });
-  children.forEach((child) => svg.appendChild(child));
+  svg.append(...children);
   return svg;
 }
 

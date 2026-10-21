@@ -44,6 +44,7 @@
   padding: 0;
 }
 [hidden] {
+  /* biome-ignore lint/complexity/noImportantStyles: [hidden] must win over component display rules */
   display: none !important;
 }
 html {
@@ -887,9 +888,13 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 .days-row {
+  border: 0;
+  margin: 0;
+  min-width: 0;
   padding: 12px 0 4px;
 }
 .days-label {
+  padding: 0;
   margin-bottom: 8px;
   display: block;
 }

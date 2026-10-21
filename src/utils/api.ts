@@ -346,8 +346,8 @@ function parseAllTimePeakLabel(html: string, allTimePeak: number): string | unde
       .split("\t")
       .map((part) => part.trim())
       .filter(Boolean);
-    if (cols.length < 2) continue;
-    const monthLabel = cols[0]!;
+    const monthLabel = cols[0];
+    if (cols.length < 2 || monthLabel === undefined) continue;
     if (/last 30 days/i.test(monthLabel)) continue;
     const peakValue = Number((cols.at(-1) ?? "").replace(/[^\d]/g, ""));
     if (peakValue === allTimePeak) {

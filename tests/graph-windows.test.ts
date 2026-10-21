@@ -31,7 +31,7 @@ describe("GRAPH_WINDOW_MS constant", () => {
     expect(GRAPH_WINDOW_MS["7d"]).toBe(604_800_000);
     expect(GRAPH_WINDOW_MS["15d"]).toBe(1_296_000_000);
     expect(GRAPH_WINDOW_MS["1m"]).toBe(2_592_000_000);
-    expect(GRAPH_WINDOW_MS["all"]).toBe(0);
+    expect(GRAPH_WINDOW_MS.all).toBe(0);
   });
 
   it("has exactly 6 entries", () => {
@@ -59,7 +59,7 @@ describe("GRAPH_WINDOW_MS constant", () => {
   });
 
   it("all = 0 (no time filter sentinel)", () => {
-    expect(GRAPH_WINDOW_MS["all"]).toBe(0);
+    expect(GRAPH_WINDOW_MS.all).toBe(0);
   });
 });
 
@@ -163,7 +163,6 @@ describe("hasEnoughGraphHistory with regular windows (non-zero windowMs)", () =>
     const windowMs = 604_800_000; // 7d
 
     // 75% of 7d = 5.25d
-    const minSpan = windowMs * 0.75; // 453_600_000 ms = 5.25 days
 
     const data: Snapshot[] = [
       { ts: now - 6 * 86_400_000, current: 1 },
@@ -190,7 +189,6 @@ describe("hasEnoughGraphHistory with regular windows (non-zero windowMs)", () =>
   it("returns false for 24h window without 75% span", () => {
     const now = Date.now();
     const windowMs = 86_400_000; // 24h
-    const minSpan = windowMs * 0.75; // 64_800_000 ms = 18h
 
     const data: Snapshot[] = [
       { ts: now - 12 * 3_600_000, current: 1 }, // 12h ago
@@ -272,7 +270,7 @@ describe("buildAvailableGraphWindows", () => {
     expect(map["7d"]).toBe(604_800_000);
     expect(map["15d"]).toBe(1_296_000_000);
     expect(map["1m"]).toBe(2_592_000_000);
-    expect(map["all"]).toBe(0);
+    expect(map.all).toBe(0);
   });
 
   it("deduplicates when retention matches a window size (e.g., 3 days)", () => {

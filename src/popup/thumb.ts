@@ -15,7 +15,7 @@ export function thumbColor(appid: string): string {
     "#b45309",
   ];
   const idx = parseInt(appid.slice(-1), 10);
-  return PALETTE[Number.isNaN(idx) ? 0 : idx % PALETTE.length]!;
+  return PALETTE[Number.isNaN(idx) ? 0 : idx % PALETTE.length] ?? "#2563eb";
 }
 
 export function wireThumbFallback(imgEl: HTMLImageElement, wrapEl: HTMLElement, appid: string): void {

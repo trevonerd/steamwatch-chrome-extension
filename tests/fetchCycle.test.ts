@@ -72,7 +72,7 @@ describe("mergeCycleCache", () => {
     const merged = mergeCycleCache(prevCache, results);
 
     expect(Object.keys(merged).sort()).toEqual(["1", "2", "3", "4", "5", "old"]);
-    expect(merged["old"]?.current).toBe(50);
+    expect(merged.old?.current).toBe(50);
     expect(merged["5"]?.current).toBe(1);
     expect(merged["3"]?.current).toBe(5);
   });

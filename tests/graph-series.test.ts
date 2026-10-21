@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { normalizeHourly } from "../src/utils/series.js";
 import { buildGraphSeries, hasEnoughGraphHistory } from "../src/utils/sparkline.js";
 
 const HOUR = 3_600_000;

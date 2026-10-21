@@ -39,7 +39,7 @@ describe("mapToPoints — X axis", () => {
     const pts = mapToPoints([10, 20, 30, 40, 50], 100, 40, 0, 0);
     const gaps = pts.slice(1).map((p, i) => p.x - pts[i]!.x);
     const first = gaps[0]!;
-    gaps.forEach((g) => expect(g).toBeCloseTo(first, 5));
+    for (const g of gaps) expect(g).toBeCloseTo(first, 5);
   });
 
   it("respects custom padX", () => {
@@ -72,17 +72,17 @@ describe("mapToPoints — Y axis", () => {
 
   it("flat series renders at vertical midpoint", () => {
     const pts = mapToPoints([5000, 5000, 5000], 160, 40, 0, 0);
-    pts.forEach((p) => expect(p.y).toBeCloseTo(20));
+    for (const p of pts) expect(p.y).toBeCloseTo(20);
   });
 
   it("Y never exceeds height for any input", () => {
     const pts = mapToPoints([100, 200, 50, 300, 150], 160, 36, 2, 3);
-    pts.forEach((p) => expect(p.y).toBeLessThanOrEqual(36));
+    for (const p of pts) expect(p.y).toBeLessThanOrEqual(36);
   });
 
   it("Y is never negative", () => {
     const pts = mapToPoints([100, 200, 50, 300, 150], 160, 36, 2, 3);
-    pts.forEach((p) => expect(p.y).toBeGreaterThanOrEqual(0));
+    for (const p of pts) expect(p.y).toBeGreaterThanOrEqual(0);
   });
 
   it("descending series: later points have larger Y (lower on screen)", () => {

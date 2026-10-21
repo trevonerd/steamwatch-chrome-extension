@@ -196,7 +196,7 @@ async function cleanupGameData(appid: string): Promise<void> {
   }
 
   const rawSettings = toRecord(await get<unknown>(KEYS.settings));
-  if (rawSettings?.["badgeFavoriteAppid"] === appid) {
+  if (rawSettings?.badgeFavoriteAppid === appid) {
     const { badgeFavoriteAppid: _removed, ...settings } = rawSettings;
     await set(KEYS.settings, settings);
   }
@@ -270,35 +270,35 @@ function normalizeSettings(raw: Record<string, unknown> | undefined): Settings {
   const settings: Settings = { ...DEFAULT_SETTINGS };
   if (!raw) return settings;
 
-  const notificationsEnabled = SettingsSchema.shape.notificationsEnabled.safeParse(raw["notificationsEnabled"]);
+  const notificationsEnabled = SettingsSchema.shape.notificationsEnabled.safeParse(raw.notificationsEnabled);
   if (notificationsEnabled.success && notificationsEnabled.data !== undefined) {
     settings.notificationsEnabled = notificationsEnabled.data;
   }
-  const globalThresholdUp = SettingsSchema.shape.globalThresholdUp.safeParse(raw["globalThresholdUp"]);
+  const globalThresholdUp = SettingsSchema.shape.globalThresholdUp.safeParse(raw.globalThresholdUp);
   if (globalThresholdUp.success && globalThresholdUp.data !== undefined) {
     settings.globalThresholdUp = Math.max(5, Math.min(100, globalThresholdUp.data));
   }
-  const globalThresholdDown = SettingsSchema.shape.globalThresholdDown.safeParse(raw["globalThresholdDown"]);
+  const globalThresholdDown = SettingsSchema.shape.globalThresholdDown.safeParse(raw.globalThresholdDown);
   if (globalThresholdDown.success && globalThresholdDown.data !== undefined) {
     settings.globalThresholdDown = -Math.max(5, Math.min(90, Math.abs(globalThresholdDown.data)));
   }
-  const quietHoursEnabled = SettingsSchema.shape.quietHoursEnabled.safeParse(raw["quietHoursEnabled"]);
+  const quietHoursEnabled = SettingsSchema.shape.quietHoursEnabled.safeParse(raw.quietHoursEnabled);
   if (quietHoursEnabled.success && quietHoursEnabled.data !== undefined) {
     settings.quietHoursEnabled = quietHoursEnabled.data;
   }
-  const quietStart = SettingsSchema.shape.quietStart.safeParse(raw["quietStart"]);
+  const quietStart = SettingsSchema.shape.quietStart.safeParse(raw.quietStart);
   if (quietStart.success && quietStart.data !== undefined) {
     settings.quietStart = quietStart.data;
   }
-  const quietEnd = SettingsSchema.shape.quietEnd.safeParse(raw["quietEnd"]);
+  const quietEnd = SettingsSchema.shape.quietEnd.safeParse(raw.quietEnd);
   if (quietEnd.success && quietEnd.data !== undefined) {
     settings.quietEnd = quietEnd.data;
   }
-  const quietDays = SettingsSchema.shape.quietDays.safeParse(raw["quietDays"]);
+  const quietDays = SettingsSchema.shape.quietDays.safeParse(raw.quietDays);
   if (quietDays.success && quietDays.data !== undefined) {
     settings.quietDays = quietDays.data & 0b1111111;
   }
-  const badgeFavoriteAppid = SettingsSchema.shape.badgeFavoriteAppid.safeParse(raw["badgeFavoriteAppid"]);
+  const badgeFavoriteAppid = SettingsSchema.shape.badgeFavoriteAppid.safeParse(raw.badgeFavoriteAppid);
   if (badgeFavoriteAppid.success && badgeFavoriteAppid.data !== undefined) {
     settings.badgeFavoriteAppid = badgeFavoriteAppid.data;
   }
@@ -319,23 +319,23 @@ export async function getGameSettings(appid: string): Promise<GameSettings> {
   }
 
   const normalized: GameSettings = {};
-  const thresholdUp = GameSettingsSchema.shape.thresholdUp.safeParse(stored["thresholdUp"]);
+  const thresholdUp = GameSettingsSchema.shape.thresholdUp.safeParse(stored.thresholdUp);
   if (thresholdUp.success && thresholdUp.data !== undefined)
     normalized.thresholdUp = Math.max(5, Math.min(100, thresholdUp.data));
-  const thresholdDown = GameSettingsSchema.shape.thresholdDown.safeParse(stored["thresholdDown"]);
+  const thresholdDown = GameSettingsSchema.shape.thresholdDown.safeParse(stored.thresholdDown);
   if (thresholdDown.success && thresholdDown.data !== undefined)
     normalized.thresholdDown = -Math.max(5, Math.min(90, Math.abs(thresholdDown.data)));
   const notifyThresholdPlayers = GameSettingsSchema.shape.notifyThresholdPlayers.safeParse(
-    stored["notifyThresholdPlayers"],
+    stored.notifyThresholdPlayers,
   );
   if (notifyThresholdPlayers.success && notifyThresholdPlayers.data !== undefined) {
     normalized.notifyThresholdPlayers = notifyThresholdPlayers.data;
   }
-  const notifyBelowPlayers = GameSettingsSchema.shape.notifyBelowPlayers.safeParse(stored["notifyBelowPlayers"]);
+  const notifyBelowPlayers = GameSettingsSchema.shape.notifyBelowPlayers.safeParse(stored.notifyBelowPlayers);
   if (notifyBelowPlayers.success && notifyBelowPlayers.data !== undefined) {
     normalized.notifyBelowPlayers = notifyBelowPlayers.data;
   }
-  const notificationsEnabled = GameSettingsSchema.shape.notificationsEnabled.safeParse(stored["notificationsEnabled"]);
+  const notificationsEnabled = GameSettingsSchema.shape.notificationsEnabled.safeParse(stored.notificationsEnabled);
   if (notificationsEnabled.success && notificationsEnabled.data !== undefined) {
     normalized.notificationsEnabled = notificationsEnabled.data;
   }

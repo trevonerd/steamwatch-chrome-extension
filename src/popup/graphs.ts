@@ -229,9 +229,9 @@ function attachSparklineHover(
     const svgX = (domX / domW) * viewW;
     const index = findNearestPointIndex(svgX, points);
     const snap = snaps[index];
-    if (!snap) return;
+    const point = points[index];
+    if (!snap || !point) return;
 
-    const point = points[index]!;
     const outer = container.getBoundingClientRect();
     const pctX = ((rect.left - outer.left + (point.x / viewW) * rect.width) / outer.width) * 100;
     const pctY = ((rect.top - outer.top + (point.y / viewH) * rect.height) / outer.height) * 100;
@@ -299,7 +299,8 @@ export function renderSparkline(
   );
   for (const segment of colorGraphSegments(series)) {
     if (segment.points.length === 1) {
-      const point = segment.points[0]!;
+      const [point] = segment.points;
+      if (!point) continue;
       svg.appendChild(s("circle", { attrs: { cx: point.x, cy: point.y, r: 1.5, fill: segment.color } }));
     } else {
       svg.appendChild(

@@ -43,8 +43,6 @@ function makeSnaps(values: number[], intervalMs = 60 * 60_000): Snapshot[] {
 
 const snaps12 = makeSnaps([30000, 31000, 32000, 33000, 34000, 35000, 36000, 37000, 38000, 39000, 40000, 41000]);
 const snaps5 = makeSnaps([1000, 2000, 3000, 4000, 5000]);
-const daySnaps = makeSnaps(Array.from({ length: 24 }, (_, hour) => 28_000 + hour));
-const retentionSnaps = makeSnaps(Array.from({ length: 72 }, (_, hour) => 26_000 + hour));
 const seasonalSnaps = makeSnaps(Array.from({ length: 35 * 24 }, (_, hour) => 20_000 + hour));
 const emptySnaps: Snapshot[] = [];
 

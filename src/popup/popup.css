@@ -55,6 +55,7 @@ html {
   font-size: 15px;
 }
 [hidden] {
+  /* biome-ignore lint/complexity/noImportantStyles: [hidden] must win over component display rules */
   display: none !important;
 }
 
