@@ -12,7 +12,7 @@ import {
 import { idbGetSnapshots, idbGetBootstrapStatus } from "../utils/idb-storage.js";
 import { fmtNumber, fmtPct, fmtTimeAgo } from "../utils/trend.js";
 import { populatePanel, renderSparkline, freshnessTitle } from "./graphs.js";
-import { buildAllViewModels, buildCardViewModel } from "../utils/card.js";
+import { buildAllViewModels, buildCardViewModel, fallbackBadgeLabel, weeklyDetail } from "../utils/card.js";
 import { buildShareText, renderShareCanvas } from "../utils/share.js";
 import { append, clear, h, mustGet, s, show, hide } from "../utils/html.js";
 import { formatError } from "../utils/log.js";
@@ -178,7 +178,7 @@ function buildGameItem(vm: CardViewModel, isTop: boolean, favoriteAppid?: string
       className: "stat-meta",
       children: [
         statRow("24H PK", `24-hour peak · ${freshnessTitle(vm.freshness?.peak24h)}`, peak24h),
-        statRow(allTimePeak !== null ? "ATH" : "OBS PK", allTimePeak !== null ? `SteamCharts record · ${freshnessTitle(vm.freshness?.allTimePeak)}` : "Maximum in available observations; not an all-time record", allTimePeak ?? vm.observedPeak ?? null),
+        statRow(allTimePeak !== null ? "ATH" : "OBS PK", allTimePeak !== null ? `SteamCharts record${vm.allTimePeakLabel ? ` (${vm.allTimePeakLabel})` : ""} · ${freshnessTitle(vm.freshness?.allTimePeak)}` : "Maximum in available observations; not an all-time record", allTimePeak ?? vm.observedPeak ?? null),
       ],
     }),
   );
@@ -186,13 +186,13 @@ function buildGameItem(vm: CardViewModel, isTop: boolean, favoriteAppid?: string
     stats.appendChild(h("span", {
       className: `trend-badge ${displayTrendCls}`,
       text: `${displayTrendIcon ? `${displayTrendIcon} ` : ""}${fmtPct(displayTrendPct)} 7d${vm.trendAsOf !== undefined ? ` · ${fmtTimeAgo(vm.trendAsOf, vm.evaluatedAt)}` : ""}`,
-      attrs: { "aria-label": `${fmtPct(displayTrendPct)} average players: 7 days vs previous 7 days${vm.trendAsOf !== undefined ? `, through ${new Date(vm.trendAsOf).toISOString()}` : ""}`, title: `${vm.trend?.level.label ?? "Weekly activity"}. ${vm.seasonalAnalysis?.reason ?? "Last 7 days vs previous 7 days."}${vm.trendAsOf !== undefined ? ` Historical comparison through ${new Date(vm.trendAsOf).toISOString()}; newer history is incomplete.` : ""}` },
+      attrs: { "aria-label": `${fmtPct(displayTrendPct)} average players: 7 days vs previous 7 days${vm.trendAsOf !== undefined ? `, through ${new Date(vm.trendAsOf).toISOString()}` : ""}`, title: `${vm.trend?.level.label ?? "Weekly activity"}. ${vm.seasonalAnalysis?.reason ?? "Last 7 days vs previous 7 days."}${weeklyDetail(vm)}${vm.trendAsOf !== undefined ? ` Historical comparison through ${new Date(vm.trendAsOf).toISOString()}; newer history is incomplete.` : ""}` },
     }));
   } else {
     const early = vm.earlyActivity;
     const pct = early?.comparison?.pct;
     stats.appendChild(h("span", { className: "trend-badge stable",
-      text: early?.status === "preliminary" ? pct != null ? `~${fmtPct(pct)} 24h` : "24h activity" : early?.status === "stale" ? "History stale" : (early?.spanHours ?? 0) >= 14 * 24 ? "History incomplete" : "Building history",
+      text: early?.status === "preliminary" ? pct != null ? `~${fmtPct(pct)} 24h` : "24h activity" : fallbackBadgeLabel(vm),
       attrs: { title: early?.reason ?? vm.seasonalAnalysis?.reason ?? "Not enough comparable history" },
     }));
   }
@@ -205,6 +205,7 @@ function buildGameItem(vm: CardViewModel, isTop: boolean, favoriteAppid?: string
   );
 
   const cardSparkline = renderSparkline(vm.snaps, {
+    ...(vm.evaluatedAt !== undefined ? { now: vm.evaluatedAt } : {}),
     width: 160,
     height: 36,
     maxPoints: 48,

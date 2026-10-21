@@ -9,6 +9,7 @@
 
 import type { CardViewModel } from "../types/index.js";
 import { fmtNumber, fmtPct, fmtTimeAgo } from "./trend.js";
+import { fallbackBadgeLabel } from "./card.js";
 import { buildGraphSeries, colorGraphSegments, type GraphSeries } from "./sparkline.js";
 
 const DAY_MS = 86_400_000;
@@ -202,7 +203,7 @@ export async function renderShareCanvas(vm: CardViewModel): Promise<Blob> {
     ctx.fillStyle = "#7a90aa";
     const early = vm.earlyActivity;
     const pct = early?.comparison?.pct;
-    const label = early?.status === "preliminary" ? pct != null ? `~${fmtPct(pct)} 24h (early)` : "24h activity (early)" : early?.status === "stale" ? "History stale" : (early?.spanHours ?? 0) >= 14 * 24 ? "History incomplete" : "Building history";
+    const label = early?.status === "preliminary" ? pct != null ? `~${fmtPct(pct)} 24h (early)` : "24h activity (early)" : fallbackBadgeLabel(vm);
     ctx.fillText(label, CANVAS_W - ctx.measureText(label).width - 12, 55);
   }
 
@@ -212,7 +213,7 @@ export async function renderShareCanvas(vm: CardViewModel): Promise<Blob> {
   const SPK_W = CANVAS_W - TEXT_X - 16;
   const SPK_H = 36;
 
-  const graph = buildShareGraphSeries(vm, Date.now(), SPK_W, SPK_H);
+  const graph = buildShareGraphSeries(vm, vm.evaluatedAt ?? Date.now(), SPK_W, SPK_H);
   for (const segment of graph.segments) {
     const first = segment.points[0];
     const last = segment.points.at(-1);

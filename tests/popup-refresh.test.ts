@@ -183,7 +183,7 @@ describe("popup refresh", () => {
     expect(document.querySelector(".period-stats")?.textContent).toContain("3d average");
     expect(document.querySelector(".period-stats")?.textContent).not.toBe(before);
     expect(document.querySelector(".panel-sparkline polyline")?.getAttribute("stroke-width")).toBe("1.8");
-    expect(document.querySelector(".panel-sparkline")?.getAttribute("title")).toContain("hourly coverage");
+    expect(document.querySelector(".period-stats")?.getAttribute("title")).toContain("hourly coverage");
     expect(document.querySelector(".panel-record-low")).toBeNull();
   });
 });

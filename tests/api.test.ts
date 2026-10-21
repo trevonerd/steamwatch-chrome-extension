@@ -361,6 +361,20 @@ describe("fetchSteamChartsBootstrap", () => {
     expect(result[1]).toMatchObject({ ts: 1343779200000, current: 0 });
   });
 
+  it("drops hourly rows older than the 60-day retention window but keeps monthly peaks", async () => {
+    const hour = 3_600_000;
+    const old = Date.now() - 90 * 86_400_000;
+    const recent = Date.now() - 2 * hour;
+    globalThis.fetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => [[Date.UTC(2020, 0, 1), 500], [old, 10], [old + hour, 11], [recent, 20], [recent + hour, 21]],
+    } as Response);
+
+    const result = await fetchSteamChartsBootstrap("570");
+
+    expect(result.map((snapshot) => snapshot.current)).toEqual([500, 20, 21]);
+  });
+
   it("filters out entries where timestamp <= 0", async () => {
     globalThis.fetch = vi.fn().mockResolvedValueOnce({
       ok: true,
@@ -466,8 +480,9 @@ describe("fetchSteamChartsBootstrap", () => {
   });
 
   it("distinguishes calendar-month peaks from nearby hourly observations", async () => {
-    const monthly = Date.UTC(2026, 0, 1);
-    const hourly = Date.UTC(2026, 0, 15, 9, 1);
+    const today = new Date();
+    const monthly = Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1);
+    const hourly = Date.now() - 5 * 86_400_000 + 60_000;
     globalThis.fetch = vi.fn().mockResolvedValueOnce({
       ok: true,
       json: async () => [[monthly, 900], [hourly, 150], [hourly + 3_600_000, 200]],

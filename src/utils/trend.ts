@@ -94,8 +94,9 @@ export function computeLatestChangePct(snapshots: readonly Snapshot[], now = Dat
 }
 
 export function computeLatestChangePctFromHourly(points: readonly HourlyPoint[], now: number): number | null {
-  const previous = points.at(-2);
-  const latest = points.at(-1);
+  const completed = points.filter((point) => point.hour < Math.floor(now / HOUR_MS) * HOUR_MS);
+  const previous = completed.at(-2);
+  const latest = completed.at(-1);
   return !previous || !latest || latest.hour - previous.hour !== HOUR_MS || now - latest.observedAt > 2 * HOUR_MS || previous.value === 0
     ? null
     : Math.round(((latest.value - previous.value) / previous.value) * 1_000) / 10;

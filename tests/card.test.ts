@@ -1,7 +1,7 @@
 // tests/card.test.ts
 import { describe, it, expect, vi } from "vitest";
-import { buildCardViewModel, buildAllViewModels } from "../src/utils/card.js";
-import type { Game, CachedData, Snapshot } from "../src/types/index.js";
+import { buildCardViewModel, buildAllViewModels, fallbackBadgeLabel } from "../src/utils/card.js";
+import type { Game, CachedData, CardViewModel, Snapshot } from "../src/types/index.js";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -369,5 +369,12 @@ describe("buildAllViewModels", () => {
   it("returns empty array for empty games list", async () => {
     const vms = await buildAllViewModels([], cache, async () => snaps12, 7);
     expect(vms).toHaveLength(0);
+  });
+});
+
+describe("fallbackBadgeLabel", () => {
+  it("labels low-player games instead of reporting incomplete history", () => {
+    const vm = { seasonalAnalysis: { status: "low-baseline", coverage: 1, reason: "" }, earlyActivity: { status: "insufficient", spanHours: 60 * 24 } } as unknown as CardViewModel;
+    expect(fallbackBadgeLabel(vm)).toBe("Low activity");
   });
 });

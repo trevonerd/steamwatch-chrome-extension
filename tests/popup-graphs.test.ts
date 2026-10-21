@@ -18,6 +18,20 @@ describe("popup graphs", () => {
     expect(panel.querySelector(".period-stats")?.textContent).toContain("3d maximum");
   });
 
+  it("includes the first hour of a fixed window and ignores single-sample outliers in extrema", () => {
+    const evaluatedAt = now + 30 * 60_000;
+    const snaps = [
+      ...Array.from({ length: 48 }, (_, index) => ({ ts: now - (48 - index) * 3_600_000,
+        current: index, source: "steamcharts" as const, granularity: "hourly" as const })),
+      { ts: now - 3 * 3_600_000 + 60_000, current: 1, source: "steam" as const, granularity: "instant" as const },
+    ];
+    const panel = document.createElement("div");
+    populatePanel(panel, buildCardViewModel({ appid: "1", name: "Game", image: "" }, {}, snaps, 60, evaluatedAt));
+    panel.querySelector<HTMLButtonElement>('[data-window="24h"]')?.click();
+    // Hours 24..47 → average 35.5, change 47 - 24, min/max from hourly series only.
+    expect(Array.from(panel.querySelectorAll(".period-stats dd"), (item) => item.textContent)).toEqual(["36", "+23", "24", "47"]);
+  });
+
   it("computes All statistics when observation timestamps are offset within the hour", () => {
     const evaluatedAt = now + 57 * 60_000;
     const snaps = Array.from({ length: 73 }, (_, index) => ({ ts: now - (73 - index) * 3_600_000 + 48 * 60_000,
@@ -26,7 +40,7 @@ describe("popup graphs", () => {
     populatePanel(panel, buildCardViewModel({ appid: "1", name: "Game", image: "" }, {}, snaps, 60, evaluatedAt));
     panel.querySelector<HTMLButtonElement>('[data-window="all"]')?.click();
     expect(Array.from(panel.querySelectorAll(".period-stats dd"), (item) => item.textContent)).toEqual(["100", "0", "100", "100"]);
-    expect(panel.querySelector(".panel-sparkline")?.getAttribute("title")).toContain("Games Popularity");
+    expect(panel.querySelector(".period-stats")?.getAttribute("title")).toContain("Games Popularity");
   });
 
   it("summarizes available All hours despite a recent gap while fixed periods remain strict", () => {

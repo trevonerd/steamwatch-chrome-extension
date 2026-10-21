@@ -156,3 +156,21 @@ export async function buildAllViewModels(
   }
   return models;
 }
+
+/** Badge text when no weekly trend is shown and no preliminary 24h comparison exists. */
+export function fallbackBadgeLabel(vm: CardViewModel): string {
+  if (vm.seasonalAnalysis?.status === "low-baseline") return "Low activity";
+  if (vm.earlyActivity?.status === "stale") return "History stale";
+  return (vm.earlyActivity?.spanHours ?? 0) >= 14 * 24 ? "History incomplete" : "Building history";
+}
+
+/** Weekly comparison numbers for the trend badge tooltip. */
+export function weeklyDetail(vm: CardViewModel): string {
+  const analysis = vm.seasonalAnalysis;
+  if (analysis?.status !== "ready" || !analysis.comparison) return "";
+  const { comparison } = analysis;
+  const pct = vm.trend?.pct ?? 0;
+  const agree = pct >= 5 ? ` · ${comparison.risingDays}/7 days higher` : pct < -5 ? ` · ${comparison.fallingDays}/7 days lower` : "";
+  const avg = (value: number) => Math.round(value).toLocaleString("en-US");
+  return ` ${avg(comparison.recentMean)} vs ${avg(comparison.baselineMean)} average players${agree} · ${comparison.matchedHours}/168 matched hours.`;
+}

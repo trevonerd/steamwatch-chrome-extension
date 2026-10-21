@@ -17,6 +17,8 @@ import type { ProviderResult, SearchResult, SteamChartsData, SteamSpyData, Snaps
 import { formatError } from "./log.js";
 import { requestWithPolicy } from "./http.js";
 
+const HISTORY_RETENTION_MS = 60 * 86_400_000;
+
 export const STEAM_CAPSULE_URL = (appid: string): string =>
   `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appid}/header.jpg`;
 
@@ -154,7 +156,7 @@ export async function fetchSteamChartsHistoryResult(appid: string): Promise<Prov
     .filter(([ts, players]) => Number.isSafeInteger(ts) && ts > 0 && ts <= now && players >= 0)
     .map(([ts, players]) => [ts, players] as const)).entries()]
     .sort(([left], [right]) => left - right);
-  const snapshots: Snapshot[] = entries.map(([ts, players], index) => {
+  const snapshots = entries.map(([ts, players], index): Snapshot => {
     const previous = entries[index - 1]?.[0];
     const next = entries[index + 1]?.[0];
     const hourly = (previous !== undefined && ts - previous <= 2 * 3_600_000)
@@ -168,11 +170,11 @@ export async function fetchSteamChartsHistoryResult(appid: string): Promise<Prov
       source: "steamcharts",
       granularity: hourly ? "hourly" : monthBoundary ? "monthly-peak" : "unknown",
     };
-  });
+  // Hourly rows past retention would sit beside compacted aggregates and be counted twice.
+  }).filter((snapshot) => snapshot.granularity !== "hourly" || snapshot.ts >= now - HISTORY_RETENTION_MS);
   return snapshots.length > 0 ? { status: "ok", value: snapshots } : { status: "error", error: "No valid historical observations" };
 }
 
-const HISTORY_RETENTION_MS = 60 * 86_400_000;
 const GAMES_POPULARITY_MAX_PAGES = 2;
 
 /**

@@ -86,3 +86,11 @@ describe("formatting regressions", () => {
     expect(fmtTimeAgo(NOW - 60_000, NOW)).toBe("1m ago");
   });
 });
+
+describe("computeLatestChangePct completed hours", () => {
+  it("ignores the hour still in progress", () => {
+    const now = Date.UTC(2026, 8, 11, 12, 30);
+    const at = (h: number, current: number) => ({ ts: Date.UTC(2026, 8, 11, h), current, source: "steamcharts" as const, granularity: "hourly" as const });
+    expect(computeLatestChangePct([at(10, 100), at(11, 110), at(12, 10)], now)).toBe(10);
+  });
+});

@@ -1,7 +1,7 @@
 import type { CardViewModel, FieldFreshness, GraphWindowKey, Snapshot } from "../types/index.js";
 import { append, clear, h, s } from "../utils/html.js";
-import { fmtNumber, fmtTimeAgo, computeWindowMin, computeRetentionAvg, computeRetentionGain } from "../utils/trend.js";
-import { buildGraphSeries, colorGraphSegments, findNearestPointIndex, filterSnapshotsByWindow } from "../utils/sparkline.js";
+import { fmtNumber, fmtTimeAgo, computeRetentionAvgFromHourly, computeRetentionGainFromHourly } from "../utils/trend.js";
+import { buildGraphSeries, colorGraphSegments, findNearestPointIndex } from "../utils/sparkline.js";
 import { HOUR_MS, normalizeHourly } from "../utils/series.js";
 
 const WINDOW_MS: Readonly<Record<GraphWindowKey, number>> = {
@@ -37,7 +37,7 @@ export function populatePanel(panel: HTMLDivElement, vm: CardViewModel): void {
       children: [
         panelStat("Current", fmtNumber(current), vm.freshness?.current),
         panelStat("24h peak", fmtNumber(peak24h), vm.freshness?.peak24h),
-        panelStat(allTimePeak === null ? "Observed peak" : "All-time peak", fmtNumber(allTimePeak ?? vm.observedPeak ?? null), allTimePeak === null ? undefined : vm.freshness?.allTimePeak),
+        panelStat(allTimePeak === null ? "Observed peak" : "All-time peak", fmtNumber(allTimePeak ?? vm.observedPeak ?? null), allTimePeak === null ? undefined : athTitle(vm)),
         panelStat("Twitch viewers", twitchViewers != null ? fmtNumber(twitchViewers) : "—", vm.freshness?.twitchViewers),
       ],
     }),
@@ -144,10 +144,10 @@ function renderPanelGraph(panel: HTMLDivElement, vm: CardViewModel, key: GraphWi
     container.appendChild(result.svg);
     cleanup.hoverCleanup = attachSparklineHover(container, result.points, result.points);
   }
-  const selected = filterSnapshotsByWindow(vm.snaps, windowMs, now);
-  const hourly = normalizeHourly(selected, now);
+  const hourly = normalizeHourly(vm.snaps, now);
   const completedHour = Math.floor(now / HOUR_MS) * HOUR_MS;
-  const completed = hourly.filter((point) => point.hour < completedHour);
+  const windowStart = windowMs === 0 ? Number.NEGATIVE_INFINITY : completedHour - windowMs;
+  const completed = hourly.filter((point) => point.hour >= windowStart && point.hour < completedHour);
   const first = completed[0];
   const last = completed.at(-1);
   const availableSummary = first && last && completed.length >= 2
@@ -158,8 +158,8 @@ function renderPanelGraph(panel: HTMLDivElement, vm: CardViewModel, key: GraphWi
       title: `Available observed hours. Missing hours excluded. First observation: ${new Date(first.observedAt).toISOString()} · Last observation: ${new Date(last.observedAt).toISOString()} (UTC).`,
     } : null;
   const days = windowMs / 86_400_000;
-  const avg = windowMs === 0 ? availableSummary?.average : computeRetentionAvg(selected, days, now);
-  const gain = windowMs === 0 ? availableSummary?.change : computeRetentionGain(selected, days, now);
+  const avg = windowMs === 0 ? availableSummary?.average : computeRetentionAvgFromHourly(hourly, days, now);
+  const gain = windowMs === 0 ? availableSummary?.change : computeRetentionGainFromHourly(hourly, days, now);
   const summaryTitle = windowMs === 0 ? availableSummary?.title : undefined;
   let stats = panel.querySelector<HTMLDListElement>(".period-stats");
   if (!stats) {
@@ -168,19 +168,31 @@ function renderPanelGraph(panel: HTMLDivElement, vm: CardViewModel, key: GraphWi
   }
   clear(stats);
   const label = key === "all" || key === null ? "All" : key;
-  const low = computeWindowMin(selected);
-  const peak = selected.length ? Math.max(...selected.map((point) => point.current)) : null;
+  // Hourly medians, same series as average: a single outlier sample cannot set the extremes.
+  const values = completed.map((point) => Math.round(point.value));
+  const low = values.length ? Math.min(...values) : null;
+  const peak = values.length ? Math.max(...values) : null;
   append(stats,
     panelStat(`${label} average`, avg == null ? "—" : fmtNumber(avg), summaryTitle),
     panelStat(`${label} change`, gain == null ? "—" : fmtSignedPlayers(gain), summaryTitle),
-    panelStat(`${label} minimum`, low ? fmtNumber(low.value) : "—"),
-    panelStat(`${label} maximum`, peak === null ? "—" : fmtNumber(peak)),
+    panelStat(`${label} minimum`, fmtNumber(low), lowTitle(vm)),
+    panelStat(`${label} maximum`, fmtNumber(peak)),
   );
-  const fallbackCredit = selected.some((point) => point.source === "games-popularity") ? " · Games Popularity" : "";
-  const latestHour = last;
-  container.title = result
-    ? `${new Date(result.startTs).toLocaleString()} – ${new Date(result.endTs).toLocaleString()} · ${Math.round(result.coverage * 100)}% hourly coverage overall${fallbackCredit}${latestHour ? ` · History ${fmtTimeAgo(latestHour.observedAt, now)}` : ""}`
+  const fallbackCredit = completed.some((point) => point.source === "games-popularity") ? " · Games Popularity" : "";
+  // Source note lives on the stats, not the graph, so it never overlaps the hover tooltip.
+  stats.title = result
+    ? `${new Date(result.startTs).toLocaleString()} – ${new Date(result.endTs).toLocaleString()} · ${Math.round(result.coverage * 100)}% hourly coverage overall${fallbackCredit}${last ? ` · History ${fmtTimeAgo(last.observedAt, now)}` : ""}`
     : "Waiting for qualified player observations.";
+}
+
+function athTitle(vm: CardViewModel): string {
+  const source = freshnessTitle(vm.freshness?.allTimePeak);
+  return vm.allTimePeakLabel ? `Reached ${vm.allTimePeakLabel} · ${source}` : source;
+}
+
+function lowTitle(vm: CardViewModel): string | undefined {
+  const low = vm.allTimeLow;
+  return low ? `Lowest tracked: ${fmtNumber(low.value)} on ${new Date(low.timestamp).toLocaleDateString()}` : undefined;
 }
 
 function attachSparklineHover(
