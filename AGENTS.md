@@ -2,7 +2,7 @@
 
 ## 1. Project Overview
 
-SteamWatch is a Chrome extension (Manifest V3) that tracks Steam games with live player counts, local player graph history, Twitch viewer data, toolbar badges, and player-count notifications. Built with TypeScript 5 (strict mode), Vite 5, Zod validation, and Vitest. Uses pnpm as the package manager.
+SteamWatch is a Chrome extension (Manifest V3) that tracks Steam games with live player counts, local player graph history, Twitch viewer data, toolbar badges, and player-count notifications. Built with TypeScript 7 (strict mode), Vite 8, Zod 4 validation, and Vitest 5. Biome lints and formats; knip reports unused code. Uses pnpm as the package manager.
 
 The extension consists of three main components:
 - Service worker (`src/background/index.ts`) - handles alarms, fetch cycles, notifications, and badge updates
@@ -32,22 +32,19 @@ The version number lives in `manifest.json` only. Never update `package.json` ve
 - MINOR: new features
 - MAJOR: breaking changes
 
-### Active v2 beta workflow
+### Version name vs Chrome version
 
-- User-requested beta builds use a numeric Chrome `version` and descriptive `version_name` in `manifest.json`, starting at `2.0.0` / `2.0.0-beta.1`.
-- Keep the visible base fixed at `2.0.0`: increment ONLY the beta counter in `version_name` (`2.0.0-beta.3`, `2.0.0-beta.4`, etc.). The beta 2 patch increment was corrected by the user.
-- Keep Chrome's technical version monotonic using its fourth numeric component: after the already delivered `2.0.1`, use `2.0.1.3` for beta 3, `2.0.1.4` for beta 4, etc. Do not increment for repeated builds/tests of the same change set.
-- Run `pnpm version-sync`, update `CHANGELOG.md`, build, and test before handing the build to the user.
-- Popup and About must display `chrome.runtime.getManifest().version_name` with `version` as fallback, so they identify the extension actually loaded.
-- Before leaving beta, choose a stable numeric version greater than the last beta build; do not reset to an older numeric version.
+- `manifest.json` carries a numeric Chrome `version` and a visible `version_name`. Stable 2.0.0 shipped as `version` `2.0.2` / `version_name` `2.0.0`, after betas that used `2.0.1.x`.
+- Chrome's numeric `version` must always increase; never reuse or go below `2.0.2`. Bump it together with `version_name` (e.g. `2.0.3` / `2.0.1`).
+- Popup and About display `chrome.runtime.getManifest().version_name` with `version` as fallback, so they identify the extension actually loaded.
 
 ### Release Checklist
 
 1. Update `manifest.json` version
 2. Run `pnpm version-sync`
 3. Update `CHANGELOG.md` using Keep a Changelog format
-4. Commit with message: `chore: bump version to X.Y.Z`
-5. Build and test: `pnpm run build && pnpm test`
+4. Run `pnpm check` (typecheck, Biome, knip, tests) and `pnpm build`
+5. Commit with message: `chore: release X.Y.Z`
 
 Note: `README.md` has no version number and is intentionally version-agnostic. The badge links to `CHANGELOG.md`.
 
@@ -197,13 +194,16 @@ pnpm run build
 
 Builds to `dist/`. Automatically runs version-sync via prebuild hook. Always run tests after building.
 
-### Testing
+### Testing and checks
 
 ```bash
-pnpm test
+pnpm test        # Vitest
+pnpm lint        # Biome lint + format check (pnpm lint:fix to apply)
+pnpm knip        # unused files, exports and dependencies
+pnpm check       # all of the above plus typecheck; must pass with zero warnings
 ```
 
-Runs all Vitest tests. Check coverage with `pnpm test:coverage`.
+Tests never reach the network: `tests/setup.ts` stubs `fetch` with a 404; tests that need responses replace it.
 
 ### Loading the Extension
 
@@ -315,8 +315,8 @@ export default defineConfig({
 
 Before marking any task complete, verify:
 
-1. Code compiles - run `pnpm run build` or check LSP diagnostics
-2. Tests pass - run `pnpm test`
+1. Code compiles - run `pnpm run build`
+2. `pnpm check` passes with no errors or warnings
 3. No type errors - TypeScript strict mode, no suppressions
 4. Version updated only if releasing - update `manifest.json`, then run `pnpm version-sync`
 5. `CHANGELOG.md` updated only if version bumped or release notes are requested
@@ -332,10 +332,12 @@ Before marking any task complete, verify:
 
 ### Development
 
-- TypeScript 5
-- Vite 5
+- TypeScript 7
+- Vite 8 (shared with vite-plugin-web-extension via `pnpm-workspace.yaml` override)
 - vite-plugin-web-extension
-- Vitest
+- Vitest 5
+- Biome
+- knip
 - happy-dom
 - fake-indexeddb
 - tsx

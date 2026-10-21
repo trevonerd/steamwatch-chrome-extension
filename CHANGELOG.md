@@ -2,6 +2,32 @@
 
 All notable changes to this project are documented in this file.
 
+## [2.0.0] - 2026-10-21
+
+First stable release of the v2 tracker (betas 1–14 below). Chrome numeric version `2.0.2`.
+
+### Fixed
+- Fixed-window average and change include the first hour of the window; minimum and maximum use the same completed hourly series, so a single outlier sample no longer sets them
+- Latest hourly change ignores the hour still in progress
+- Games averaging under 10 players show "Low activity" instead of "History incomplete"
+- SteamCharts hourly rows older than the 60-day retention window are no longer re-imported beside compacted aggregates
+- Weekly trend alerts stay armed through mixed or briefly stale weeks, so a later sustained crossing still notifies
+- Clearing a per-game threshold now restores the global default (or turns the absolute rule off) instead of keeping the old value
+- Per-game rise/drop thresholds use the same 5–100% / 5–90% ranges as the global settings
+- Overnight quiet hours belong to the day they start (Friday 23:00 → 07:00 covers Saturday morning)
+- Fetch and compaction alarms are recreated when missing after the extension is disabled and re-enabled
+- Graph source note no longer overlaps the hover tooltip
+- Search combobox exposes its expanded state; buttons and day selector use correct semantics
+
+### Added
+- Clicking a notification opens the game's Steam store page
+- Tooltips show the all-time peak date, the lowest tracked count with its date, and weekly averages with how many days agree
+
+### Changed
+- Upgraded to Vite 8, Vitest 5, TypeScript 7, Zod 4 and current dev dependencies
+- Biome lint/format and knip added; `pnpm check` runs typecheck, lint, knip and tests
+- Removed unused view-model fields, legacy cooldown storage helpers, dead graph helpers and orphan CSS
+
 ## [2.0.0-beta.14] - 2026-09-16
 
 ### Fixed

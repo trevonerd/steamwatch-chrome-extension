@@ -51,6 +51,7 @@ Then in Chrome:
 ```bash
 pnpm run dev         # Vite watch mode
 pnpm test            # Vitest
+pnpm check           # typecheck + Biome + knip + tests
 pnpm run test:coverage
 ```
 
@@ -58,10 +59,10 @@ pnpm run test:coverage
 
 | Layer | Tech |
 |---|---|
-| Language | TypeScript 5 (strict) |
-| Bundler | Vite 5 + vite-plugin-web-extension |
-| Validation | Zod |
-| Testing | Vitest |
+| Language | TypeScript 7 (strict) |
+| Bundler | Vite 8 + vite-plugin-web-extension |
+| Validation | Zod 4 |
+| Testing | Vitest 5 |
 | Extension | Chrome MV3 |
 
 ### Project structure
