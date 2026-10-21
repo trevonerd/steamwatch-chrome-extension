@@ -50,6 +50,33 @@ const emptySnaps: Snapshot[] = [];
 // ── buildCardViewModel ─────────────────────────────────────────────────────────
 
 describe("buildCardViewModel", () => {
+  it("keeps all graph filters usable with interrupted history without inventing complete-period statistics", () => {
+    const now = Date.UTC(2026, 8, 16, 16);
+    const hourly = Array.from({ length: 60 * 24 }, (_, index) => chartSnapshot(now - (60 * 24 - index) * 3_600_000, 3000));
+    const snapshots: Snapshot[] = [...hourly.filter((point) => point.ts < now - 16 * 3_600_000),
+      { ts: now, current: 3100, source: "steam", granularity: "instant" }];
+    const vm = buildCardViewModel(game, cache, snapshots, 60, now);
+    expect(vm.availableGraphWindows.map((window) => window.key)).toEqual(["24h", "3d", "7d", "15d", "1m", "all"]);
+    expect(vm.defaultGraphWindow).toBe("24h");
+    expect(vm.avg24h).toBeUndefined();
+    expect(vm.trend?.pct).toBe(0);
+    expect(vm.trendAsOf).toBe(now - 16 * 3_600_000);
+  });
+
+  it("keeps filters enabled after live hourly tracking resumes while a historical gap remains", () => {
+    const now = Date.UTC(2026, 8, 16, 16);
+    const past = Array.from({ length: 60 * 24 }, (_, index) => chartSnapshot(now - (60 * 24 - index) * 3_600_000, 3000))
+      .filter((point) => point.ts < now - 16 * 3_600_000);
+    const live: Snapshot[] = Array.from({ length: 24 }, (_, index) => ({
+      ts: now - 2 * 3_600_000 + index * 5 * 60_000, current: 3100, source: "steam", granularity: "instant",
+    }));
+    const vm = buildCardViewModel(game, cache, [...past, ...live], 60, now);
+    expect(vm.earlyActivity).toBeUndefined();
+    expect(vm.availableGraphWindows.map((window) => window.key)).toEqual(["24h", "3d", "7d", "15d", "1m", "all"]);
+    expect(vm.avg24h).toBeUndefined();
+    expect(vm.trend?.pct).toBe(0);
+    expect(vm.trendAsOf).toBe(now - 16 * 3_600_000);
+  });
   it("returns the original game object unchanged", () => {
     const vm = buildCardViewModel(game, cache, snaps12, 7);
     expect(vm.game).toBe(game);
@@ -183,10 +210,8 @@ describe("buildCardViewModel", () => {
     expect(vm.twitchViewers).toBe(12_345);
     expect(vm.retentionDays).toBe(7);
     expect(vm.retentionWindowLabel).toBe("7d");
-    expect(vm.availableGraphWindows).toEqual([
-      { key: "all", label: "all", windowMs: 0 },
-    ]);
-    expect(vm.defaultGraphWindow).toBe("all");
+    expect(vm.availableGraphWindows.map((window) => window.key)).toEqual(["24h", "3d", "7d", "all"]);
+    expect(vm.defaultGraphWindow).toBe("24h");
   });
 
   it("only exposes 24h local stats when there is reliable 24h coverage", () => {
@@ -207,7 +232,7 @@ describe("buildCardViewModel", () => {
   it("exposes available graph windows and picks 24h as default when possible", () => {
     const graphSnaps = makeSnaps(Array.from({ length: 72 }, (_, hour) => 20_000 + hour));
     const vm = buildCardViewModel(game, cache, graphSnaps, 7);
-    expect(vm.availableGraphWindows.map((window) => window.key)).toEqual(["24h", "3d", "all"]);
+    expect(vm.availableGraphWindows.map((window) => window.key)).toEqual(["24h", "3d", "7d", "all"]);
     expect(vm.defaultGraphWindow).toBe("24h");
   });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analyzeSeasonalTrend, analyzeSeasonalTrendFromHourly } from "../src/utils/seasonal.js";
+import { analyzeLatestAvailableSeasonalTrendFromHourly, analyzeSeasonalTrend, analyzeSeasonalTrendFromHourly } from "../src/utils/seasonal.js";
 import { normalizeHourly } from "../src/utils/series.js";
 
 describe("analyzeSeasonalTrend", () => {
@@ -119,5 +119,63 @@ describe("analyzeSeasonalTrend", () => {
   ])("keeps labels and eligibility consistent near the %s%% display boundary", (change, pct, key, sustained) => {
     const result = analyzeSeasonalTrend(hourly((ts) => ts >= now - 7 * 24 * 3_600_000 ? 100 + Number(change) : 100), now);
     expect(result).toMatchObject({ status: "ready", trend: { pct, sustained, level: { key } } });
+  });
+});
+
+describe("latest available seasonal comparison", () => {
+  const hour = 3_600_000;
+  const now = Date.UTC(2026, 8, 16, 16);
+  const history = (end: number, hours = 14 * 24) => Array.from({ length: hours }, (_, index) => ({
+    hour: end - (hours - index) * hour,
+    observedAt: end - (hours - index) * hour + 6 * 60_000,
+    value: index >= hours - 168 ? 80 : 100,
+    source: "games-popularity" as const,
+  }));
+
+  it("recovers a dated comparison behind a sixteen-hour provider delay without changing current alert eligibility", () => {
+    const end = now - 16 * hour;
+    const points = history(end);
+    expect(analyzeSeasonalTrendFromHourly(points, now).status).toBe("stale");
+    expect(analyzeLatestAvailableSeasonalTrendFromHourly(points, now)).toMatchObject({
+      status: "ready", trend: { pct: -20 }, comparison: { endTs: end, matchedHours: 168 },
+    });
+  });
+
+  it("finds the latest complete comparison despite isolated recent hours", () => {
+    const end = now - 16 * hour;
+    const points = [...history(end), { hour: now - hour, observedAt: now - 10 * 60_000, value: 90, source: "steam" as const }];
+    expect(analyzeSeasonalTrendFromHourly(points, now).status).toBe("insufficient");
+    expect(analyzeLatestAvailableSeasonalTrendFromHourly(points, now)).toMatchObject({
+      status: "ready", comparison: { endTs: end },
+    });
+  });
+
+  it("preserves an already current ready comparison", () => {
+    const points = history(now);
+    expect(analyzeLatestAvailableSeasonalTrendFromHourly(points, now)).toEqual(analyzeSeasonalTrendFromHourly(points, now));
+  });
+
+  it("preserves a current low baseline instead of substituting an older ready comparison", () => {
+    const points = history(now, 15 * 24).map((point) => ({
+      ...point,
+      value: point.hour < now - 14 * 24 * hour ? 100 : 5,
+    }));
+    const current = analyzeSeasonalTrendFromHourly(points, now);
+    expect(current.status).toBe("low-baseline");
+    expect(analyzeSeasonalTrendFromHourly(points, now - 24 * hour).status).toBe("ready");
+    expect(analyzeLatestAvailableSeasonalTrendFromHourly(points, now)).toEqual(current);
+  });
+
+  it("does not relax required history or recover comparisons older than forty-eight hours", () => {
+    for (const points of [history(now - 16 * hour, 168), history(now - 49 * hour), history(now, 336).filter((point) => new Date(point.hour).getUTCHours() >= 6)]) {
+      expect(analyzeLatestAvailableSeasonalTrendFromHourly(points, now)).toEqual(analyzeSeasonalTrendFromHourly(points, now));
+    }
+  });
+
+  it("ignores future observations when recovering historical comparisons", () => {
+    const points = history(now - 16 * hour);
+    const future = history(now + 24 * hour).map((point) => ({ ...point, observedAt: now + hour, value: 10000 }));
+    expect(analyzeLatestAvailableSeasonalTrendFromHourly([...points, ...future], now))
+      .toEqual(analyzeLatestAvailableSeasonalTrendFromHourly(points, now));
   });
 });

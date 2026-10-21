@@ -43,6 +43,13 @@ afterEach(async () => {
 });
 
 describe("popup refresh", () => {
+  it("shows game names without ranking numbers when several games are tracked", async () => {
+    const games = ["570", "730", "440"].map((appid) => ({ appid, name: `Game ${appid}`, image: "" }));
+    await chrome.storage.local.set({ sw_games: games, sw_cache: Object.fromEntries(games.map((game) => [game.appid, cached])) });
+    await loadPopup();
+    expect(document.querySelectorAll(".rank-badge")).toHaveLength(0);
+    expect(Array.from(document.querySelectorAll(".game-name"), (item) => item.textContent)).toEqual(games.map((game) => game.name));
+  });
   it("renders cached counts before IndexedDB history finishes loading", async () => {
     let finish: (value: []) => void = () => undefined;
     const waiting = new Promise<[]>((resolve) => { finish = resolve; });
@@ -54,7 +61,7 @@ describe("popup refresh", () => {
     await vi.waitFor(() => expect(document.querySelector(".stat-current")?.textContent).toBe("100"));
     expect(document.querySelector('[data-history-loading="true"]')).not.toBeNull();
     document.querySelector<HTMLButtonElement>(".btn-expand")?.click();
-    expect(document.querySelector(".history-notice")?.textContent).toContain("Loading available history");
+    expect(document.querySelector(".history-notice")).toBeNull();
     finish([]);
     await vi.waitFor(() => expect(document.querySelector('[data-history-loading="true"]')).toBeNull());
   });
@@ -63,7 +70,7 @@ describe("popup refresh", () => {
     await loadPopup();
     document.querySelector<HTMLButtonElement>(".btn-expand")?.click();
     expect(document.querySelectorAll(".graph-pill:disabled")).toHaveLength(6);
-    expect(document.querySelector(".history-notice")?.getAttribute("role")).toBe("status");
+    expect(document.querySelector(".history-notice")).toBeNull();
     expect(document.querySelector(".graph-pill:disabled")?.getAttribute("title")).toBeTruthy();
     element("refreshBtn").click();
     await vi.waitFor(() => expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({ type: "FETCH_NOW", retryHistory: true }));
@@ -176,6 +183,7 @@ describe("popup refresh", () => {
     expect(document.querySelector(".period-stats")?.textContent).toContain("3d average");
     expect(document.querySelector(".period-stats")?.textContent).not.toBe(before);
     expect(document.querySelector(".panel-sparkline polyline")?.getAttribute("stroke-width")).toBe("1.8");
-    expect(document.querySelector(".panel-record-low")?.textContent).toContain("hourly coverage");
+    expect(document.querySelector(".panel-sparkline")?.getAttribute("title")).toContain("hourly coverage");
+    expect(document.querySelector(".panel-record-low")).toBeNull();
   });
 });

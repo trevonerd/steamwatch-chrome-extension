@@ -14,10 +14,14 @@ export function buildEarlyActivity(snapshots: readonly Snapshot[], hourly: reado
     maximum: valid.length ? Math.max(...valid.map((point) => point.current)) : null,
   };
   if (!valid.length) return { ...base, status: "collecting", reason: "Waiting for history. Current players are shown separately when available." };
-  if (now - latest > 2 * HOUR_MS) return { ...base, status: "stale", reason: "Historical observations are stale. Refresh is needed before comparing activity." };
   const end = Math.floor(now / HOUR_MS) * HOUR_MS;
+  const completed = hourly.filter((point) => point.observedAt <= now && point.hour < end);
+  const latestCompleted = completed.reduce((last, point) => Math.max(last, point.observedAt), 0);
+  if (now - (latestCompleted || latest) > 2 * HOUR_MS) {
+    return { ...base, status: "stale", reason: "Hourly history is behind the live count. Refresh checks for newer history; comparisons resume when enough recent hours are available." };
+  }
   const start = end - 24 * HOUR_MS;
-  const byHour = new Map(hourly.filter((point) => point.observedAt <= now && point.hour < end).map((point) => [point.hour, point]));
+  const byHour = new Map(completed.map((point) => [point.hour, point]));
   const pairs: { recent: number; baseline: number }[] = [];
   for (let hour = start; hour < end; hour += HOUR_MS) {
     const recent = byHour.get(hour);

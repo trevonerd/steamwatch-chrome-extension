@@ -1,7 +1,8 @@
 import type { CardViewModel, FieldFreshness, GraphWindowKey, Snapshot } from "../types/index.js";
 import { append, clear, h, s } from "../utils/html.js";
-import { fmtNumber, fmtPct, fmtTimeAgo, computeWindowMin, computeRetentionAvg, computeRetentionGain } from "../utils/trend.js";
+import { fmtNumber, fmtTimeAgo, computeWindowMin, computeRetentionAvg, computeRetentionGain } from "../utils/trend.js";
 import { buildGraphSeries, colorGraphSegments, findNearestPointIndex, filterSnapshotsByWindow } from "../utils/sparkline.js";
+import { HOUR_MS, normalizeHourly } from "../utils/series.js";
 
 const WINDOW_MS: Readonly<Record<GraphWindowKey, number>> = {
   "24h": 86_400_000,
@@ -26,20 +27,7 @@ export function populatePanel(panel: HTMLDivElement, vm: CardViewModel): void {
   clear(panel);
   const availableKeys = new Set(availableGraphWindows.map((window) => window.key));
   panel.appendChild(buildGraphPills(availableKeys, defaultGraphWindow, panel, vm));
-  if (availableKeys.size < 6) {
-    panel.appendChild(h("p", {
-      className: "history-notice",
-      text: vm.historyLoading ? "Loading available history…" : vm.historyStatus?.state === "unavailable"
-        ? "No history is available from the connected providers. Only available local observations can be shown."
-        : vm.historyStatus?.state === "retry"
-          ? "History download failed. Refresh retries the download; periods need enough coverage."
-          : "Some periods lack enough observations. Legacy data and monthly peaks are excluded from player-count graphs.",
-      attrs: { role: "status" },
-    }));
-  }
-
   const sparklinePanel = h("div", { className: "panel-sparkline" });
-  const recordLowEl = h("div", { className: "panel-record-low" });
 
   append(
     panel,
@@ -53,7 +41,6 @@ export function populatePanel(panel: HTMLDivElement, vm: CardViewModel): void {
         panelStat("Twitch viewers", twitchViewers != null ? fmtNumber(twitchViewers) : "—", vm.freshness?.twitchViewers),
       ],
     }),
-    recordLowEl,
     h("div", {
       className: "panel-links",
       children: [
@@ -64,35 +51,6 @@ export function populatePanel(panel: HTMLDivElement, vm: CardViewModel): void {
   );
 
   renderPanelGraph(panel, vm, defaultGraphWindow);
-  const analysis = vm.seasonalAnalysis;
-  if (analysis?.status === "ready" && analysis.comparison) {
-    const comparison = analysis.comparison;
-    const formatMean = (value: number): string => value.toLocaleString("en-US", { maximumFractionDigits: 1 });
-    const timestamp = (value: number): string => new Date(value).toISOString().slice(0, 16).replace("T", " ");
-    const summary = h("section", {
-      className: "weekly-comparison",
-      attrs: { "aria-label": "Weekly activity comparison" },
-      children: [
-        h("strong", { text: `7d vs previous 7d: ${fmtPct(analysis.trend.pct)}` }),
-        h("p", { text: `${formatMean(comparison.recentMean)} average players vs ${formatMean(comparison.baselineMean)} · ${comparison.matchedHours}/168 matched hours` }),
-        h("p", { text: analysis.trend.sustained ? `${analysis.trend.pct < 0 ? comparison.fallingDays : comparison.risingDays}/7 days confirm ${analysis.trend.pct < 0 ? "lower" : "higher"} activity.` : analysis.trend.level.label === "Uneven week" ? "Uneven week: the change is not sustained across five days." : "Weekly activity is broadly stable." }),
-        h("p", { text: `${timestamp(comparison.startTs)} → ${timestamp(comparison.endTs)} UTC`, attrs: { title: `Previous period: ${timestamp(comparison.baselineStartTs)} → ${timestamp(comparison.startTs)} UTC. Only matching hours are averaged. Concurrent players, not unique players lost.` } }),
-      ],
-    });
-    recordLowEl.after(summary);
-  } else if (vm.earlyActivity) {
-    const early = vm.earlyActivity;
-    const comparison = early.comparison;
-    recordLowEl.after(h("section", {
-      className: "weekly-comparison early-activity", attrs: { "aria-label": "Limited history activity" },
-      children: [
-        h("strong", { text: comparison ? `24h vs previous 24h: ${comparison.pct === null ? `${comparison.delta > 0 ? "+" : ""}${comparison.delta} avg players` : fmtPct(comparison.pct)} · preliminary` : early.status === "stale" ? "History needs refreshing" : "Building an activity baseline" }),
-        h("p", { text: comparison ? `${comparison.recentMean.toLocaleString("en-US", { maximumFractionDigits: 1 })} average players vs ${comparison.baselineMean.toLocaleString("en-US", { maximumFractionDigits: 1 })} · ${comparison.matchedHours}/24 matched hours` : `${early.observations} observations · ${early.spanHours.toFixed(1)}h span${early.minimum === null ? "" : ` · observed range ${fmtNumber(early.minimum)}–${fmtNumber(early.maximum)}`}` }),
-        h("p", { text: early.reason }),
-        ...(comparison ? [h("p", { text: `${new Date(comparison.startTs).toISOString().slice(0, 16).replace("T", " ")} → ${new Date(comparison.endTs).toISOString().slice(0, 16).replace("T", " ")} UTC` })] : []),
-      ],
-    }));
-  }
 }
 
 function buildGraphPills(
@@ -142,12 +100,12 @@ export function freshnessTitle(freshness: FieldFreshness | undefined): string {
   return `${freshness.source} · ${acquired}${freshness.status === "error" ? " · Latest request failed" : ""}`;
 }
 
-function panelStat(label: string, value: string, freshness?: FieldFreshness): HTMLDivElement {
+function panelStat(label: string, value: string, context?: FieldFreshness | string): HTMLDivElement {
   return h("div", {
     className: "panel-stat",
     children: [
       h("dt", { className: "panel-stat-label", text: label }),
-      h("dd", { className: "panel-stat-value", text: value, attrs: { title: freshness ? freshnessTitle(freshness) : undefined } }),
+      h("dd", { className: "panel-stat-value", text: value, attrs: { title: typeof context === "string" ? context : context ? freshnessTitle(context) : undefined } }),
     ],
   });
 }
@@ -187,32 +145,42 @@ function renderPanelGraph(panel: HTMLDivElement, vm: CardViewModel, key: GraphWi
     cleanup.hoverCleanup = attachSparklineHover(container, result.points, result.points);
   }
   const selected = filterSnapshotsByWindow(vm.snaps, windowMs, now);
-  const days = (windowMs || (now - (selected[0]?.ts ?? now))) / 86_400_000;
-  const avg = days > 0 ? computeRetentionAvg(selected, days, now) : undefined;
-  const gain = days > 0 ? computeRetentionGain(selected, days, now) : undefined;
+  const hourly = normalizeHourly(selected, now);
+  const completedHour = Math.floor(now / HOUR_MS) * HOUR_MS;
+  const completed = hourly.filter((point) => point.hour < completedHour);
+  const first = completed[0];
+  const last = completed.at(-1);
+  const availableSummary = first && last && completed.length >= 2
+    && completed.length / ((last.hour - first.hour) / HOUR_MS + 1) >= 0.8
+    ? {
+      average: Math.round(completed.reduce((sum, point) => sum + point.value, 0) / completed.length),
+      change: last.value - first.value,
+      title: `Available observed hours. Missing hours excluded. First observation: ${new Date(first.observedAt).toISOString()} · Last observation: ${new Date(last.observedAt).toISOString()} (UTC).`,
+    } : null;
+  const days = windowMs / 86_400_000;
+  const avg = windowMs === 0 ? availableSummary?.average : computeRetentionAvg(selected, days, now);
+  const gain = windowMs === 0 ? availableSummary?.change : computeRetentionGain(selected, days, now);
+  const summaryTitle = windowMs === 0 ? availableSummary?.title : undefined;
   let stats = panel.querySelector<HTMLDListElement>(".period-stats");
   if (!stats) {
     stats = h("dl", { className: "panel-stats period-stats" });
     panel.querySelector(".panel-stats")?.after(stats);
   }
   clear(stats);
-  const label = key === "all" || key === null ? "Available" : key;
+  const label = key === "all" || key === null ? "All" : key;
   const low = computeWindowMin(selected);
   const peak = selected.length ? Math.max(...selected.map((point) => point.current)) : null;
   append(stats,
-    panelStat(`${label} average`, avg == null ? "—" : fmtNumber(avg)),
-    panelStat(`${label} change`, gain == null ? "—" : fmtSignedPlayers(gain)),
-    panelStat("Observed minimum", low ? fmtNumber(low.value) : "—"),
-    panelStat("Observed maximum", peak === null ? "—" : fmtNumber(peak)),
+    panelStat(`${label} average`, avg == null ? "—" : fmtNumber(avg), summaryTitle),
+    panelStat(`${label} change`, gain == null ? "—" : fmtSignedPlayers(gain), summaryTitle),
+    panelStat(`${label} minimum`, low ? fmtNumber(low.value) : "—"),
+    panelStat(`${label} maximum`, peak === null ? "—" : fmtNumber(peak)),
   );
-  const caption = panel.querySelector<HTMLDivElement>(".panel-record-low");
-  if (caption) {
-    caption.hidden = false;
-    const fallbackCredit = selected.some((point) => point.source === "games-popularity") ? " · Games Popularity" : "";
-    caption.textContent = result
-      ? `${new Date(result.startTs).toLocaleString()} – ${new Date(result.endTs).toLocaleString()} · ${Math.round(result.coverage * 100)}% hourly coverage${fallbackCredit}`
-      : "Waiting for qualified player observations.";
-  }
+  const fallbackCredit = selected.some((point) => point.source === "games-popularity") ? " · Games Popularity" : "";
+  const latestHour = last;
+  container.title = result
+    ? `${new Date(result.startTs).toLocaleString()} – ${new Date(result.endTs).toLocaleString()} · ${Math.round(result.coverage * 100)}% hourly coverage overall${fallbackCredit}${latestHour ? ` · History ${fmtTimeAgo(latestHour.observedAt, now)}` : ""}`
+    : "Waiting for qualified player observations.";
 }
 
 function attachSparklineHover(

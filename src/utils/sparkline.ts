@@ -133,26 +133,19 @@ export function hasEnoughGraphHistory(
   windowMs: number,
   now = Date.now(),
 ): boolean {
-  return hasEnoughGraphHistoryFromHourly(normalizeHourly(snapshots, now), windowMs, now);
+  const start = windowMs === 0 ? Number.NEGATIVE_INFINITY : now - windowMs;
+  return snapshots.some((point) => point.ts >= start && point.ts <= now
+    && point.aggregate === undefined && isQualifiedSnapshot(point));
 }
 
-/** Assess graph eligibility from an already-normalized hourly series. */
+/** Viewing observations does not require the coverage needed for statistical comparisons. */
 export function hasEnoughGraphHistoryFromHourly(
   points: readonly HourlyPoint[],
   windowMs: number,
   now: number,
 ): boolean {
-  if (windowMs === 0) return points.length >= 2;
-  const end = Math.floor(now / HOUR_MS) * HOUR_MS;
-  const start = end - windowMs;
-  const window = points.filter((point) => point.hour >= start && point.hour < end);
-  const first = window[0];
-  const last = window.at(-1);
-  return first !== undefined && last !== undefined
-    && hourlyCoverage(window, start, end) >= 0.8
-    && first.hour <= start + 2 * HOUR_MS
-    && now - last.observedAt <= 2 * HOUR_MS
-    && window.every((point, index) => index === 0 || point.hour - (window[index - 1]?.hour ?? point.hour) <= 3 * HOUR_MS);
+  const start = windowMs === 0 ? Number.NEGATIVE_INFINITY : now - windowMs;
+  return points.some((point) => point.observedAt >= start && point.observedAt <= now);
 }
 
 export function buildGraphSeries(

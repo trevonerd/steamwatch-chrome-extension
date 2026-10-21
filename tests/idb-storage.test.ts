@@ -398,6 +398,36 @@ describe("idb-storage", () => {
       await expect(idbAcquireBootstrapLease("242050", Date.now(), 1_000, true)).resolves.toBeNull();
     });
 
+    it("allows manual recovery of stale completed history after a fifteen-minute cooldown", async () => {
+      const now = Date.now();
+      const lease = await idbAcquireBootstrapLease("3751950", now, 120_000);
+      if (!lease) throw new Error("expected bootstrap lease");
+      await idbCompleteBootstrapImport(lease, [
+        { ts: now - 16 * 3_600_000, current: 2139, source: "games-popularity", granularity: "hourly" },
+      ]);
+      const completedAt = (await idbGetBootstrapStatus("3751950"))?.completedAt;
+      if (completedAt === undefined) throw new Error("expected completed import");
+
+      await expect(idbAcquireBootstrapLease("3751950", completedAt + 15 * 60_000 - 1, 120_000, true)).resolves.toBeNull();
+      await expect(idbAcquireBootstrapLease("3751950", completedAt + 15 * 60_000, 120_000)).resolves.toBeNull();
+      await expect(idbAcquireBootstrapLease("3751950", completedAt + 15 * 60_000, 120_000, true)).resolves.toMatchObject({ attempt: 1 });
+      await expect(idbAcquireBootstrapLease("3751950", completedAt + 15 * 60_000 + 1, 120_000, true)).resolves.toBeNull();
+    });
+
+    it("keeps fresh completed history on the normal schedule even during manual refresh", async () => {
+      const now = Date.now();
+      const lease = await idbAcquireBootstrapLease("570", now, 120_000);
+      if (!lease) throw new Error("expected bootstrap lease");
+      await idbCompleteBootstrapImport(lease, [
+        { ts: now - 30 * 60_000, current: 200, source: "steamcharts", granularity: "hourly" },
+      ]);
+      const completedAt = (await idbGetBootstrapStatus("570"))?.completedAt;
+      if (completedAt === undefined) throw new Error("expected completed import");
+
+      await expect(idbAcquireBootstrapLease("570", completedAt + 15 * 60_000, 120_000, true)).resolves.toBeNull();
+      await expect(idbAcquireBootstrapLease("570", completedAt + 6 * 3_600_000, 120_000)).resolves.toMatchObject({ attempt: 1 });
+    });
+
     it("promotes a matching unknown row to known metadata regardless of import order", async () => {
       const lease = await idbAcquireBootstrapLease("100", 10_000, 1_000);
       expect(lease).not.toBeNull();

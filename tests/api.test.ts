@@ -80,6 +80,16 @@ describe("fetchAppDetails", () => {
 // ── fetchCurrentPlayers ───────────────────────────────────────────────────────
 
 describe("fetchCurrentPlayers", () => {
+  it("rejects an explicit Steam failure instead of recording zero players", async () => {
+    mockFetch({ response: { player_count: 0, result: 2 } });
+    expect(await fetchCurrentPlayers("3751950")).toBeNull();
+  });
+
+  it("preserves a successful zero-player response", async () => {
+    mockFetch({ response: { player_count: 0, result: 1 } });
+    expect(await fetchCurrentPlayers("3751950")).toBe(0);
+  });
+
   it("returns player count on valid response", async () => {
     mockFetch({ response: { player_count: 85432 } });
     expect(await fetchCurrentPlayers("570")).toBe(85432);

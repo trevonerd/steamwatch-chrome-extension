@@ -57,4 +57,22 @@ describe("early activity", () => {
     expect(analyze([{ ts: now, current: 999 }, { ts: now + hour, current: 888, source: "steam", granularity: "instant" }]))
       .toMatchObject({ status: "collecting", observations: 0, minimum: null, maximum: null });
   });
+
+  it("keeps stale hourly history stale when a fresh live count arrives", () => {
+    const snapshots: Snapshot[] = [
+      ...history(60 * 24, () => 3000).slice(0, -16),
+      { ts: now, current: 3100, source: "steam", granularity: "instant" },
+    ];
+    const vm = buildCardViewModel({ appid: "3751950", name: "Black Flag", image: "" }, {}, snapshots, 60, now);
+    expect(analyze(snapshots).status).toBe("stale");
+    expect(analyze(snapshots).comparison).toBeUndefined();
+    expect(vm.seasonalAnalysis?.status).toBe("ready");
+    expect(vm.trendAsOf).toBeLessThan(now);
+    expect(vm.earlyActivity).toBeUndefined();
+  });
+
+  it("keeps collecting when fresh live observations have not yet established an hour", () => {
+    const snapshots: Snapshot[] = [{ ts: now, current: 100, source: "steam", granularity: "instant" }];
+    expect(analyze(snapshots).status).toBe("collecting");
+  });
 });

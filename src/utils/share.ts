@@ -53,6 +53,7 @@ export function buildShareText(vm: CardViewModel): string {
   // Trend
   if (trend) {
     parts.push(`${trend.level.icon} 7d vs previous 7d: ${fmtPct(trend.pct)} (${trend.level.label})`);
+    if (vm.trendAsOf !== undefined) parts.push(`Historical comparison through ${new Date(vm.trendAsOf).toISOString()}; newer history is incomplete.`);
   } else if (seasonalAnalysis) {
     parts.push(`↔ Trend unavailable: ${seasonalAnalysis.reason}`);
     const early = vm.earlyActivity;
@@ -181,7 +182,7 @@ export async function renderShareCanvas(vm: CardViewModel): Promise<Blob> {
   // ── Trend badge ────────────────────────────────────────────────────────────
   if (trend) {
     const badgeColor = trendBadgeColor(vm.trendCls);
-    const badgeText  = `${trend.level.icon} ${fmtPct(trend.pct)} 7d`;
+    const badgeText  = `${trend.level.icon} ${fmtPct(trend.pct)} 7d${vm.trendAsOf !== undefined ? ` · ${fmtTimeAgo(vm.trendAsOf, vm.evaluatedAt)}` : ""}`;
     ctx.font = "11px 'Courier New', Courier, monospace";
     const bw = ctx.measureText(badgeText).width + 14;
     const bx = CANVAS_W - bw - 12;
@@ -201,7 +202,7 @@ export async function renderShareCanvas(vm: CardViewModel): Promise<Blob> {
     ctx.fillStyle = "#7a90aa";
     const early = vm.earlyActivity;
     const pct = early?.comparison?.pct;
-    const label = early?.status === "preliminary" ? pct != null ? `~${fmtPct(pct)} 24h (early)` : "24h activity (early)" : early?.status === "stale" ? "History stale" : "Building history";
+    const label = early?.status === "preliminary" ? pct != null ? `~${fmtPct(pct)} 24h (early)` : "24h activity (early)" : early?.status === "stale" ? "History stale" : (early?.spanHours ?? 0) >= 14 * 24 ? "History incomplete" : "Building history";
     ctx.fillText(label, CANVAS_W - ctx.measureText(label).width - 12, 55);
   }
 

@@ -52,14 +52,35 @@ describe("buildGraphSeries", () => {
 });
 
 describe("hasEnoughGraphHistory", () => {
+  it("allows every period containing observations even when recent history has a gap", () => {
+    const snapshots = [...hourly(60 * 24).filter((point) => point.ts < NOW - 16 * HOUR),
+      { ts: NOW, current: 3100, source: "steam" as const, granularity: "instant" as const }];
+    for (const hours of [24, 72, 168, 360, 720, 0]) {
+      expect(hasEnoughGraphHistory(snapshots, hours * HOUR, NOW)).toBe(true);
+      expect(buildGraphSeries(snapshots, hours * HOUR, NOW, 240, 60).segments.length).toBeGreaterThan(1);
+    }
+  });
+
+  it("allows a period with only live observations that cannot support an hourly average", () => {
+    expect(hasEnoughGraphHistory([{ ts: NOW, current: 3100, source: "steam", granularity: "instant" }], 24 * HOUR, NOW)).toBe(true);
+  });
+
+  it("does not enable an empty period from older or unqualified observations", () => {
+    expect(hasEnoughGraphHistory([
+      ...hourly(2, NOW - 3 * 24 * HOUR),
+      { ts: NOW, current: 999, source: "steamcharts", granularity: "monthly-peak" },
+      { ts: NOW + HOUR, current: 999, source: "steamcharts", granularity: "hourly" },
+    ], 24 * HOUR, NOW)).toBe(false);
+  });
+
   it("matches the snapshot API when supplied normalized points", () => {
     const snapshots = hourly(24);
     expect(hasEnoughGraphHistoryFromHourly(normalizeHourly(snapshots, NOW), 24 * HOUR, NOW)).toBe(hasEnoughGraphHistory(snapshots, 24 * HOUR, NOW));
   });
 
-  it("rejects dense same-hour samples and accepts coverage-complete windows", () => {
+  it("allows both same-hour live samples and coverage-complete windows to be viewed", () => {
     const dense = Array.from({ length: 1_000 }, (_, index) => ({ ts: NOW - HOUR + index, current: 100, source: "steam" as const, granularity: "instant" as const }));
-    expect(hasEnoughGraphHistory(dense, 30 * 24 * HOUR, NOW)).toBe(false);
+    expect(hasEnoughGraphHistory(dense, 30 * 24 * HOUR, NOW)).toBe(true);
     expect(hasEnoughGraphHistory(hourly(24), 24 * HOUR, NOW)).toBe(true);
   });
 });

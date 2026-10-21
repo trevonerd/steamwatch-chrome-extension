@@ -100,10 +100,7 @@ function renderGames(vms: CardViewModel[], favoriteAppid?: string): void {
   clear(gamesListEl);
 
   vms.forEach((vm, index) => {
-    const rankEmoji = vms.length > 1
-      ? index === 0 ? "1" : index === 1 ? "2" : index === 2 ? "3" : ""
-      : "";
-    const item = buildGameItem(vm, rankEmoji, index === 0, favoriteAppid);
+    const item = buildGameItem(vm, index === 0, favoriteAppid);
     gamesListEl.appendChild(item);
     if (expanded.has(vm.game.appid)) {
       item.querySelector<HTMLButtonElement>(".btn-expand")?.click();
@@ -130,7 +127,7 @@ function renderGames(vms: CardViewModel[], favoriteAppid?: string): void {
   }
 }
 
-function buildGameItem(vm: CardViewModel, rankEmoji: string, isTop: boolean, favoriteAppid?: string): HTMLLIElement {
+function buildGameItem(vm: CardViewModel, isTop: boolean, favoriteAppid?: string): HTMLLIElement {
   const { game, current, peak24h, allTimePeak, trendCls, displayTrendPct, displayTrendIcon, displayTrendCls } = vm;
   const li = h("li", { className: "game-item", dataset: { historyLoading: String(vm.historyLoading === true) } });
   const card = h("div", {
@@ -164,9 +161,6 @@ function buildGameItem(vm: CardViewModel, rankEmoji: string, isTop: boolean, fav
   wireThumbFallback(img, thumbWrap, game.appid);
 
   const gameName = h("div", { className: "game-name", attrs: { title: game.name } });
-  if (rankEmoji) {
-    gameName.appendChild(h("span", { className: "rank-badge", text: rankEmoji, attrs: { "aria-hidden": "true" } }));
-  }
   gameName.appendChild(h("span", { className: "game-name-text", text: game.name }));
 
   const stats = h("div", { className: "game-stats" });
@@ -191,14 +185,14 @@ function buildGameItem(vm: CardViewModel, rankEmoji: string, isTop: boolean, fav
   if (displayTrendPct != null) {
     stats.appendChild(h("span", {
       className: `trend-badge ${displayTrendCls}`,
-      text: `${displayTrendIcon ? `${displayTrendIcon} ` : ""}${fmtPct(displayTrendPct)} 7d`,
-      attrs: { "aria-label": `${fmtPct(displayTrendPct)} average players: last 7 days vs previous 7 days`, title: `${vm.trend?.level.label ?? "Weekly activity"}. ${vm.seasonalAnalysis?.reason ?? "Last 7 days vs previous 7 days."}` },
+      text: `${displayTrendIcon ? `${displayTrendIcon} ` : ""}${fmtPct(displayTrendPct)} 7d${vm.trendAsOf !== undefined ? ` · ${fmtTimeAgo(vm.trendAsOf, vm.evaluatedAt)}` : ""}`,
+      attrs: { "aria-label": `${fmtPct(displayTrendPct)} average players: 7 days vs previous 7 days${vm.trendAsOf !== undefined ? `, through ${new Date(vm.trendAsOf).toISOString()}` : ""}`, title: `${vm.trend?.level.label ?? "Weekly activity"}. ${vm.seasonalAnalysis?.reason ?? "Last 7 days vs previous 7 days."}${vm.trendAsOf !== undefined ? ` Historical comparison through ${new Date(vm.trendAsOf).toISOString()}; newer history is incomplete.` : ""}` },
     }));
   } else {
     const early = vm.earlyActivity;
     const pct = early?.comparison?.pct;
     stats.appendChild(h("span", { className: "trend-badge stable",
-      text: early?.status === "preliminary" ? pct != null ? `~${fmtPct(pct)} 24h` : "24h activity" : early?.status === "stale" ? "History stale" : "Building history",
+      text: early?.status === "preliminary" ? pct != null ? `~${fmtPct(pct)} 24h` : "24h activity" : early?.status === "stale" ? "History stale" : (early?.spanHours ?? 0) >= 14 * 24 ? "History incomplete" : "Building history",
       attrs: { title: early?.reason ?? vm.seasonalAnalysis?.reason ?? "Not enough comparable history" },
     }));
   }

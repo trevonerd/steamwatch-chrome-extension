@@ -2,6 +2,39 @@
 
 All notable changes to this project are documented in this file.
 
+## [2.0.0-beta.14] - 2026-09-16
+
+### Fixed
+- Display the latest reliable weekly comparison within 48 hours when recent history is incomplete, with its age visible; current-time notification checks remain unchanged
+- Compute All-period average and change from sufficiently covered observed hours instead of suppressing the entire summary for a recent gap
+- Distinguish incomplete mature histories from new histories still building a baseline
+
+### Changed
+- Historical trend cutoffs are included in popup tooltips and shared summaries
+- Visible version is `2.0.0-beta.14`; Chrome numeric version is `2.0.1.14`
+
+## [2.0.0-beta.13] - 2026-09-16
+
+### Fixed
+- Enable graph filters whenever their period contains valid observations, including interrupted Black Flag history and sparse live samples; preserve visible gaps and statistical coverage requirements
+- Restore the Current, 24h peak, record and Twitch data tiles
+
+### Changed
+- Remove the verbose history coverage and weekly/daily explanatory blocks from expanded cards; retain source and time metadata in graph tooltips
+- Visible version is `2.0.0-beta.13`; Chrome numeric version is `2.0.1.13`
+
+## [2.0.0-beta.12] - 2026-09-16
+
+### Fixed
+- Detect stale historical data even when a fresh live player count exists
+- Retry completed but stale history manually after a short cooldown
+- Reject explicit Steam player-count API failures instead of recording false zeros
+- Align all-period statistics to normalized completed hours
+- Remove numeric rankings and repeated detail statistics from the popup
+
+### Changed
+- Visible version is `2.0.0-beta.12`; Chrome numeric version is `2.0.1.12`
+
 ## [2.0.0-beta.11] - 2026-09-11
 
 ### Added

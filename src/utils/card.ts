@@ -24,14 +24,14 @@ import {
 } from "./trend.js";
 import {
   buildAvailableGraphWindows,
-  hasEnoughGraphHistoryFromHourly,
+  hasEnoughGraphHistory,
   sparklineColor,
   filterSnapshotsByWindow,
   GRAPH_WINDOW_MS,
 } from "./sparkline.js";
 import { formatError } from "./log.js";
-import { isQualifiedSnapshot, normalizeHourly } from "./series.js";
-import { analyzeSeasonalTrendFromHourly } from "./seasonal.js";
+import { HOUR_MS, isQualifiedSnapshot, normalizeHourly } from "./series.js";
+import { analyzeLatestAvailableSeasonalTrendFromHourly } from "./seasonal.js";
 
 /**
  * Build the complete view model for a single game card.
@@ -63,10 +63,13 @@ export function buildCardViewModel(
   const retentionGain = computeRetentionGainFromHourly(hourly, retentionDays, now);
   const retentionWindowLabel = computeRetentionWindowLabel(snaps, retentionDays, now);
   const availableGraphWindows = buildAvailableGraphWindows(retentionDays)
-    .filter((window) => hasEnoughGraphHistoryFromHourly(hourly, window.windowMs, now));
+    .filter((window) => hasEnoughGraphHistory(observations, window.windowMs, now));
   const defaultGraphWindow = availableGraphWindows.find((w) => w.key !== "all")?.key ?? availableGraphWindows[0]?.key ?? null;
-  const seasonalAnalysis = analyzeSeasonalTrendFromHourly(hourly, now);
+  const seasonalAnalysis = analyzeLatestAvailableSeasonalTrendFromHourly(hourly, now);
   const trend = seasonalAnalysis.status === "ready" ? seasonalAnalysis.trend : null;
+  const comparisonEnd = seasonalAnalysis.status === "ready" ? seasonalAnalysis.comparison?.endTs : undefined;
+  const trendAsOf = comparisonEnd !== undefined && comparisonEnd < Math.floor(now / HOUR_MS) * HOUR_MS
+    ? comparisonEnd : undefined;
   const trendCls   = trend?.level.cls ?? "stable";
   const latestChangePct = computeLatestChangePctFromHourly(hourly, now);
   const stroke = trend ? sparklineColor(observations) : "#00c8ff";
@@ -86,6 +89,7 @@ export function buildCardViewModel(
     ...(allTimePeak !== null && data?.allTimePeakLabel ? { allTimePeakLabel: data.allTimePeakLabel } : {}),
     ...(observedPeak !== null ? { observedPeak } : {}),
     seasonalAnalysis,
+    ...(trendAsOf !== undefined ? { trendAsOf } : {}),
     ...(seasonalAnalysis.status !== "ready" ? { earlyActivity: buildEarlyActivity(observations, hourly, now) } : {}),
     displayTrendPct: trend?.pct ?? null,
     displayTrendIcon: trend?.level.icon ?? null,

@@ -14,6 +14,18 @@ export function analyzeSeasonalTrend(snapshots: readonly Snapshot[], now = Date.
   return analyzeSeasonalTrendFromHourly(normalizeHourly(snapshots, now), now);
 }
 
+/** Display-only recovery; alert evaluation must use the current-time analysis. */
+export function analyzeLatestAvailableSeasonalTrendFromHourly(points: readonly HourlyPoint[], now: number): SeasonalTrendAnalysis {
+  const current = analyzeSeasonalTrendFromHourly(points, now);
+  if (current.status !== "stale" && current.status !== "insufficient") return current;
+  const oldestEnd = now - 48 * HOUR_MS;
+  for (let end = Math.floor(now / HOUR_MS) * HOUR_MS - HOUR_MS; end >= oldestEnd; end -= HOUR_MS) {
+    const candidate = analyzeSeasonalTrendFromHourly(points, end);
+    if (candidate.status === "ready") return candidate;
+  }
+  return current;
+}
+
 /** Compare adjacent weeks using only matched UTC hours, so nights and weekends align. */
 export function analyzeSeasonalTrendFromHourly(points: readonly HourlyPoint[], now: number): SeasonalTrendAnalysis {
   const week = 7 * 24 * HOUR_MS;

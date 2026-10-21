@@ -345,6 +345,8 @@ export interface CardViewModel {
   readonly historyStatus?: BootstrapStatus;
   readonly historyLoading?: boolean;
   readonly seasonalAnalysis?: SeasonalTrendAnalysis;
+  /** Historical comparison cutoff, present only when the current week is incomplete. */
+  readonly trendAsOf?: number;
   readonly earlyActivity?: EarlyActivity;
   readonly observedPeak?: number;
   readonly evaluatedAt?: number;
@@ -357,7 +359,7 @@ export interface CardViewModel {
 // ── External API schemas ──────────────────────────────────────────────────────
 
 export const PlayerCountSchema = z.object({
-  response: z.object({ player_count: z.number().int().nonnegative() }),
+  response: z.object({ player_count: z.number().int().nonnegative(), result: z.literal(1).optional() }),
 });
 
 export const StoreSearchSchema = z.object({

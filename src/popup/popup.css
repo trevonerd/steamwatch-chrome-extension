@@ -225,13 +225,13 @@ body {
   display: flex; align-items: center; gap: 3px;
 }
 .game-name-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.rank-badge     { font-size: 12px; line-height: 1; flex-shrink: 0; }
 
 /* ── Stats row ───────────────────────────────────────────────── */
-.game-stats { display: flex; align-items: center; gap: 7px; }
+.game-stats { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
 
 /* Big player count — primary data point, highest contrast */
 .stat-current {
+  flex-shrink: 0;
   font-family: var(--ff-mono);
   font-size: 20px; font-weight: 600;
   color: var(--accent);
@@ -240,7 +240,7 @@ body {
 }
 
 /* Secondary stats: PK / 24H */
-.stat-meta { display: flex; flex-direction: column; gap: 2px; }
+.stat-meta { display: flex; flex-shrink: 0; flex-direction: column; gap: 2px; }
 
 .stat-row {
   display: flex; align-items: baseline; gap: 4px;
