@@ -20,15 +20,19 @@ First stable release of the v2 tracker (betas 1–14 below). Chrome numeric vers
 - Graph source note no longer overlaps the hover tooltip
 - Search combobox exposes its expanded state; buttons and day selector use correct semantics
 - Popup footer fits on one line
+- Trend badge never wraps onto the card graph: it stays on the stats row and truncates; the age of a dated comparison moved to the tooltip
+- Card controls are visible on keyboard focus
+- Muted labels, the Stable badge and footer text meet 4.5:1 contrast
 
 ### Added
 - Clicking a notification opens the game's Steam store page
 - Tooltips show the all-time peak date and the lowest tracked count with its date
 - Sudden changes (6+ hours each at least 20% away from the same hour a week earlier) are marked on the graph, listed under it with official Steam announcements from the 48 hours before, and notified once
 - Collapse level for drops beyond −50%
+- Expanded panel states the comparison in words (24h average vs the same hours last week, matched hours)
 
 ### Changed
-- Trend badge shows momentum: last 24 hours vs the same hours a week earlier ("−45% vs last wk"), falling back to the 7-day average of each hour ("vs 7d avg") for newer games. A two-day collapse no longer reads as stable because the weekly average dilutes it; the weekly average, peaks and matched hours move to the tooltip
+- Trend badge shows momentum: last 24 hours vs the same hours a week earlier ("−45% w/w"), falling back to the 7-day average of each hour ("vs 7d", dashed outline) for newer games. A two-day collapse no longer reads as stable because the weekly average dilutes it; the weekly average, peaks and matched hours move to the tooltip
 - Trend levels widened to ±10 / 25 / 50% for the noisier 24-hour window
 - Trend alerts follow the 24-hour momentum and must hold for 3 consecutive completed hours; pending alerts from the weekly algorithm are re-primed
 - Upgraded to Vite 8, Vitest 5, TypeScript 7, Zod 4 and current dev dependencies

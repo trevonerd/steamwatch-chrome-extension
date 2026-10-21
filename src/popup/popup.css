@@ -23,14 +23,14 @@
   --crash: #ff3366;
   --crash-bg: rgba(255 51 102 / 0.13);
   --warn: #f59e0b;
-  --stable: #64748b;
+  --stable: #8a9ab0;
   --stable-bg: rgba(100 116 139 / 0.13);
 
   /* ─ Text hierarchy: clear 4-step scale ─ */
   --text: #e2e8f2; /* primary — game names, current count */
   --text-2: #94a3b8; /* secondary — stat values, trend pct */
-  --text-3: #546a80; /* tertiary — labels / captions */
-  --text-4: #2e4560; /* quaternary — separators, borders */
+  --text-3: #7d93ab; /* tertiary — labels / captions (≥4.5:1 on cards) */
+  --text-4: #2e4560; /* quaternary — separators and borders only, never text */
 
   --ff-head: "Rajdhani", sans-serif;
   --ff-body: "DM Sans", sans-serif;
@@ -320,9 +320,10 @@ body {
 /* ── Stats row ───────────────────────────────────────────────── */
 .game-stats {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 7px;
+  min-width: 0;
 }
 
 /* Big player count — primary data point, highest contrast */
@@ -373,16 +374,25 @@ body {
 
 /* ── Trend badge ─────────────────────────────────────────────── */
 .trend-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
+  display: inline-block;
   padding: 2px 6px;
   border-radius: var(--r-pill);
   font-size: 12px;
   font-family: var(--ff-mono);
   font-weight: 600;
   white-space: nowrap;
-  flex-shrink: 0;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Weaker baseline (7-day hourly average): same colour, dashed outline. */
+.trend-badge--provisional {
+  outline: 1px dashed currentColor;
+  outline-offset: -1px;
+}
+.trend-badge--dated {
+  opacity: 0.75;
 }
 .trend-badge.explosion,
 .trend-badge.strong-up,
@@ -436,6 +446,7 @@ body {
   transition: opacity 0.15s;
 }
 .game-card:hover .card-controls,
+.game-card:focus-within .card-controls,
 .game-item.expanded .card-controls {
   opacity: 1;
 }
@@ -459,7 +470,7 @@ body {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: var(--text-4);
+  color: var(--text-3);
   transition:
     border-color 0.15s,
     color 0.15s,
@@ -719,13 +730,28 @@ body {
   color: var(--text-2);
 }
 
-.panel-change {
+.panel-momentum {
   margin: 0;
-  padding: 5px 12px;
+  padding: 6px 12px 0;
+  font-size: 11px;
+  font-family: var(--ff-mono);
+  color: var(--text-2);
+  line-height: 1.4;
+}
+.panel-change {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 4px 12px 6px;
   font-size: 11.5px;
   font-family: var(--ff-mono);
   font-weight: 600;
   line-height: 1.4;
+}
+.panel-change-news-list {
+  font-weight: 500;
+  color: var(--text-3);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -903,7 +929,7 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: 10px;
-  color: var(--text-4);
+  color: var(--text-3);
   cursor: help;
 }
 .footer-links {
@@ -923,7 +949,7 @@ body {
   color: var(--accent);
 }
 .footer-sep {
-  color: var(--text-4);
+  color: var(--text-3);
   font-size: 11px;
 }
 .footer-copy {

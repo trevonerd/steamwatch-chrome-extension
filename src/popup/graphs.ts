@@ -1,5 +1,5 @@
 import type { CardViewModel, FieldFreshness, GraphWindowKey, PlayerChange, Snapshot } from "../types/index.js";
-import { changeLabel, latestChange } from "../utils/card.js";
+import { changeLabel, latestChange, momentumLine } from "../utils/card.js";
 import { append, clear, h, s } from "../utils/html.js";
 import { getSteamNews, newsForChange } from "../utils/news.js";
 import { HOUR_MS, normalizeHourly } from "../utils/series.js";
@@ -29,9 +29,11 @@ export function populatePanel(panel: HTMLDivElement, vm: CardViewModel): void {
   const sparklinePanel = h("div", { className: "panel-sparkline" });
 
   const change = latestChange(vm);
+  const momentum = momentumLine(vm);
   append(
     panel,
     sparklinePanel,
+    ...(momentum ? [h("p", { className: "panel-momentum", text: momentum })] : []),
     ...(change ? [buildChangeRow(game.appid, change)] : []),
     h("dl", {
       className: "panel-stats",
@@ -67,15 +69,25 @@ function buildChangeRow(appid: string, change: PlayerChange): HTMLParagraphEleme
     className: `panel-change panel-change--${change.direction}`,
     text: `${change.direction === "drop" ? "▼" : "▲"} ${changeLabel(change)}`,
     attrs: {
-      title: "Sudden change: each hour at least 20% away from the same hour a week earlier, for 6 hours or more.",
+      title:
+        "Sudden change: each hour at least 20% away from the same hour a week earlier, for 6 hours or more. Marked ▼/▲ on the graph.",
     },
   });
+  const summary = h("span", {
+    className: "panel-change-summary",
+    text: `${change.direction === "drop" ? "▼" : "▲"} ${changeLabel(change)}`,
+  });
+  row.replaceChildren(summary);
   // Only official announcements near the change are shown; the cause is never guessed.
   void getSteamNews(appid)
     .then((items) => {
-      for (const item of newsForChange(items, change).slice(0, 2)) {
-        row.append(
-          " · ",
+      const news = newsForChange(items, change).slice(0, 2);
+      if (news.length === 0) return;
+      const list = h("span", { className: "panel-change-news-list", text: "Steam news: " });
+      row.append(list);
+      for (const [index, item] of news.entries()) {
+        list.append(
+          index > 0 ? " · " : "",
           h("a", {
             className: "panel-change-news",
             text: item.title,
@@ -367,23 +379,35 @@ export function renderSparkline(
     }
   }
   const span = Math.max(1, series.endTs - series.startTs);
-  for (const change of opts.markers ?? []) {
+  // Neutral dashes with a ▼/▲ cap: the line itself is red and green, so colour alone would vanish.
+  const markers = opts.markers ?? [];
+  for (const [index, change] of markers.entries()) {
     if (change.startTs < series.startTs || change.startTs > series.endTs) continue;
     const x = ((change.startTs - series.startTs) / span) * opts.width;
-    svg.appendChild(
+    const latest = index === markers.length - 1;
+    const group = s("g", {
+      attrs: { class: `change-marker${latest ? " change-marker--latest" : ""}`, opacity: latest ? 1 : 0.55 },
+    });
+    group.append(
       s("line", {
         attrs: {
-          class: "change-marker",
           x1: x,
           x2: x,
-          y1: 0,
+          y1: 5,
           y2: opts.height,
-          stroke: change.direction === "drop" ? "#ef4444" : "#22c55e",
+          stroke: "#cbd5e1",
           "stroke-width": 1,
-          "stroke-dasharray": "3 3",
+          "stroke-dasharray": "2 3",
+        },
+      }),
+      s("polygon", {
+        attrs: {
+          points: change.direction === "drop" ? `${x - 3.5},0 ${x + 3.5},0 ${x},5` : `${x - 3.5},5 ${x + 3.5},5 ${x},0`,
+          fill: change.direction === "drop" ? "#ef4444" : "#22c55e",
         },
       }),
     );
+    svg.appendChild(group);
   }
   return { svg, points, startTs: series.startTs, endTs: series.endTs, coverage: series.coverage };
 }

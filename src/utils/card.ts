@@ -124,16 +124,34 @@ export async function buildAllViewModels(
 
 /** Badge text when no momentum comparison is shown and no preliminary 24h comparison exists. */
 export function fallbackBadgeLabel(vm: CardViewModel): string {
+  // Kept to 12 characters or fewer so the badge never wraps under the stats.
   if (vm.seasonalAnalysis?.status === "low-baseline") return "Low activity";
-  if (vm.earlyActivity?.status === "stale") return "History stale";
-  return (vm.earlyActivity?.spanHours ?? 0) >= 8 * 24 ? "History incomplete" : "Building history";
+  if (vm.earlyActivity?.status === "stale") return "Stale data";
+  return (vm.earlyActivity?.spanHours ?? 0) >= 8 * 24 ? "Partial data" : "Collecting";
 }
 
-/** "vs wk" (same hours last week) or "vs 7d" (7-day hourly average); short enough to share the stats row. */
+/** "w/w" (same hours last week) or "vs 7d" (7-day hourly average); short enough to share the stats row. */
 export function momentumBasisLabel(vm: CardViewModel): string {
-  return vm.seasonalAnalysis?.status === "ready" && vm.seasonalAnalysis.comparison?.basis === "7d-avg"
-    ? "vs 7d"
-    : "vs wk";
+  return isProvisionalMomentum(vm) ? "vs 7d" : "w/w";
+}
+
+/** The 7-day hourly average is a weaker baseline than the same hours last week. */
+export function isProvisionalMomentum(vm: CardViewModel): boolean {
+  return vm.seasonalAnalysis?.status === "ready" && vm.seasonalAnalysis.comparison?.basis === "7d-avg";
+}
+
+/** Whole percent from 10% up; one decimal below, where it still carries information. */
+export function badgePct(pct: number): number {
+  return Math.abs(pct) >= 10 ? Math.round(pct) : pct;
+}
+
+/** Visible panel line: what the badge compares, in words. */
+export function momentumLine(vm: CardViewModel): string | null {
+  const analysis = vm.seasonalAnalysis;
+  if (analysis?.status !== "ready" || !analysis.comparison) return null;
+  const { comparison } = analysis;
+  const basis = comparison.basis === "week" ? "same hours last week" : "7-day average at the same hours";
+  return `24h avg ${fmtNumber(Math.round(comparison.recentMean))} vs ${fmtNumber(Math.round(comparison.baselineMean))} ${basis} · ${comparison.matchedHours}/24 h`;
 }
 
 /** Momentum numbers for the trend badge tooltip. */

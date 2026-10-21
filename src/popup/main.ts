@@ -2,9 +2,11 @@
 
 import type { CardViewModel } from "../types/index.js";
 import {
+  badgePct,
   buildAllViewModels,
   buildCardViewModel,
   fallbackBadgeLabel,
+  isProvisionalMomentum,
   momentumBasisLabel,
   momentumDetail,
 } from "../utils/card.js";
@@ -198,13 +200,18 @@ function buildGameItem(vm: CardViewModel, isTop: boolean, favoriteAppid?: string
     }),
   );
   if (displayTrendPct != null) {
+    // The age of a dated comparison lives in the tooltip and label: a suffix would wrap the badge onto the graph.
+    const asOf =
+      vm.trendAsOf !== undefined
+        ? new Date(vm.trendAsOf).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
+        : undefined;
     stats.appendChild(
       h("span", {
-        className: `trend-badge ${displayTrendCls}`,
-        text: `${fmtPct(displayTrendPct)} ${momentumBasisLabel(vm)}${vm.trendAsOf !== undefined ? ` · ${fmtTimeAgo(vm.trendAsOf, vm.evaluatedAt)}` : ""}`,
+        className: `trend-badge ${displayTrendCls}${isProvisionalMomentum(vm) ? " trend-badge--provisional" : ""}${asOf ? " trend-badge--dated" : ""}`,
+        text: `${fmtPct(badgePct(displayTrendPct))} ${momentumBasisLabel(vm)}`,
         attrs: {
-          "aria-label": `${fmtPct(displayTrendPct)} average players: last 24 hours ${momentumBasisLabel(vm) === "vs 7d" ? "vs the 7-day average" : "vs the same hours last week"}${vm.trendAsOf !== undefined ? `, through ${new Date(vm.trendAsOf).toISOString()}` : ""}`,
-          title: `${vm.trend?.level.label ?? "Activity"}. ${vm.seasonalAnalysis?.reason ?? "Last 24 hours vs the same hours a week earlier."}${momentumDetail(vm)}${vm.trendAsOf !== undefined ? ` Historical comparison through ${new Date(vm.trendAsOf).toISOString()}; newer history is incomplete.` : ""}`,
+          "aria-label": `${fmtPct(displayTrendPct)} average players: last 24 hours ${isProvisionalMomentum(vm) ? "vs the 7-day average" : "vs the same hours last week"}${asOf ? `, through ${asOf}` : ""}`,
+          title: `${vm.trend?.level.label ?? "Activity"}. ${vm.seasonalAnalysis?.reason ?? "Last 24 hours vs the same hours a week earlier."}${momentumDetail(vm)}${asOf ? ` Comparison through ${asOf} (${fmtTimeAgo(vm.trendAsOf ?? 0, vm.evaluatedAt)}); newer history is incomplete.` : ""}`,
         },
       }),
     );
