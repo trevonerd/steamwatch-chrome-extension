@@ -25,7 +25,7 @@ export interface Game {
 export type SnapshotSource = "steam" | "steamcharts" | "games-popularity" | "legacy";
 
 /** Resolution of a persisted player-count value. */
-export type SnapshotGranularity =
+type SnapshotGranularity =
   | "instant"
   | "hourly"
   | "monthly-peak"
@@ -33,14 +33,14 @@ export type SnapshotGranularity =
   | "weekly"
   | "unknown";
 
-export const SnapshotSourceSchema = z.enum(["steam", "steamcharts", "games-popularity", "legacy"]);
+const SnapshotSourceSchema = z.enum(["steam", "steamcharts", "games-popularity", "legacy"]);
 
 export const GamesPopularityHistorySchema = z.object({
   steamId: z.string(),
   history: z.array(z.object({ players: z.number().finite().nonnegative(), added: z.string() })).max(1000),
   nextCursor: z.string().nullable().optional(),
 });
-export const SnapshotGranularitySchema = z.enum([
+const SnapshotGranularitySchema = z.enum([
   "instant",
   "hourly",
   "monthly-peak",
@@ -62,7 +62,7 @@ export interface SnapshotAggregate {
   readonly observedDurationMs: number;
 }
 
-export const SnapshotAggregateSchema = z.object({
+const SnapshotAggregateSchema = z.object({
   startTs: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
   endTs: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
   sampleCount: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
@@ -96,7 +96,7 @@ export const SnapshotSchema = z.object({
   aggregate: SnapshotAggregateSchema.optional(),
 });
 
-export type BootstrapState = "leased" | "retry" | "unavailable" | "completed";
+type BootstrapState = "leased" | "retry" | "unavailable" | "completed";
 
 /** A time-bounded, single-writer claim for one game's historical import. */
 export interface BootstrapLease {
@@ -123,7 +123,7 @@ export type ProviderResult<T> =
   | { readonly status: "unavailable" }
   | { readonly status: "error"; readonly error: string };
 
-export const FieldFreshnessSchema = z.object({
+const FieldFreshnessSchema = z.object({
   source: z.enum(["steam", "steamcharts", "steamspy", "twitch", "legacy"]),
   status: z.enum(["ok", "error", "unavailable"]),
   acquiredAt: z.number().finite().nonnegative().optional(),
@@ -131,10 +131,9 @@ export const FieldFreshnessSchema = z.object({
 });
 
 export type FieldFreshness = z.infer<typeof FieldFreshnessSchema>;
-export type MetricKey = "current" | "peak24h" | "allTimePeak" | "twitchViewers";
 export type MetricFreshness = z.infer<typeof MetricFreshnessSchema>;
 
-export const MetricFreshnessSchema = z.object({
+const MetricFreshnessSchema = z.object({
   current: FieldFreshnessSchema.optional(),
   peak24h: FieldFreshnessSchema.optional(),
   allTimePeak: FieldFreshnessSchema.optional(),
@@ -199,7 +198,7 @@ export const GameSettingsSchema = z.object({
   notificationsEnabled: z.boolean().optional(),
 }).strip();
 
-export const QuietTimeSchema = z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/);
+const QuietTimeSchema = z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/);
 
 /** Parses stored global settings field by field during controlled recovery. */
 export const SettingsSchema = z.object({
@@ -215,7 +214,7 @@ export const SettingsSchema = z.object({
 
 // ── Trend ────────────────────────────────────────────────────────────────────
 
-export type TrendKey =
+type TrendKey =
   | "EXPLOSION"
   | "STRONG_UP"
   | "UP"
@@ -325,24 +324,16 @@ export interface CardViewModel {
   readonly displayTrendIcon: string | null;
   /** CSS class for the badge colour (e.g. up/down/stable/strong-up/strong-down). */
   readonly displayTrendCls: string;
-  readonly avg24h?: number;
-  readonly gain24h?: number;
-  readonly retentionAvg?: number;
-  readonly retentionGain?: number;
-  readonly retentionDays: number;
-  readonly retentionWindowLabel: string;
   readonly availableGraphWindows: readonly GraphWindowOption[];
   readonly defaultGraphWindow: GraphWindowKey | null;
   readonly trend: TrendResult | null;
   readonly trendCls: string;
   readonly latestChangePct: number | null;
   readonly snaps: readonly Snapshot[];
-  readonly sparklineStroke: string;
   /** Timestamp of the last successful fetch (0 if never). */
   readonly fetchedAt: number;
   readonly freshness?: MetricFreshness;
   readonly twitchViewers?: number;
-  readonly historyStatus?: BootstrapStatus;
   readonly historyLoading?: boolean;
   readonly seasonalAnalysis?: SeasonalTrendAnalysis;
   /** Historical comparison cutoff, present only when the current week is incomplete. */
@@ -350,8 +341,6 @@ export interface CardViewModel {
   readonly earlyActivity?: EarlyActivity;
   readonly observedPeak?: number;
   readonly evaluatedAt?: number;
-  /** Minimum within the active graph window: { value, timestamp } or null. */
-  readonly recordLow: { value: number; timestamp: number } | null;
   /** Minimum across all snapshots: { value, timestamp } or null. */
   readonly allTimeLow: { value: number; timestamp: number } | null;
 }
@@ -382,7 +371,7 @@ export const TwitchGqlSchema = z.array(z.object({
   }).optional(),
 }));
 
-export interface WeeklyComparison {
+interface WeeklyComparison {
   readonly startTs: number;
   readonly endTs: number;
   readonly baselineStartTs: number;

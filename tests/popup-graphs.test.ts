@@ -4,7 +4,7 @@ import { freshnessTitle, populatePanel, renderSparkline } from "../src/popup/gra
 import { buildCardViewModel } from "../src/utils/card.js";
 
 const now = Date.UTC(2026, 8, 11, 12);
-const options = { width: 372, height: 56, maxPoints: 200, strokeColor: "#00c8ff", now };
+const options = { width: 372, height: 56, maxPoints: 200, now };
 
 describe("popup graphs", () => {
   it("preserves all live data tiles and labels extrema by selected period", () => {
@@ -120,7 +120,7 @@ describe("popup graphs", () => {
   it("colors individual rises and falls independently of the overall stroke", () => {
     const result = renderSparkline([100, 105, 102, 103].map((current, index) => ({
       ts: now - (3 - index) * 3_600_000, current, source: "steamcharts", granularity: "hourly",
-    })), { ...options, strokeColor: "#ef4444" });
+    })), options);
     expect(Array.from(result!.svg.querySelectorAll("polyline"), (line) => line.getAttribute("stroke")))
       .toEqual(["#22c55e", "#ef4444", "#00c8ff"]);
   });

@@ -11,13 +11,10 @@ import {
   idbDeleteGameData,
   idbDeleteSnapshots,
   idbFailBootstrapLease,
-  idbGetCooldown,
   idbGetBootstrapStatus,
   idbGetSnapshots,
   idbGetSnapshotsInRange,
-  idbPurgeCooldowns,
   idbSaveSnapshot,
-  idbSetCooldown,
   idbTransformSnapshotsAtomically,
 } from "../src/utils/idb-storage.js";
 
@@ -128,109 +125,13 @@ describe("idb-storage", () => {
     ]);
   });
 
-  describe("cooldowns", () => {
-    it("sets and retrieves a cooldown", async () => {
-      const key = "730__trend_up";
-      const expiresAt = Date.now() + 60000;
-
-      await idbSetCooldown(key, expiresAt);
-      const result = await idbGetCooldown(key);
-
-      expect(result).toBe(expiresAt);
-    });
-
-    it("returns null for missing cooldown", async () => {
-      const result = await idbGetCooldown("nonexistent__key");
-      expect(result).toBeNull();
-    });
-
-    it("returns null for expired cooldown", async () => {
-      const key = "730__trend_down";
-      const expiresAt = Date.now() - 1000; // expired 1s ago
-
-      await idbSetCooldown(key, expiresAt);
-      const result = await idbGetCooldown(key);
-
-      expect(result).toBeNull();
-    });
-
-    it("returns expiresAt for non-expired cooldown", async () => {
-      const key = "730__absolute";
-      const expiresAt = Date.now() + 60000;
-
-      await idbSetCooldown(key, expiresAt);
-      const result = await idbGetCooldown(key);
-
-      expect(result).toBe(expiresAt);
-    });
-
-    it("updates existing cooldown", async () => {
-      const key = "730__trend_up";
-      const firstExpiry = Date.now() + 30000;
-      const secondExpiry = Date.now() + 90000;
-
-      await idbSetCooldown(key, firstExpiry);
-      await idbSetCooldown(key, secondExpiry);
-
-      const result = await idbGetCooldown(key);
-      expect(result).toBe(secondExpiry);
-    });
-
-    it("purges all expired cooldowns", async () => {
-      const now = Date.now();
-      const expiredKey = "730__trend_up";
-      const validKey = "570__trend";
-
-      await idbSetCooldown(expiredKey, now - 1000); // expired
-      await idbSetCooldown(validKey, now + 60000); // valid
-
-      await idbPurgeCooldowns();
-
-      const expiredResult = await idbGetCooldown(expiredKey);
-      const validResult = await idbGetCooldown(validKey);
-
-      expect(expiredResult).toBeNull();
-      expect(validResult).toBe(now + 60000);
-    });
-
-    it("purges cooldowns with expiresAt exactly at current time", async () => {
-      const now = Date.now();
-      const key = "730__trend_down";
-
-      await idbSetCooldown(key, now);
-      await idbPurgeCooldowns();
-
-      const result = await idbGetCooldown(key);
-      expect(result).toBeNull();
-    });
-
-     it("keeps non-expired cooldowns after purge", async () => {
-       const now = Date.now();
-       const key1 = "730__trend_up";
-       const key2 = "570__trend";
-       const key3 = "440__absolute";
-
-       await idbSetCooldown(key1, now + 10000);
-       await idbSetCooldown(key2, now + 20000);
-       await idbSetCooldown(key3, now + 30000);
-
-       await idbPurgeCooldowns();
-
-       expect(await idbGetCooldown(key1)).toBe(now + 10000);
-       expect(await idbGetCooldown(key2)).toBe(now + 20000);
-       expect(await idbGetCooldown(key3)).toBe(now + 30000);
-     });
-   });
-
    describe("idbClearAllData", () => {
-     it("clears snapshots and cooldowns", async () => {
+     it("clears snapshots", async () => {
        await idbSaveSnapshot("100", { ts: 1000, current: 10 });
-       await idbSetCooldown("100__trend_up", Date.now() + 60_000);
 
        await idbClearAllData();
 
        expect(await idbGetSnapshots("100")).toEqual([]);
-       expect(await idbGetCooldown("100__trend_up")).toBeNull();
      });
    });
 
@@ -447,7 +348,6 @@ describe("idb-storage", () => {
       const lease = await idbAcquireBootstrapLease("100", 10_000, 1_000);
       expect(lease).not.toBeNull();
       if (!lease) throw new Error("expected bootstrap lease");
-      await idbSetCooldown("100__trend_up", Date.now() + 60_000);
 
       await idbDeleteGameData("100");
 
@@ -455,7 +355,6 @@ describe("idb-storage", () => {
         { ts: 1_000, current: 2, source: "steamcharts", granularity: "hourly" },
       ])).resolves.toBe(false);
       await expect(idbGetSnapshots("100")).resolves.toEqual([]);
-      await expect(idbGetCooldown("100__trend_up")).resolves.toBeNull();
 
       await idbClearGameTombstone("100");
       await expect(idbAcquireBootstrapLease("100", 30_000, 1_000)).resolves.toMatchObject({ attempt: 1 });

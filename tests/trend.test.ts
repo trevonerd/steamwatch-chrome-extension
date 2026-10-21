@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analyzeSeasonalTrend, compute24hAvg, compute24hAvgFromHourly, computeLatestChangePct, computeLatestChangePctFromHourly, computeLocalPeak, computeRetentionAvg, computeRetentionAvgFromHourly, computeRetentionWindowLabel, computeTrend, computeWindowMin, fmtBadge, fmtNumber, fmtPct, fmtTimeAgo } from "../src/utils/trend.js";
+import { analyzeSeasonalTrend, compute24hAvg, compute24hAvgFromHourly, computeLatestChangePct, computeLatestChangePctFromHourly, computeLocalPeak, computeRetentionAvg, computeRetentionAvgFromHourly, computeTrend, computeWindowMin, fmtBadge, fmtNumber, fmtPct, fmtTimeAgo } from "../src/utils/trend.js";
 import type { Snapshot } from "../src/types/index.js";
 import { normalizeHourly } from "../src/utils/series.js";
 
@@ -66,7 +66,6 @@ describe("coverage-bound metrics", () => {
     const gapped = history((base) => base).slice(-24).filter((_, index) => index < 10 || index > 12);
     expect(compute24hAvg(gapped, NOW)).toBeNull();
     expect(computeLatestChangePct([{ ts: NOW - 4 * HOUR, current: 100, source: "steamcharts", granularity: "hourly" }, { ts: NOW - HOUR, current: 110, source: "steamcharts", granularity: "hourly" }], NOW)).toBeNull();
-    expect(computeRetentionWindowLabel(history((base) => base), 7, NOW)).toBe("7d");
   });
 });
 

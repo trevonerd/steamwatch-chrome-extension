@@ -55,7 +55,7 @@ function hasLocalSupport(samples: readonly Snapshot[]): boolean {
   return ordered.every((sample, index) => index === 0 || sample.ts - (ordered[index - 1]?.ts ?? sample.ts) <= 15 * 60_000);
 }
 
-export function median(values: readonly number[]): number {
+function median(values: readonly number[]): number {
   const ordered = [...values].sort((left, right) => left - right);
   const middle = Math.floor(ordered.length / 2);
   if (ordered.length === 0) return 0;

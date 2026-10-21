@@ -9,7 +9,7 @@ import {
   TRACKING_RETENTION_DAYS,
   MAX_GAMES,
 } from "../utils/storage.js";
-import { idbGetSnapshots, idbGetBootstrapStatus } from "../utils/idb-storage.js";
+import { idbGetSnapshots } from "../utils/idb-storage.js";
 import { fmtNumber, fmtPct, fmtTimeAgo } from "../utils/trend.js";
 import { populatePanel, renderSparkline, freshnessTitle } from "./graphs.js";
 import { buildAllViewModels, buildCardViewModel, fallbackBadgeLabel, weeklyDetail } from "../utils/card.js";
@@ -69,7 +69,7 @@ async function init(refreshOnOpen = false): Promise<void> {
       updateFetchBar(await getLastFetchTime());
     }
 
-    const vms = await buildAllViewModels(games, cache, idbGetSnapshots, TRACKING_RETENTION_DAYS, idbGetBootstrapStatus);
+    const vms = await buildAllViewModels(games, cache, idbGetSnapshots, TRACKING_RETENTION_DAYS);
     const lastFetch = await getLastFetchTime();
     if (revision !== renderRevision) return;
     vms.sort((a, b) => (b.current ?? -1) - (a.current ?? -1));
@@ -209,7 +209,6 @@ function buildGameItem(vm: CardViewModel, isTop: boolean, favoriteAppid?: string
     width: 160,
     height: 36,
     maxPoints: 48,
-    strokeColor: vm.sparklineStroke,
   });
   if (cardSparkline) {
     card.appendChild(h("div", {

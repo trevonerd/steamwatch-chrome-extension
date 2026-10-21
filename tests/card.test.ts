@@ -1,6 +1,7 @@
 // tests/card.test.ts
 import { describe, it, expect, vi } from "vitest";
 import { buildCardViewModel, buildAllViewModels, fallbackBadgeLabel } from "../src/utils/card.js";
+import { compute24hAvg } from "../src/utils/trend.js";
 import type { Game, CachedData, CardViewModel, Snapshot } from "../src/types/index.js";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -58,7 +59,7 @@ describe("buildCardViewModel", () => {
     const vm = buildCardViewModel(game, cache, snapshots, 60, now);
     expect(vm.availableGraphWindows.map((window) => window.key)).toEqual(["24h", "3d", "7d", "15d", "1m", "all"]);
     expect(vm.defaultGraphWindow).toBe("24h");
-    expect(vm.avg24h).toBeUndefined();
+    expect(compute24hAvg(vm.snaps, now)).toBeNull();
     expect(vm.trend?.pct).toBe(0);
     expect(vm.trendAsOf).toBe(now - 16 * 3_600_000);
   });
@@ -73,7 +74,7 @@ describe("buildCardViewModel", () => {
     const vm = buildCardViewModel(game, cache, [...past, ...live], 60, now);
     expect(vm.earlyActivity).toBeUndefined();
     expect(vm.availableGraphWindows.map((window) => window.key)).toEqual(["24h", "3d", "7d", "15d", "1m", "all"]);
-    expect(vm.avg24h).toBeUndefined();
+    expect(compute24hAvg(vm.snaps, now)).toBeNull();
     expect(vm.trend?.pct).toBe(0);
     expect(vm.trendAsOf).toBe(now - 16 * 3_600_000);
   });
@@ -185,11 +186,6 @@ describe("buildCardViewModel", () => {
     expect(vm.latestChangePct).toBeNull();
   });
 
-  it("sparklineStroke is a valid hex colour string", () => {
-    const vm = buildCardViewModel(game, cache, snaps12, 7);
-    expect(vm.sparklineStroke).toMatch(/^#[0-9a-f]{6}$/i);
-  });
-
   it("fetchedAt matches cache entry", () => {
     const vm = buildCardViewModel(game, cache, snaps12, 7);
     expect(vm.fetchedAt).toBe(cache["1245620"]!.fetchedAt);
@@ -208,25 +204,8 @@ describe("buildCardViewModel", () => {
   it("keeps fetched supplementary metrics on the view model", () => {
     const vm = buildCardViewModel(game, cache, snaps12, 7);
     expect(vm.twitchViewers).toBe(12_345);
-    expect(vm.retentionDays).toBe(7);
-    expect(vm.retentionWindowLabel).toBe("7d");
     expect(vm.availableGraphWindows.map((window) => window.key)).toEqual(["24h", "3d", "7d", "all"]);
     expect(vm.defaultGraphWindow).toBe("24h");
-  });
-
-  it("only exposes 24h local stats when there is reliable 24h coverage", () => {
-    const vmShort = buildCardViewModel(game, cache, snaps12, 7);
-    expect(vmShort.avg24h).toBeUndefined();
-    expect(vmShort.gain24h).toBeUndefined();
-
-    const vmDay = buildCardViewModel(game, cache, daySnaps, 3);
-    expect(vmDay.avg24h).toBeDefined();
-    expect(vmDay.gain24h).toBeDefined();
-
-    const vmRetention = buildCardViewModel(game, cache, retentionSnaps, 3);
-    expect(vmRetention.retentionAvg).toBeDefined();
-    expect(vmRetention.retentionGain).toBeDefined();
-    expect(vmRetention.retentionWindowLabel).toBe("3d");
   });
 
   it("exposes available graph windows and picks 24h as default when possible", () => {
@@ -246,21 +225,6 @@ describe("buildCardViewModel", () => {
 // ── record lows ────────────────────────────────────────────────────────────────
 
 describe("buildCardViewModel — record lows", () => {
-  it("computes recordLow for active window from filtered snapshots", () => {
-    const thirtyDaySnaps: Snapshot[] = [
-      chartSnapshot(Date.now() - 29.9 * 86_400_000, 30_000),
-      chartSnapshot(Date.now() - 25 * 86_400_000, 35_000),
-      chartSnapshot(Date.now() - 15 * 86_400_000, 10_000),
-      chartSnapshot(Date.now() - 5 * 86_400_000, 50_000),
-      chartSnapshot(Date.now() - 1 * 86_400_000, 45_000),
-      chartSnapshot(Date.now() - 12 * 3_600_000, 40_000),
-      chartSnapshot(Date.now() - 1 * 3_600_000, 45_000),
-    ];
-    const vm = buildCardViewModel(game, cache, thirtyDaySnaps, 30);
-    expect(vm.recordLow).not.toBeNull();
-    expect(vm.recordLow?.value).toBeLessThanOrEqual(45_000);
-  });
-
   it("computes allTimeLow from all snapshots regardless of active window", () => {
     const thirtyDaySnaps: Snapshot[] = [
       chartSnapshot(Date.now() - 29.9 * 86_400_000, 30_000),
@@ -274,22 +238,12 @@ describe("buildCardViewModel — record lows", () => {
     expect(vm.allTimeLow?.value).toBe(10_000);
   });
 
-  it("recordLow reflects the available window (all if that's the only option)", () => {
-    const oldSnaps: Snapshot[] = [
-      chartSnapshot(Date.now() - 29 * 86_400_000, 20_000),
-      chartSnapshot(Date.now() - 25 * 86_400_000, 25_000),
-    ];
-    const vm = buildCardViewModel(game, cache, oldSnaps, 30);
-    expect(vm.recordLow).not.toBeNull();
-    expect(vm.recordLow?.value).toBe(20_000);
-  });
-
   it("allTimeLow is null when no snapshots at all", () => {
     const vm = buildCardViewModel(game, cache, emptySnaps, 30);
     expect(vm.allTimeLow).toBeNull();
   });
 
-  it("recordLow and allTimeLow can differ when data spans multiple windows", () => {
+  it("allTimeLow spans data beyond the default window", () => {
     const graphSnaps: Snapshot[] = [
       chartSnapshot(Date.now() - 2.95 * 86_400_000, 5_000),
       chartSnapshot(Date.now() - 2.4 * 86_400_000, 30_000),
@@ -302,21 +256,8 @@ describe("buildCardViewModel — record lows", () => {
       chartSnapshot(Date.now() - 10 * 60_000, 28_000),
     ];
     const vm = buildCardViewModel(game, cache, graphSnaps, 7);
-    expect(vm.recordLow).not.toBeNull();
     expect(vm.allTimeLow).not.toBeNull();
     expect(vm.allTimeLow?.value).toBe(5_000);
-  });
-
-  it("recordLow includes correct timestamp", () => {
-    const snapsWithTimestamps: Snapshot[] = [
-      chartSnapshot(Date.now() - 5 * 86_400_000, 50_000),
-      chartSnapshot(Date.now() - 2 * 86_400_000, 30_000),
-      chartSnapshot(Date.now() - 12 * 3_600_000, 25_000), // min in window
-      chartSnapshot(Date.now() - 1 * 3_600_000, 45_000),
-    ];
-    const vm = buildCardViewModel(game, cache, snapsWithTimestamps, 7);
-    expect(vm.recordLow?.value).toBe(25_000);
-    expect(vm.recordLow?.timestamp).toBe(snapsWithTimestamps[2]!.ts);
   });
 
   it("allTimeLow includes correct timestamp", () => {

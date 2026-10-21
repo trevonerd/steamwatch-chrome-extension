@@ -412,13 +412,6 @@ body {
   background: var(--accent-dim);
 }
 
-.history-notice {
-  margin: 0 12px 10px;
-  color: var(--text-2);
-  font-size: 11px;
-  line-height: 1.5;
-}
-
 .graph-pill--disabled {
   opacity: .55;
   cursor: not-allowed;
@@ -432,7 +425,6 @@ body {
   overflow: visible;
   aspect-ratio: 372 / 56;
 }
-
 
 .sparkline-tooltip {
   position:       absolute;
@@ -513,18 +505,6 @@ body {
 .panel-link:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
 
 /* ── Record low row ─────────────────────────────────────────── */
-.panel-record-low {
-  padding: 4px 12px;
-  font-size: 11px;
-  font-family: var(--ff-mono);
-  color: var(--text-3);
-  border-top: 1px solid var(--border);
-}
-.panel-record-low-val {
-  color: var(--down);
-  font-weight: 600;
-}
-
 
 .game-divider { height: 1px; background: var(--border); margin: 0; }
 
@@ -603,13 +583,3 @@ body {
   color: var(--text-2);
   font-family: var(--ff-mono);
 }
-.weekly-comparison {
-  margin: 8px 0;
-  padding: 8px 12px;
-  border-top: 1px solid var(--border);
-  color: var(--text-2);
-  font-size: 11px;
-  line-height: 1.5;
-}
-.weekly-comparison strong { color: var(--text); }
-.weekly-comparison p { margin: 2px 0 0; }

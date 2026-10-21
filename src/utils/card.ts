@@ -10,25 +10,10 @@
 // No side effects. No I/O. Fully unit-testable.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import type { Game, CachedData, Snapshot, CardViewModel, BootstrapStatus } from "../types/index.js";
+import type { Game, CachedData, Snapshot, CardViewModel } from "../types/index.js";
 import { buildEarlyActivity } from "./earlyActivity.js";
-import {
-  compute24hAvgFromHourly,
-  compute24hGainFromHourly,
-  computeRetentionAvgFromHourly,
-  computeRetentionGainFromHourly,
-  computeRetentionWindowLabel,
-  computeLatestChangePctFromHourly,
-  computeLocalPeak,
-  computeWindowMin,
-} from "./trend.js";
-import {
-  buildAvailableGraphWindows,
-  hasEnoughGraphHistory,
-  sparklineColor,
-  filterSnapshotsByWindow,
-  GRAPH_WINDOW_MS,
-} from "./sparkline.js";
+import { computeLatestChangePctFromHourly, computeLocalPeak, computeWindowMin } from "./trend.js";
+import { buildAvailableGraphWindows, hasEnoughGraphHistory } from "./sparkline.js";
 import { formatError } from "./log.js";
 import { HOUR_MS, isQualifiedSnapshot, normalizeHourly } from "./series.js";
 import { analyzeLatestAvailableSeasonalTrendFromHourly } from "./seasonal.js";
@@ -57,11 +42,6 @@ export function buildCardViewModel(
   const observedPeak = computeLocalPeak(observations);
   const allTimePeak = data?.freshness?.allTimePeak?.source === "steamcharts" && data.freshness.allTimePeak.acquiredAt !== undefined ? data.allTimePeak ?? null : null;
   const peak24h    = data?.peak24h ?? null;
-  const avg24h     = compute24hAvgFromHourly(hourly, now);
-  const gain24h    = compute24hGainFromHourly(hourly, now);
-  const retentionAvg = computeRetentionAvgFromHourly(hourly, retentionDays, now);
-  const retentionGain = computeRetentionGainFromHourly(hourly, retentionDays, now);
-  const retentionWindowLabel = computeRetentionWindowLabel(snaps, retentionDays, now);
   const availableGraphWindows = buildAvailableGraphWindows(retentionDays)
     .filter((window) => hasEnoughGraphHistory(observations, window.windowMs, now));
   const defaultGraphWindow = availableGraphWindows.find((w) => w.key !== "all")?.key ?? availableGraphWindows[0]?.key ?? null;
@@ -72,12 +52,6 @@ export function buildCardViewModel(
     ? comparisonEnd : undefined;
   const trendCls   = trend?.level.cls ?? "stable";
   const latestChangePct = computeLatestChangePctFromHourly(hourly, now);
-  const stroke = trend ? sparklineColor(observations) : "#00c8ff";
-
-  const activeWindowKey = defaultGraphWindow ?? "all";
-  const activeWindowMs = GRAPH_WINDOW_MS[activeWindowKey];
-  const filteredSnapsForWindow = filterSnapshotsByWindow(observations, activeWindowMs, now);
-  const recordLow = computeWindowMin(filteredSnapsForWindow);
   const allTimeLow = computeWindowMin(observations);
 
   return {
@@ -94,23 +68,15 @@ export function buildCardViewModel(
     displayTrendPct: trend?.pct ?? null,
     displayTrendIcon: trend?.level.icon ?? null,
     displayTrendCls: trend?.level.cls ?? "stable",
-    ...(avg24h != null ? { avg24h } : {}),
-    ...(gain24h != null ? { gain24h } : {}),
-    ...(retentionAvg != null ? { retentionAvg } : {}),
-    ...(retentionGain != null ? { retentionGain } : {}),
-    retentionDays,
-    retentionWindowLabel,
     availableGraphWindows,
     defaultGraphWindow,
     trend,
     trendCls,
     latestChangePct,
     snaps: observations,
-    sparklineStroke: stroke,
     fetchedAt: data?.fetchedAt ?? 0,
     ...(data?.freshness ? { freshness: data.freshness } : {}),
     ...(data?.twitchViewers != null ? { twitchViewers: data.twitchViewers } : {}),
-    recordLow,
     allTimeLow,
   };
 }
@@ -127,7 +93,6 @@ export async function buildAllViewModels(
   cache: Record<string, CachedData>,
   loadSnaps: (appid: string) => Promise<Snapshot[]>,
   retentionDays: number,
-  loadHistoryStatus?: (appid: string) => Promise<BootstrapStatus | null>,
 ): Promise<CardViewModel[]> {
   const now = Date.now();
   const loaded = await Promise.all(
@@ -139,20 +104,14 @@ export async function buildAllViewModels(
         console.warn(`[SteamWatch] Failed to load snapshots for appid ${game.appid}: ${formatError(error)}`);
         snaps = [];
       }
-      let historyStatus: BootstrapStatus | null = null;
-      try {
-        historyStatus = loadHistoryStatus ? await loadHistoryStatus(game.appid) : null;
-      } catch (error) {
-        console.warn(`[SteamWatch] Failed to load history status for ${game.appid}: ${formatError(error)}`);
-      }
-      return { game, snaps, historyStatus };
+      return { game, snaps };
     }),
   );
   const models: CardViewModel[] = [];
   for (const [index, item] of loaded.entries()) {
     // Yield between games so ten full histories do not occupy one UI task.
     if (index > 0) await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    models.push({ ...buildCardViewModel(item.game, cache, item.snaps, retentionDays, now), ...(item.historyStatus ? { historyStatus: item.historyStatus } : {}) });
+    models.push(buildCardViewModel(item.game, cache, item.snaps, retentionDays, now));
   }
   return models;
 }

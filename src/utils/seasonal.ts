@@ -1,7 +1,7 @@
 import type { SeasonalTrendAnalysis, Snapshot, TrendLevel, TrendResult } from "../types/index.js";
 import { HOUR_MS, hourlyCoverage, normalizeHourly, type HourlyPoint } from "./series.js";
 
-export const TREND_LEVELS: readonly TrendLevel[] = [
+const TREND_LEVELS: readonly TrendLevel[] = [
   { key: "EXPLOSION", label: "Explosion!", icon: "🚀🚀", cls: "explosion", minPct: 50 },
   { key: "STRONG_UP", label: "Strong Rise", icon: "🚀", cls: "strong-up", minPct: 20 },
   { key: "UP", label: "Rising", icon: "📈", cls: "up", minPct: 5 },

@@ -47,8 +47,6 @@ describe("Resynced partial history", () => {
     expect(vm.current).toBe(2200);
     expect(vm.allTimePeak).toBeNull();
     expect(vm.observedPeak).toBe(2200);
-    expect(vm.retentionAvg).toBeUndefined();
-    expect(vm.retentionGain).toBeUndefined();
     expect(vm.displayTrendPct).toBeNull();
     expect(vm.availableGraphWindows.map((window) => window.key)).toEqual(["24h", "3d", "7d", "15d", "1m", "all"]);
     expect(vm.snaps.map((point) => point.current)).toEqual([2000, 2200]);

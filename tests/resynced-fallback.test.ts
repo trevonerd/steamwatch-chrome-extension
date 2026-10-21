@@ -5,6 +5,7 @@ import { GamesPopularityHistorySchema } from "../src/types/index.js";
 import { refreshHistory } from "../src/background/historyBootstrap.js";
 import { _resetDbForTesting, idbClearAllData, idbGetBootstrapStatus, idbGetSnapshots } from "../src/utils/idb-storage.js";
 import { buildCardViewModel } from "../src/utils/card.js";
+import { compute24hAvg } from "../src/utils/trend.js";
 
 const pages = z.array(GamesPopularityHistorySchema).parse(JSON.parse(readFileSync("tests/fixtures/resynced-games-popularity.json", "utf8")));
 const now = Date.UTC(2026, 8, 11, 10, 40);
@@ -24,7 +25,7 @@ describe("Resynced actual fallback history", () => {
     expect(snaps.every((s) => s.source === "games-popularity")).toBe(true);
     const vm = buildCardViewModel({ appid: "3751950", name: "Black Flag Resynced", image: "" }, {}, snaps, 60, now);
     expect(vm.availableGraphWindows.map((w) => w.key)).toEqual(["24h", "3d", "7d", "15d", "1m", "all"]);
-    expect(vm.avg24h).toBeGreaterThan(0);
+    expect(compute24hAvg(vm.snaps, now)).toBeGreaterThan(0);
     expect(vm.seasonalAnalysis?.status).toBe("ready");
     expect(vm.trend?.pct).toBe(-20.6);
     if (vm.seasonalAnalysis?.status === "ready") {

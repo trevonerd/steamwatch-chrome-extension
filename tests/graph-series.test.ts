@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildGraphSeries, hasEnoughGraphHistory, hasEnoughGraphHistoryFromHourly } from "../src/utils/sparkline.js";
+import { buildGraphSeries, hasEnoughGraphHistory } from "../src/utils/sparkline.js";
 import { normalizeHourly } from "../src/utils/series.js";
 
 const HOUR = 3_600_000;
@@ -71,11 +71,6 @@ describe("hasEnoughGraphHistory", () => {
       { ts: NOW, current: 999, source: "steamcharts", granularity: "monthly-peak" },
       { ts: NOW + HOUR, current: 999, source: "steamcharts", granularity: "hourly" },
     ], 24 * HOUR, NOW)).toBe(false);
-  });
-
-  it("matches the snapshot API when supplied normalized points", () => {
-    const snapshots = hourly(24);
-    expect(hasEnoughGraphHistoryFromHourly(normalizeHourly(snapshots, NOW), 24 * HOUR, NOW)).toBe(hasEnoughGraphHistory(snapshots, 24 * HOUR, NOW));
   });
 
   it("allows both same-hour live samples and coverage-complete windows to be viewed", () => {

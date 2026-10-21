@@ -5,6 +5,7 @@ import { ChartDataSchema, fetchSteamChartsHistoryResult } from "../src/utils/api
 import { buildCardViewModel } from "../src/utils/card.js";
 import { buildGraphSeries } from "../src/utils/sparkline.js";
 import { analyzeSeasonalTrend } from "../src/utils/seasonal.js";
+import { compute24hAvg, computeRetentionAvg } from "../src/utils/trend.js";
 
 const samples = z.array(z.object({
   appid: z.string(), name: z.string(), current: z.number(), acquiredAt: z.number(), source: z.string().url(), history: ChartDataSchema,
@@ -30,9 +31,9 @@ describe("recorded real provider sample", () => {
     }, history.value, 60, sample.acquiredAt);
     expect(vm.current).toBe(sample.current);
     expect(vm.availableGraphWindows.map((window) => window.key)).toEqual(["24h", "3d", "7d", "15d", "1m", "all"]);
-    expect(vm.avg24h).toBeGreaterThan(0);
+    expect(compute24hAvg(vm.snaps, sample.acquiredAt)).toBeGreaterThan(0);
     expect(vm.seasonalAnalysis?.status).toBe("ready");
-    expect(vm.retentionAvg).toBeUndefined(); // 30 hourly days do not establish a 60-day average.
+    expect(computeRetentionAvg(vm.snaps, 60, sample.acquiredAt)).toBeNull(); // 30 hourly days do not establish a 60-day average.
     const graph = buildGraphSeries(vm.snaps, 7 * 86_400_000, sample.acquiredAt, 372, 56, 200);
     expect(graph.segments.flatMap((segment) => segment.points).length).toBeLessThanOrEqual(200);
     expect(graph.coverage).toBeGreaterThanOrEqual(0.8);

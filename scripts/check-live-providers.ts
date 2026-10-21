@@ -5,6 +5,7 @@ import { randomInt } from "node:crypto";
 import { fetchAppDetails, fetchCurrentPlayers, fetchSteamChartsHistoryResult, fetchSteamChartsResult, fetchTwitchResult } from "../src/utils/api.js";
 import { buildCardViewModel } from "../src/utils/card.js";
 import { analyzeSeasonalTrend } from "../src/utils/seasonal.js";
+import { compute24hAvg } from "../src/utils/trend.js";
 import type { CachedData } from "../src/types/index.js";
 
 // Opt-in live diagnostic; never part of the deterministic test suite.
@@ -50,7 +51,7 @@ async function main(): Promise<void> {
       const row = { appid, name: details?.name, current, charts, twitch, historyStatus: history.status,
         points: snapshots.length, hourlyPoints: snapshots.filter((point) => point.granularity === "hourly").length,
         latest: snapshots.at(-1)?.ts, windows: vm.availableGraphWindows.map((window) => window.key),
-        average24h: vm.avg24h, trend: vm.seasonalAnalysis, replay,
+        average24h: compute24hAvg(vm.snaps, now), trend: vm.seasonalAnalysis, replay,
       };
       results.push(row);
       await writeFile(resolve(output, "results.json"), JSON.stringify({ checkedAt: new Date().toISOString(), results, requests }, null, 2));

@@ -1,4 +1,4 @@
-export const RULE_KEYS = ["above", "below", "trendUp", "trendDown"] as const;
+const RULE_KEYS = ["above", "below", "trendUp", "trendDown"] as const;
 export type RuleKey = (typeof RULE_KEYS)[number];
 export interface RuleState { readonly fingerprint: string; readonly lastValue: number; readonly lastObservedAt: number; readonly armed: boolean; readonly crossedAt?: number; readonly observations: number; readonly pendingId?: string; }
 export interface EvaluateRuleInput { readonly key: RuleKey; readonly threshold: number; readonly value: number | null; readonly now: number; readonly previous?: RuleState; }

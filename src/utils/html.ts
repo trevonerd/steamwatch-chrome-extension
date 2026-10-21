@@ -3,16 +3,6 @@
 // DOM helpers. All user/API data must be escaped before HTML insertion.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Escape a string for safe insertion into HTML content or attributes. */
-export function esc(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#x27;");
-}
-
 type Child = Node | string | number | null | undefined | false;
 
 interface HtmlOptions {
@@ -126,7 +116,3 @@ export function hide(el: HTMLElement): void {
   el.style.setProperty("display", "none", "important");
 }
 
-/** Toggle a CSS class based on a condition. */
-export function toggleClass(el: HTMLElement, cls: string, condition: boolean): void {
-  el.classList.toggle(cls, condition);
-}

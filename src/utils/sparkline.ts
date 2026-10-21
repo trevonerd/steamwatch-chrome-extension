@@ -107,27 +107,6 @@ export function filterSnapshotsByWindow(
   return snapshots.filter((snapshot) => snapshot.ts >= cutoff && snapshot.ts <= now);
 }
 
-export function downsampleSnapshotsForGraph(
-  snapshots: readonly Snapshot[],
-  maxPoints: number,
-): Snapshot[] {
-  if (snapshots.length <= maxPoints) return [...snapshots];
-  if (maxPoints < 2) return snapshots.length > 0 ? [snapshots[snapshots.length - 1]!] : [];
-
-  const lastIndex = snapshots.length - 1;
-  const step = lastIndex / (maxPoints - 1);
-  const indexes = new Set<number>([0, lastIndex]);
-
-  for (let i = 1; i < maxPoints - 1; i++) {
-    indexes.add(Math.round(i * step));
-  }
-
-  return [...indexes]
-    .sort((a, b) => a - b)
-    .map((index) => snapshots[index]!)
-    .filter(Boolean);
-}
-
 export function hasEnoughGraphHistory(
   snapshots: readonly Snapshot[],
   windowMs: number,
@@ -135,17 +114,7 @@ export function hasEnoughGraphHistory(
 ): boolean {
   const start = windowMs === 0 ? Number.NEGATIVE_INFINITY : now - windowMs;
   return snapshots.some((point) => point.ts >= start && point.ts <= now
-    && point.aggregate === undefined && isQualifiedSnapshot(point));
-}
-
-/** Viewing observations does not require the coverage needed for statistical comparisons. */
-export function hasEnoughGraphHistoryFromHourly(
-  points: readonly HourlyPoint[],
-  windowMs: number,
-  now: number,
-): boolean {
-  const start = windowMs === 0 ? Number.NEGATIVE_INFINITY : now - windowMs;
-  return points.some((point) => point.observedAt >= start && point.observedAt <= now);
+    && isQualifiedSnapshot(point));
 }
 
 export function buildGraphSeries(
@@ -210,15 +179,6 @@ export function buildAvailableGraphWindows(retentionDays: number): GraphWindowOp
  * Determine the stroke colour based on the overall direction of the sparkline.
  * Rising → green, falling → red, flat → accent blue.
  */
-export function sparklineColor(snapshots: readonly Snapshot[]): string {
-  if (snapshots.length < 2) return "#00c8ff";
-  const first = snapshots[0]!.current;
-  const last  = snapshots[snapshots.length - 1]!.current;
-  if (last > first * 1.02) return "#22c55e";   // up
-  if (last < first * 0.98) return "#ef4444";   // down
-  return "#00c8ff";                             // flat
-}
-
 function segmentColor(prev: number, next: number): string {
   if (prev <= 0) return next > 0 ? "#16a34a" : "#00c8ff";
   const pct = ((next - prev) / prev) * 100;

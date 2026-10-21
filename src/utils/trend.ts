@@ -3,7 +3,7 @@ import { HOUR_MS, hourlyCoverage, normalizeHourly } from "./series.js";
 import type { HourlyPoint } from "./series.js";
 import { analyzeSeasonalTrend } from "./seasonal.js";
 
-export { analyzeSeasonalTrend, TREND_LEVELS } from "./seasonal.js";
+export { analyzeSeasonalTrend } from "./seasonal.js";
 
 export function computeTrend(snapshots: readonly Snapshot[], now = Date.now()): TrendResult | null {
   const analysis = analyzeSeasonalTrend(snapshots, now);
@@ -19,15 +19,6 @@ export function compute24hAvgFromHourly(points: readonly HourlyPoint[], now: num
   return values ? Math.round(average(values)) : null;
 }
 
-export function compute24hGain(snapshots: readonly Snapshot[], now = Date.now()): number | null {
-  return compute24hGainFromHourly(normalizeHourly(snapshots, now), now);
-}
-
-export function compute24hGainFromHourly(points: readonly HourlyPoint[], now: number): number | null {
-  const values = reliableWindowFromHourly(points, 24, now);
-  return gain(values);
-}
-
 export function computeRetentionAvg(snapshots: readonly Snapshot[], days: number, now = Date.now()): number | null {
   return computeRetentionAvgFromHourly(normalizeHourly(snapshots, now), days, now);
 }
@@ -37,19 +28,9 @@ export function computeRetentionAvgFromHourly(points: readonly HourlyPoint[], da
   return values ? Math.round(average(values)) : null;
 }
 
-export function computeRetentionGain(snapshots: readonly Snapshot[], days: number, now = Date.now()): number | null {
-  return computeRetentionGainFromHourly(normalizeHourly(snapshots, now), days, now);
-}
-
 export function computeRetentionGainFromHourly(points: readonly HourlyPoint[], days: number, now: number): number | null {
   const values = reliableWindowFromHourly(points, days * 24, now);
   return gain(values);
-}
-
-export function computeRetentionWindowLabel(snapshots: readonly Snapshot[], days: number, now = Date.now()): string {
-  void snapshots;
-  void now;
-  return `${days}d`;
 }
 
 export function computeLocalPeak(snapshots: readonly Snapshot[]): number | null {

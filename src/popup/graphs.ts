@@ -138,7 +138,7 @@ function renderPanelGraph(panel: HTMLDivElement, vm: CardViewModel, key: GraphWi
   clear(container);
   const now = vm.evaluatedAt ?? Date.now();
   const windowMs = key ? WINDOW_MS[key] : 0;
-  const result = renderSparkline(vm.snaps, { width: 372, height: 56, maxPoints: 200, strokeColor: "#00c8ff", windowMs, now });
+  const result = renderSparkline(vm.snaps, { width: 372, height: 56, maxPoints: 200, windowMs, now });
   container.hidden = !result;
   if (result) {
     container.appendChild(result.svg);
@@ -260,7 +260,7 @@ function attachSparklineHover(
 
 export function renderSparkline(
   snapshots: readonly Snapshot[],
-  opts: { width: number; height: number; maxPoints: number; strokeColor: string; windowMs?: number; now?: number },
+  opts: { width: number; height: number; maxPoints: number; windowMs?: number; now?: number },
 ) {
   const series = buildGraphSeries(snapshots, opts.windowMs ?? WINDOW_MS["24h"], opts.now ?? Date.now(), opts.width, opts.height, opts.maxPoints);
   const points = series.segments.flatMap((segment) => [...segment.points]);
