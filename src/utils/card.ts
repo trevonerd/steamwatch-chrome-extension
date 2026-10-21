@@ -10,13 +10,13 @@
 // No side effects. No I/O. Fully unit-testable.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import type { CachedData, CardViewModel, Game, Snapshot } from "../types/index.js";
+import type { CachedData, CardViewModel, Game, PlayerChange, Snapshot } from "../types/index.js";
 import { buildEarlyActivity } from "./earlyActivity.js";
 import { formatError } from "./log.js";
-import { analyzeLatestAvailableSeasonalTrendFromHourly } from "./seasonal.js";
+import { analyzeLatestAvailableSeasonalTrendFromHourly, detectPlayerChanges } from "./seasonal.js";
 import { HOUR_MS, isQualifiedSnapshot, normalizeHourly } from "./series.js";
 import { buildAvailableGraphWindows, hasEnoughGraphHistory } from "./sparkline.js";
-import { computeLatestChangePctFromHourly, computeLocalPeak, computeWindowMin } from "./trend.js";
+import { computeLatestChangePctFromHourly, computeLocalPeak, computeWindowMin, fmtNumber, fmtPct } from "./trend.js";
 
 /**
  * Build the complete view model for a single game card.
@@ -82,6 +82,7 @@ export function buildCardViewModel(
     fetchedAt: data?.fetchedAt ?? 0,
     ...(data?.freshness ? { freshness: data.freshness } : {}),
     ...(data?.twitchViewers != null ? { twitchViewers: data.twitchViewers } : {}),
+    changes: detectPlayerChanges(hourly, now),
     allTimeLow,
   };
 }
@@ -121,25 +122,47 @@ export async function buildAllViewModels(
   return models;
 }
 
-/** Badge text when no weekly trend is shown and no preliminary 24h comparison exists. */
+/** Badge text when no momentum comparison is shown and no preliminary 24h comparison exists. */
 export function fallbackBadgeLabel(vm: CardViewModel): string {
   if (vm.seasonalAnalysis?.status === "low-baseline") return "Low activity";
   if (vm.earlyActivity?.status === "stale") return "History stale";
-  return (vm.earlyActivity?.spanHours ?? 0) >= 14 * 24 ? "History incomplete" : "Building history";
+  return (vm.earlyActivity?.spanHours ?? 0) >= 8 * 24 ? "History incomplete" : "Building history";
 }
 
-/** Weekly comparison numbers for the trend badge tooltip. */
-export function weeklyDetail(vm: CardViewModel): string {
+/** "vs wk" (same hours last week) or "vs 7d" (7-day hourly average); short enough to share the stats row. */
+export function momentumBasisLabel(vm: CardViewModel): string {
+  return vm.seasonalAnalysis?.status === "ready" && vm.seasonalAnalysis.comparison?.basis === "7d-avg"
+    ? "vs 7d"
+    : "vs wk";
+}
+
+/** Momentum numbers for the trend badge tooltip. */
+export function momentumDetail(vm: CardViewModel): string {
   const analysis = vm.seasonalAnalysis;
   if (analysis?.status !== "ready" || !analysis.comparison) return "";
   const { comparison } = analysis;
-  const pct = vm.trend?.pct ?? 0;
-  const agree =
-    pct >= 5
-      ? ` · ${comparison.risingDays}/7 days higher`
-      : pct < -5
-        ? ` · ${comparison.fallingDays}/7 days lower`
-        : "";
-  const avg = (value: number) => Math.round(value).toLocaleString("en-US");
-  return ` ${avg(comparison.recentMean)} vs ${avg(comparison.baselineMean)} average players${agree} · ${comparison.matchedHours}/168 matched hours.`;
+  const parts = [
+    `24h average ${fmtNumber(Math.round(comparison.recentMean))} vs ${fmtNumber(Math.round(comparison.baselineMean))}`,
+    `peak ${fmtNumber(Math.round(comparison.recentPeak))} vs ${fmtNumber(Math.round(comparison.baselinePeak))}`,
+    ...(comparison.weeklyPct !== undefined ? [`7-day average ${fmtPct(comparison.weeklyPct)} vs previous week`] : []),
+    `${comparison.matchedHours}/24 matched hours`,
+  ];
+  const change = latestChange(vm);
+  return ` ${parts.join(" · ")}.${change ? ` ${changeLabel(change)}.` : ""}`;
+}
+
+/** Most recent detected change in the last 7 days. */
+export function latestChange(vm: CardViewModel): PlayerChange | undefined {
+  const change = vm.changes.at(-1);
+  return change && (vm.evaluatedAt ?? Date.now()) - change.lastTs <= 7 * 24 * HOUR_MS ? change : undefined;
+}
+
+export function changeLabel(change: PlayerChange): string {
+  const when = new Date(change.startTs).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return `${change.direction === "drop" ? "Drop" : "Rise"} ${fmtPct(change.pct)} since ${when}${change.ongoing ? "" : ` (${change.hours}h)`}`;
 }

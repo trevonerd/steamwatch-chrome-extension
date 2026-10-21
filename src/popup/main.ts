@@ -1,7 +1,13 @@
 // SteamWatch — src/popup/main.ts
 
 import type { CardViewModel } from "../types/index.js";
-import { buildAllViewModels, buildCardViewModel, fallbackBadgeLabel, weeklyDetail } from "../utils/card.js";
+import {
+  buildAllViewModels,
+  buildCardViewModel,
+  fallbackBadgeLabel,
+  momentumBasisLabel,
+  momentumDetail,
+} from "../utils/card.js";
 import { append, clear, h, hide, mustGet, s, show } from "../utils/html.js";
 import { idbGetSnapshots } from "../utils/idb-storage.js";
 import { formatError } from "../utils/log.js";
@@ -131,7 +137,7 @@ function renderGames(vms: CardViewModel[], favoriteAppid?: string): void {
 }
 
 function buildGameItem(vm: CardViewModel, isTop: boolean, favoriteAppid?: string): HTMLLIElement {
-  const { game, current, peak24h, allTimePeak, trendCls, displayTrendPct, displayTrendIcon, displayTrendCls } = vm;
+  const { game, current, peak24h, allTimePeak, trendCls, displayTrendPct, displayTrendCls } = vm;
   const li = h("li", { className: "game-item", dataset: { historyLoading: String(vm.historyLoading === true) } });
   const card = h("div", {
     className: `game-card ${trendCls}${isTop ? " rank-first" : ""}`,
@@ -195,10 +201,10 @@ function buildGameItem(vm: CardViewModel, isTop: boolean, favoriteAppid?: string
     stats.appendChild(
       h("span", {
         className: `trend-badge ${displayTrendCls}`,
-        text: `${displayTrendIcon ? `${displayTrendIcon} ` : ""}${fmtPct(displayTrendPct)} 7d${vm.trendAsOf !== undefined ? ` · ${fmtTimeAgo(vm.trendAsOf, vm.evaluatedAt)}` : ""}`,
+        text: `${fmtPct(displayTrendPct)} ${momentumBasisLabel(vm)}${vm.trendAsOf !== undefined ? ` · ${fmtTimeAgo(vm.trendAsOf, vm.evaluatedAt)}` : ""}`,
         attrs: {
-          "aria-label": `${fmtPct(displayTrendPct)} average players: 7 days vs previous 7 days${vm.trendAsOf !== undefined ? `, through ${new Date(vm.trendAsOf).toISOString()}` : ""}`,
-          title: `${vm.trend?.level.label ?? "Weekly activity"}. ${vm.seasonalAnalysis?.reason ?? "Last 7 days vs previous 7 days."}${weeklyDetail(vm)}${vm.trendAsOf !== undefined ? ` Historical comparison through ${new Date(vm.trendAsOf).toISOString()}; newer history is incomplete.` : ""}`,
+          "aria-label": `${fmtPct(displayTrendPct)} average players: last 24 hours ${momentumBasisLabel(vm) === "vs 7d" ? "vs the 7-day average" : "vs the same hours last week"}${vm.trendAsOf !== undefined ? `, through ${new Date(vm.trendAsOf).toISOString()}` : ""}`,
+          title: `${vm.trend?.level.label ?? "Activity"}. ${vm.seasonalAnalysis?.reason ?? "Last 24 hours vs the same hours a week earlier."}${momentumDetail(vm)}${vm.trendAsOf !== undefined ? ` Historical comparison through ${new Date(vm.trendAsOf).toISOString()}; newer history is incomplete.` : ""}`,
         },
       }),
     );

@@ -9,6 +9,7 @@ import { deleteNotificationState } from "../background/notificationState.js";
 import type { CachedData, Game, GameSettings, Settings } from "../types/index.js";
 import { CachedDataSchema, GameSchema, GameSettingsSchema, SettingsSchema } from "../types/index.js";
 import { idbClearAllData, idbClearGameTombstone, idbDeleteGameData } from "./idb-storage.js";
+import { NEWS_PREFIX } from "./news.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -187,7 +188,11 @@ async function removePendingGameCleanup(appid: string): Promise<void> {
 async function cleanupGameData(appid: string): Promise<void> {
   await idbDeleteGameData(appid);
   await deleteNotificationState(appid);
-  await chrome.storage.local.remove([`${KEYS.gameSettingsPrefix}${appid}`, `${KEYS.legacySnapshotsPrefix}${appid}`]);
+  await chrome.storage.local.remove([
+    `${KEYS.gameSettingsPrefix}${appid}`,
+    `${KEYS.legacySnapshotsPrefix}${appid}`,
+    `${NEWS_PREFIX}${appid}`,
+  ]);
 
   const rawCache = toRecord(await get<unknown>(KEYS.cache));
   if (rawCache && appid in rawCache) {

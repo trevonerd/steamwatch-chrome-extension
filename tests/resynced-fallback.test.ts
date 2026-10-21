@@ -45,11 +45,18 @@ describe("Resynced actual fallback history", () => {
     expect(vm.availableGraphWindows.map((w) => w.key)).toEqual(["24h", "3d", "7d", "15d", "1m", "all"]);
     expect(compute24hAvg(vm.snaps, now)).toBeGreaterThan(0);
     expect(vm.seasonalAnalysis?.status).toBe("ready");
-    expect(vm.trend?.pct).toBe(-20.6);
+    expect(vm.trend?.pct).toBe(-26.1);
     if (vm.seasonalAnalysis?.status === "ready") {
-      expect(vm.seasonalAnalysis.comparison?.recentMean).toBeCloseTo(3786.6687, 3);
-      expect(vm.seasonalAnalysis.comparison?.baselineMean).toBeCloseTo(4769.8675, 3);
-      expect(vm.seasonalAnalysis.comparison?.matchedHours).toBe(166);
+      expect(vm.seasonalAnalysis.comparison).toMatchObject({
+        basis: "week",
+        matchedHours: 24,
+        recentPeak: 3953,
+        baselinePeak: 5423,
+        // The weekly average stays available as context: 7d vs previous 7d.
+        weeklyPct: -20.6,
+      });
+      expect(vm.seasonalAnalysis.comparison?.recentMean).toBeCloseTo(2789.333, 3);
+      expect(vm.seasonalAnalysis.comparison?.baselineMean).toBeCloseTo(3775.667, 3);
     }
     expect(vm.allTimePeak).toBeNull();
   });

@@ -8,7 +8,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { CardViewModel } from "../types/index.js";
-import { fallbackBadgeLabel } from "./card.js";
+import { changeLabel, fallbackBadgeLabel, latestChange, momentumBasisLabel } from "./card.js";
 import { buildGraphSeries, colorGraphSegments, type GraphSeries } from "./sparkline.js";
 import { fmtNumber, fmtPct, fmtTimeAgo } from "./trend.js";
 
@@ -53,7 +53,9 @@ export function buildShareText(vm: CardViewModel): string {
 
   // Trend
   if (trend) {
-    parts.push(`${trend.level.icon} 7d vs previous 7d: ${fmtPct(trend.pct)} (${trend.level.label})`);
+    parts.push(
+      `${trend.level.icon} Last 24h ${momentumBasisLabel(vm) === "vs 7d" ? "vs 7-day average" : "vs same hours last week"}: ${fmtPct(trend.pct)} (${trend.level.label})`,
+    );
     if (vm.trendAsOf !== undefined)
       parts.push(`Historical comparison through ${new Date(vm.trendAsOf).toISOString()}; newer history is incomplete.`);
   } else if (seasonalAnalysis) {
@@ -68,6 +70,9 @@ export function buildShareText(vm: CardViewModel): string {
       );
     }
   }
+
+  const change = latestChange(vm);
+  if (change) parts.push(`${change.direction === "drop" ? "▼" : "▲"} ${changeLabel(change)}`);
 
   if (latestChangePct != null) {
     parts.push(`↕ Latest change: ${fmtPct(latestChangePct)}`);
@@ -190,7 +195,7 @@ export async function renderShareCanvas(vm: CardViewModel): Promise<Blob> {
   // ── Trend badge ────────────────────────────────────────────────────────────
   if (trend) {
     const badgeColor = trendBadgeColor(vm.trendCls);
-    const badgeText = `${trend.level.icon} ${fmtPct(trend.pct)} 7d${vm.trendAsOf !== undefined ? ` · ${fmtTimeAgo(vm.trendAsOf, vm.evaluatedAt)}` : ""}`;
+    const badgeText = `${trend.level.icon} ${fmtPct(trend.pct)} ${momentumBasisLabel(vm)}${vm.trendAsOf !== undefined ? ` · ${fmtTimeAgo(vm.trendAsOf, vm.evaluatedAt)}` : ""}`;
     ctx.font = "11px 'Courier New', Courier, monospace";
     const bw = ctx.measureText(badgeText).width + 14;
     const bx = CANVAS_W - bw - 12;
@@ -339,7 +344,7 @@ function hexToRgba(hex: string, alpha: number): string {
 /** Left-border accent colour per trend class. */
 function trendStripColor(cls: string): string {
   if (["explosion", "strong-up", "up"].includes(cls)) return "#22c55e";
-  if (["down", "strong-down"].includes(cls)) return "#ef4444";
+  if (["down", "strong-down", "crash"].includes(cls)) return "#ef4444";
   return "#1e3a5f";
 }
 
@@ -347,5 +352,6 @@ function trendStripColor(cls: string): string {
 function trendBadgeColor(cls: string): { bg: string; text: string } {
   if (["explosion", "strong-up", "up"].includes(cls)) return { bg: "rgba(34,197,94,0.15)", text: "#22c55e" };
   if (["down", "strong-down"].includes(cls)) return { bg: "rgba(239,68,68,0.15)", text: "#ef4444" };
+  if (cls === "crash") return { bg: "rgba(255,51,102,0.15)", text: "#ff3366" };
   return { bg: "rgba(100,116,139,0.15)", text: "#64748b" };
 }

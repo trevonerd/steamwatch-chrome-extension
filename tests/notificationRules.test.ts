@@ -26,7 +26,7 @@ describe("evaluateRule", () => {
       },
     });
     expect(result.eventId).toBeUndefined();
-    expect(result.state?.fingerprint).toBe("trendDown:weekly-v2:-20");
+    expect(result.state?.fingerprint).toBe("trendDown:momentum-v1:-20");
     expect(result.state?.pendingId).toBeUndefined();
   });
 

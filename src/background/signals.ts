@@ -1,8 +1,11 @@
-import type { CachedData, Game, GameSettings, Settings, Snapshot, TrendResult } from "../types/index.js";
+import type { CachedData, Game, GameSettings, PlayerChange, Settings, Snapshot, TrendResult } from "../types/index.js";
 import { GameSchema } from "../types/index.js";
 import { formatError } from "../utils/log.js";
+import { getSteamNews, newsForChange } from "../utils/news.js";
 import { isQuietNow } from "../utils/quietHours.js";
-import { computeTrend, fmtBadge, fmtNumber } from "../utils/trend.js";
+import { analyzeSeasonalTrendFromHourly, detectPlayerChanges } from "../utils/seasonal.js";
+import { HOUR_MS, type HourlyPoint, normalizeHourly } from "../utils/series.js";
+import { fmtBadge, fmtNumber, fmtPct } from "../utils/trend.js";
 import { acknowledgeRule, evaluateRule, type RuleKey } from "./notificationRules.js";
 import { withNotificationState } from "./notificationState.js";
 
@@ -18,27 +21,23 @@ interface PublishInput {
 
 export async function publishLiveResult(input: PublishInput): Promise<Signal> {
   const now = input.cache[input.game.appid]?.fetchedAt ?? Date.now();
-  const trend = computeTrend(input.snapshots, now);
-  const signal =
-    trend && trend.sustained !== false && trend.pct >= 5
-      ? "rising"
-      : trend && trend.sustained !== false && trend.pct < -5
-        ? "alerting"
-        : "stable";
+  const hourly = normalizeHourly(input.snapshots, now);
+  const trend = trendAt(hourly, now);
+  const signal = trend && trend.pct >= 10 ? "rising" : trend && trend.pct <= -10 ? "alerting" : "stable";
   if (!input.settings.notificationsEnabled || input.gameSettings.notificationsEnabled === false) return signal;
   await withNotificationState(input.game.appid, async (state, save) => {
     if (!(await isFollowed(input.game.appid))) return;
-    const configured = rulesFor(input, trend);
+    const configured = rulesFor(input, hourly, now);
     const enabledKeys = new Set(configured.map((rule) => rule.key));
     for (const key of Object.keys(state)) {
       if (key === "above" || key === "below" || key === "trendUp" || key === "trendDown") {
         if (!enabledKeys.has(key)) delete state[key];
       }
     }
-    const events: { readonly key: RuleKey; readonly id: string; readonly threshold: number }[] = [];
+    const events: { readonly key: RuleKey | "change"; readonly id: string; readonly threshold: number }[] = [];
     for (const rule of configured) {
       if ((rule.key === "trendUp" || rule.key === "trendDown") && rule.value === null) {
-        // No usable weekly value: drop any pending crossing but keep arming, so a later sustained crossing still alerts.
+        // No usable momentum value: drop any pending crossing but keep arming, so a later held crossing still alerts.
         const previous = state[rule.key];
         if (previous) state[rule.key] = { ...acknowledgeRule(previous), armed: previous.armed };
         continue;
@@ -48,6 +47,8 @@ export async function publishLiveResult(input: PublishInput): Promise<Signal> {
       if (result.state) state[rule.key] = result.state;
       if (result.eventId) events.push({ key: rule.key, id: result.eventId, threshold: rule.threshold });
     }
+    const change = newChange(hourly, now, state.changeAt);
+    if (change) events.push({ key: "change", id: `change_${change.startTs}`, threshold: 0 });
     // Pending IDs must survive a worker restart before native delivery.
     await save(state);
     if (isQuietNow(input.settings)) return;
@@ -57,15 +58,21 @@ export async function publishLiveResult(input: PublishInput): Promise<Signal> {
         await chrome.notifications.create(`sw_${input.game.appid}_${event.id}`, {
           type: "basic",
           iconUrl: "/icons/logo-128.png",
-          title: `${input.game.name} — ${event.key === "above" ? "Player count above threshold" : event.key === "below" ? "Player count below threshold" : "Weekly activity alert"}`,
+          title: `${input.game.name} — ${notificationTitle(event.key, change)}`,
           message:
             event.key === "above" || event.key === "below"
               ? `${fmtNumber(input.current)} players; threshold ${fmtNumber(event.threshold)}. Sustained for 5 minutes.`
-              : `${trend?.pct ?? 0}% average players: last 7 days vs previous 7 days. At least 5 days agree; threshold held for 5 minutes.`,
+              : event.key === "change" && change
+                ? await changeMessage(input.game.appid, change, now)
+                : `${fmtPct(trend?.pct ?? 0)} average players: last 24 hours vs the same hours a week earlier. Held for 3 hours.`,
           priority: 1,
         });
-        const rule = state[event.key];
-        if (rule) state[event.key] = acknowledgeRule(rule);
+        if (event.key === "change") {
+          if (change) state.changeAt = change.startTs;
+        } else {
+          const rule = state[event.key];
+          if (rule) state[event.key] = acknowledgeRule(rule);
+        }
         await save(state);
       } catch (error: unknown) {
         console.warn(`[SteamWatch] Notification delivery failed for ${input.game.appid}: ${formatError(error)}`);
@@ -77,15 +84,13 @@ export async function publishLiveResult(input: PublishInput): Promise<Signal> {
 
 function rulesFor(
   input: PublishInput,
-  trend: TrendResult | null,
+  hourly: readonly HourlyPoint[],
+  now: number,
 ): { key: RuleKey; threshold: number; value: number | null }[] {
   const { gameSettings, settings, current } = input;
-  const trendValue =
-    !trend || (trend.sustained === false && (trend.pct >= 5 || trend.pct < -5))
-      ? null
-      : Math.abs(trend.delta) >= 10
-        ? trend.pct
-        : 0;
+  // The crossing must hold for the last 3 completed hours: the weakest of the three decides.
+  const held = [0, 1, 2].map((hours) => trendAt(hourly, now - hours * HOUR_MS)?.pct ?? null);
+  const complete = held.every((value) => value !== null) ? (held as number[]) : null;
   return [
     ...(gameSettings.notifyThresholdPlayers !== undefined
       ? [{ key: "above" as const, threshold: gameSettings.notifyThresholdPlayers, value: current }]
@@ -93,9 +98,46 @@ function rulesFor(
     ...(gameSettings.notifyBelowPlayers !== undefined
       ? [{ key: "below" as const, threshold: gameSettings.notifyBelowPlayers, value: current }]
       : []),
-    { key: "trendUp", threshold: gameSettings.thresholdUp ?? settings.globalThresholdUp, value: trendValue },
-    { key: "trendDown", threshold: gameSettings.thresholdDown ?? settings.globalThresholdDown, value: trendValue },
+    {
+      key: "trendUp",
+      threshold: gameSettings.thresholdUp ?? settings.globalThresholdUp,
+      value: complete ? Math.min(...complete) : null,
+    },
+    {
+      key: "trendDown",
+      threshold: gameSettings.thresholdDown ?? settings.globalThresholdDown,
+      value: complete ? Math.max(...complete) : null,
+    },
   ];
+}
+
+function trendAt(hourly: readonly HourlyPoint[], at: number): TrendResult | null {
+  const analysis = analyzeSeasonalTrendFromHourly(hourly, at);
+  return analysis.status === "ready" ? analysis.trend : null;
+}
+
+/** An ongoing change that started in the last 24 hours and has not been announced yet. */
+function newChange(hourly: readonly HourlyPoint[], now: number, announcedAt: number | undefined): PlayerChange | null {
+  const change = detectPlayerChanges(hourly, now).at(-1);
+  return change?.ongoing && now - change.startTs <= 24 * HOUR_MS && change.startTs > (announcedAt ?? 0) ? change : null;
+}
+
+function notificationTitle(key: RuleKey | "change", change: PlayerChange | null): string {
+  if (key === "above") return "Player count above threshold";
+  if (key === "below") return "Player count below threshold";
+  if (key === "change") return change?.direction === "rise" ? "Sudden rise" : "Sudden drop";
+  return "24h activity alert";
+}
+
+async function changeMessage(appid: string, change: PlayerChange, now: number): Promise<string> {
+  const base = `${fmtPct(change.pct)} players vs the same hours last week, for ${change.hours} hours.`;
+  try {
+    const [news] = newsForChange(await getSteamNews(appid, now), change);
+    return news ? `${base} Latest news: ${news.title}` : base;
+  } catch (error: unknown) {
+    console.warn(`[SteamWatch] News lookup failed for ${appid}: ${formatError(error)}`);
+    return base;
+  }
 }
 
 async function isFollowed(appid: string): Promise<boolean> {

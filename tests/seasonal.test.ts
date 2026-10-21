@@ -3,6 +3,7 @@ import {
   analyzeLatestAvailableSeasonalTrendFromHourly,
   analyzeSeasonalTrend,
   analyzeSeasonalTrendFromHourly,
+  detectPlayerChanges,
 } from "../src/utils/seasonal.js";
 import { normalizeHourly } from "../src/utils/series.js";
 
@@ -13,10 +14,10 @@ describe("analyzeSeasonalTrend", () => {
       const ts = now - (35 * 24 - index) * 3_600_000;
       return { ts, current: valueAt(ts), source: "steamcharts" as const, granularity: "hourly" as const };
     });
-  it("requires a preceding week of same-hour weekday observations", () => {
+  it("requires matching hours from a week earlier or three earlier days", () => {
     const now = Date.UTC(2026, 0, 31, 12);
-    const snapshots = Array.from({ length: 7 * 24 }, (_, index) => ({
-      ts: now - (7 * 24 - index) * 3_600_000,
+    const snapshots = Array.from({ length: 3 * 24 }, (_, index) => ({
+      ts: now - (3 * 24 - index) * 3_600_000,
       current: 100,
       source: "steamcharts" as const,
       granularity: "hourly" as const,
@@ -64,23 +65,25 @@ describe("analyzeSeasonalTrend", () => {
     });
   });
 
-  it("detects a persistent twenty percent decline against matched seasonal hours", () => {
-    const snapshots = hourly((ts) => (ts >= now - 7 * 24 * 3_600_000 ? 80 : 100));
-    const result = analyzeSeasonalTrend(snapshots, now);
-    expect(result).toMatchObject({
+  it("shows a two-day collapse that the weekly average dilutes", () => {
+    const day = 24 * 3_600_000;
+    const snapshots = hourly((ts) => (ts >= now - day ? 55 : ts >= now - 2 * day ? 85 : 100));
+    expect(analyzeSeasonalTrend(snapshots, now)).toMatchObject({
       status: "ready",
-      trend: { pct: -20, level: expect.objectContaining({ key: "DOWN" }) },
+      trend: { pct: -45, delta: -45, level: expect.objectContaining({ key: "STRONG_DOWN" }) },
+      comparison: { basis: "week", matchedHours: 24, weeklyPct: -8.6, recentPeak: 55, baselinePeak: 100 },
     });
   });
 
-  it("uses median baselines so one historical spike does not erase a sustained decline", () => {
-    const spikeWeek = now - 3 * 7 * 24 * 3_600_000;
-    const snapshots = hourly((ts) => {
-      const recent = ts >= now - 7 * 24 * 3_600_000;
-      const spike = ts >= spikeWeek && ts < spikeWeek + 7 * 24 * 3_600_000;
-      return recent ? 80 : spike ? 1_000 : 100;
+  it("falls back to the 7-day average of each hour when the week-ago hours are missing", () => {
+    const snapshots = hourly((ts) => (ts >= now - 24 * 3_600_000 ? 50 : 100)).filter(
+      (snapshot) => snapshot.ts >= now - 5 * 24 * 3_600_000,
+    );
+    expect(analyzeSeasonalTrend(snapshots, now)).toMatchObject({
+      status: "ready",
+      trend: { pct: -50 },
+      comparison: { basis: "7d-avg" },
     });
-    expect(analyzeSeasonalTrend(snapshots, now)).toMatchObject({ status: "ready", trend: { pct: -20 } });
   });
 
   it("reports low baseline and sparse comparable-hours explicitly", () => {
@@ -94,53 +97,39 @@ describe("analyzeSeasonalTrend", () => {
     expect(analyzeSeasonalTrend(sparse, now)).toMatchObject({ status: "insufficient" });
   });
 
-  it("reports stability after two stable weeks even when the launch month was much higher", () => {
-    const snapshots = hourly((ts) => (ts >= now - 14 * 24 * 3_600_000 ? 3500 : 12000));
-    expect(analyzeSeasonalTrend(snapshots, now)).toMatchObject({ status: "ready", trend: { pct: 0 } });
-  });
-
-  it("reports the current weekly pace instead of cumulative loss against old weeks", () => {
-    const snapshots = hourly((ts) =>
-      ts >= now - 7 * 24 * 3_600_000 ? 80 : ts >= now - 14 * 24 * 3_600_000 ? 100 : 200,
-    );
-    expect(analyzeSeasonalTrend(snapshots, now)).toMatchObject({ status: "ready", trend: { pct: -20, delta: -20 } });
-  });
-
   it("uses the ratio of matched means instead of overweighting quiet hours", () => {
     const snapshots = hourly((ts) => {
-      const recent = ts >= now - 7 * 24 * 3_600_000;
+      const recent = ts >= now - 24 * 3_600_000;
       return new Date(ts).getUTCHours() < 12 ? (recent ? 20 : 10) : recent ? 90 : 100;
     });
     expect(analyzeSeasonalTrend(snapshots, now)).toMatchObject({ status: "ready", trend: { pct: 0, delta: 0 } });
   });
 
-  it("keeps a one-day event visible without classifying it as sustained growth", () => {
-    const result = analyzeSeasonalTrend(
-      hourly((ts) => (ts >= now - 24 * 3_600_000 ? 400 : 100)),
-      now,
-    );
-    expect(result).toMatchObject({
-      status: "ready",
-      trend: { pct: 42.9, sustained: false, level: { label: "Uneven week" } },
-    });
-  });
-
-  it("detects a week-long crash while a real zero remains a valid observation", () => {
+  it("shows a one-day event immediately", () => {
     expect(
       analyzeSeasonalTrend(
-        hourly((ts) => (ts >= now - 7 * 24 * 3_600_000 ? 0 : 100)),
+        hourly((ts) => (ts >= now - 24 * 3_600_000 ? 400 : 100)),
         now,
       ),
-    ).toMatchObject({
-      status: "ready",
-      trend: { pct: -100, sustained: true },
-      comparison: { fallingDays: 7, matchedHours: 168 },
-    });
+    ).toMatchObject({ status: "ready", trend: { pct: 300, level: { key: "EXPLOSION" } } });
   });
 
-  it("does not refresh an incomplete comparison with an unmatched live hour", () => {
-    const missingEnd = hourly(() => 100).filter((s) => s.ts !== now - 3_600_000);
-    expect(analyzeSeasonalTrend(missingEnd, now).status).toBe("insufficient");
+  it("classifies a fall to zero as a collapse while a real zero remains a valid observation", () => {
+    expect(
+      analyzeSeasonalTrend(
+        hourly((ts) => (ts >= now - 24 * 3_600_000 ? 0 : 100)),
+        now,
+      ),
+    ).toMatchObject({ status: "ready", trend: { pct: -100, level: { key: "COLLAPSE", cls: "crash" } } });
+  });
+
+  it("tolerates up to four missing recent hours", () => {
+    const missing = hourly(() => 100).filter(
+      (s) => s.ts < now - 5 * 3_600_000 || s.ts >= now - 3_600_000 || s.ts === now,
+    );
+    expect(analyzeSeasonalTrend(missing, now).status).toBe("ready");
+    const tooMany = hourly(() => 100).filter((s) => s.ts < now - 6 * 3_600_000 || s.ts >= now - 3_600_000);
+    expect(analyzeSeasonalTrend(tooMany, now).status).toBe("insufficient");
   });
 
   it("compares identical observations consistently across history providers", () => {
@@ -152,17 +141,60 @@ describe("analyzeSeasonalTrend", () => {
   });
 
   it.each([
-    [4.96, 5, "UP", true],
-    [5.04, 5, "UP", true],
-    [-4.96, -5, "STABLE", false],
-    [-5.04, -5, "STABLE", false],
-    [-5.06, -5.1, "DOWN", true],
-  ])("keeps labels and eligibility consistent near the %s%% display boundary", (change, pct, key, sustained) => {
+    [9.9, "STABLE"],
+    [10, "UP"],
+    [25, "STRONG_UP"],
+    [50, "EXPLOSION"],
+    [-10, "STABLE"],
+    [-10.1, "DOWN"],
+    [-25, "DOWN"],
+    [-25.1, "STRONG_DOWN"],
+    [-50, "STRONG_DOWN"],
+    [-50.1, "COLLAPSE"],
+  ])("labels a %s%% change as %s", (change, key) => {
     const result = analyzeSeasonalTrend(
-      hourly((ts) => (ts >= now - 7 * 24 * 3_600_000 ? 100 + Number(change) : 100)),
+      hourly((ts) => (ts >= now - 24 * 3_600_000 ? 1000 + Number(change) * 10 : 1000)),
       now,
     );
-    expect(result).toMatchObject({ status: "ready", trend: { pct, sustained, level: { key } } });
+    expect(result).toMatchObject({ status: "ready", trend: { pct: change, level: { key } } });
+  });
+});
+
+describe("detectPlayerChanges", () => {
+  const hour = 3_600_000;
+  const now = Date.UTC(2026, 1, 28, 12);
+  const points = (valueAt: (hour: number) => number) =>
+    Array.from({ length: 21 * 24 }, (_, index) => {
+      const ts = now - (21 * 24 - index) * hour;
+      return { hour: ts, observedAt: ts + 60_000, value: valueAt(ts), source: "steamcharts" as const };
+    });
+
+  it("marks one ongoing drop from the first hour at least 20% below last week", () => {
+    const start = now - 30 * hour;
+    expect(
+      detectPlayerChanges(
+        points((ts) => (ts >= start ? 60 : 100)),
+        now,
+      ),
+    ).toEqual([{ startTs: start, lastTs: now - hour, direction: "drop", pct: -40, hours: 30, ongoing: true }]);
+  });
+
+  it("ignores short spikes and tolerates two missing hours", () => {
+    const spike = points((ts) => (ts >= now - 50 * hour && ts < now - 45 * hour ? 200 : 100));
+    expect(detectPlayerChanges(spike, now)).toEqual([]);
+    const start = now - 10 * hour;
+    const gapped = points((ts) => (ts >= start ? 150 : 100)).filter(
+      (point) => point.hour !== now - 5 * hour && point.hour !== now - 4 * hour,
+    );
+    expect(detectPlayerChanges(gapped, now)).toMatchObject([{ startTs: start, direction: "rise", hours: 8 }]);
+  });
+
+  it("closes a change once players return within 20% of last week", () => {
+    const changes = detectPlayerChanges(
+      points((ts) => (ts >= now - 40 * hour && ts < now - 20 * hour ? 50 : 100)),
+      now,
+    );
+    expect(changes).toMatchObject([{ direction: "drop", hours: 20, ongoing: false }]);
   });
 });
 
@@ -184,7 +216,7 @@ describe("latest available seasonal comparison", () => {
     expect(analyzeLatestAvailableSeasonalTrendFromHourly(points, now)).toMatchObject({
       status: "ready",
       trend: { pct: -20 },
-      comparison: { endTs: end, matchedHours: 168 },
+      comparison: { endTs: end, matchedHours: 23 },
     });
   });
 
@@ -211,7 +243,10 @@ describe("latest available seasonal comparison", () => {
   it("preserves a current low baseline instead of substituting an older ready comparison", () => {
     const points = history(now, 15 * 24).map((point) => ({
       ...point,
-      value: point.hour < now - 14 * 24 * hour ? 100 : 5,
+      value:
+        point.hour >= now - 24 * hour || (point.hour >= now - 8 * 24 * hour && point.hour < now - 7 * 24 * hour)
+          ? 5
+          : 100,
     }));
     const current = analyzeSeasonalTrendFromHourly(points, now);
     expect(current.status).toBe("low-baseline");
@@ -221,8 +256,8 @@ describe("latest available seasonal comparison", () => {
 
   it("does not relax required history or recover comparisons older than forty-eight hours", () => {
     for (const points of [
-      history(now - 16 * hour, 168),
-      history(now - 49 * hour),
+      history(now - 16 * hour, 72),
+      history(now - 51 * hour),
       history(now, 336).filter((point) => new Date(point.hour).getUTCHours() >= 6),
     ]) {
       expect(analyzeLatestAvailableSeasonalTrendFromHourly(points, now)).toEqual(

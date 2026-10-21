@@ -12,7 +12,7 @@ First stable release of the v2 tracker (betas 1–14 below). Chrome numeric vers
 - Latest hourly change ignores the hour still in progress
 - Games averaging under 10 players show "Low activity" instead of "History incomplete"
 - SteamCharts hourly rows older than the 60-day retention window are no longer re-imported beside compacted aggregates
-- Weekly trend alerts stay armed through mixed or briefly stale weeks, so a later sustained crossing still notifies
+- Trend alerts stay armed through briefly stale history, so a later held crossing still notifies
 - Clearing a per-game threshold now restores the global default (or turns the absolute rule off) instead of keeping the old value
 - Per-game rise/drop thresholds use the same 5–100% / 5–90% ranges as the global settings
 - Overnight quiet hours belong to the day they start (Friday 23:00 → 07:00 covers Saturday morning)
@@ -23,9 +23,14 @@ First stable release of the v2 tracker (betas 1–14 below). Chrome numeric vers
 
 ### Added
 - Clicking a notification opens the game's Steam store page
-- Tooltips show the all-time peak date, the lowest tracked count with its date, and weekly averages with how many days agree
+- Tooltips show the all-time peak date and the lowest tracked count with its date
+- Sudden changes (6+ hours each at least 20% away from the same hour a week earlier) are marked on the graph, listed under it with official Steam announcements from the 48 hours before, and notified once
+- Collapse level for drops beyond −50%
 
 ### Changed
+- Trend badge shows momentum: last 24 hours vs the same hours a week earlier ("−45% vs last wk"), falling back to the 7-day average of each hour ("vs 7d avg") for newer games. A two-day collapse no longer reads as stable because the weekly average dilutes it; the weekly average, peaks and matched hours move to the tooltip
+- Trend levels widened to ±10 / 25 / 50% for the noisier 24-hour window
+- Trend alerts follow the 24-hour momentum and must hold for 3 consecutive completed hours; pending alerts from the weekly algorithm are re-primed
 - Upgraded to Vite 8, Vitest 5, TypeScript 7, Zod 4 and current dev dependencies
 - Biome lint/format and knip added; `pnpm check` runs typecheck, lint, knip and tests
 - Removed unused view-model fields, legacy cooldown storage helpers, dead graph helpers and orphan CSS

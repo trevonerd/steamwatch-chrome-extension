@@ -444,6 +444,7 @@ body {
 .card-bottom {
   grid-column: 2 / 3; /* content column ONLY — does NOT overlap controls */
   grid-row: 2;
+  padding-top: 4px;
   padding-bottom: 3px;
   min-width: 0;
 }
@@ -716,6 +717,34 @@ body {
 .panel-stat-value.owners-stat,
 .panel-stat-value.rank-stat {
   color: var(--text-2);
+}
+
+.panel-change {
+  margin: 0;
+  padding: 5px 12px;
+  font-size: 11.5px;
+  font-family: var(--ff-mono);
+  font-weight: 600;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.panel-change--drop {
+  color: var(--down);
+}
+.panel-change--rise {
+  color: var(--up);
+}
+.panel-change-news {
+  color: var(--text-2);
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: var(--border);
+  text-underline-offset: 2px;
+}
+.panel-change-news:hover {
+  color: var(--accent);
 }
 
 .panel-links {

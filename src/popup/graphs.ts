@@ -1,5 +1,7 @@
-import type { CardViewModel, FieldFreshness, GraphWindowKey, Snapshot } from "../types/index.js";
+import type { CardViewModel, FieldFreshness, GraphWindowKey, PlayerChange, Snapshot } from "../types/index.js";
+import { changeLabel, latestChange } from "../utils/card.js";
 import { append, clear, h, s } from "../utils/html.js";
+import { getSteamNews, newsForChange } from "../utils/news.js";
 import { HOUR_MS, normalizeHourly } from "../utils/series.js";
 import { buildGraphSeries, colorGraphSegments, findNearestPointIndex } from "../utils/sparkline.js";
 import {
@@ -26,9 +28,11 @@ export function populatePanel(panel: HTMLDivElement, vm: CardViewModel): void {
   panel.appendChild(buildGraphPills(availableKeys, defaultGraphWindow, panel, vm));
   const sparklinePanel = h("div", { className: "panel-sparkline" });
 
+  const change = latestChange(vm);
   append(
     panel,
     sparklinePanel,
+    ...(change ? [buildChangeRow(game.appid, change)] : []),
     h("dl", {
       className: "panel-stats",
       children: [
@@ -56,6 +60,37 @@ export function populatePanel(panel: HTMLDivElement, vm: CardViewModel): void {
   );
 
   renderPanelGraph(panel, vm, defaultGraphWindow);
+}
+
+function buildChangeRow(appid: string, change: PlayerChange): HTMLParagraphElement {
+  const row = h("p", {
+    className: `panel-change panel-change--${change.direction}`,
+    text: `${change.direction === "drop" ? "▼" : "▲"} ${changeLabel(change)}`,
+    attrs: {
+      title: "Sudden change: each hour at least 20% away from the same hour a week earlier, for 6 hours or more.",
+    },
+  });
+  // Only official announcements near the change are shown; the cause is never guessed.
+  void getSteamNews(appid)
+    .then((items) => {
+      for (const item of newsForChange(items, change).slice(0, 2)) {
+        row.append(
+          " · ",
+          h("a", {
+            className: "panel-change-news",
+            text: item.title,
+            attrs: {
+              href: item.url,
+              target: "_blank",
+              rel: "noopener noreferrer",
+              title: new Date(item.date).toLocaleString(),
+            },
+          }),
+        );
+      }
+    })
+    .catch(() => undefined);
+  return row;
 }
 
 function buildGraphPills(
@@ -148,7 +183,14 @@ function renderPanelGraph(panel: HTMLDivElement, vm: CardViewModel, key: GraphWi
   clear(container);
   const now = vm.evaluatedAt ?? Date.now();
   const windowMs = key ? WINDOW_MS[key] : 0;
-  const result = renderSparkline(vm.snaps, { width: 372, height: 56, maxPoints: 200, windowMs, now });
+  const result = renderSparkline(vm.snaps, {
+    width: 372,
+    height: 56,
+    maxPoints: 200,
+    windowMs,
+    now,
+    markers: vm.changes,
+  });
   container.hidden = !result;
   if (result) {
     container.appendChild(result.svg);
@@ -272,7 +314,14 @@ function attachSparklineHover(
 
 export function renderSparkline(
   snapshots: readonly Snapshot[],
-  opts: { width: number; height: number; maxPoints: number; windowMs?: number; now?: number },
+  opts: {
+    width: number;
+    height: number;
+    maxPoints: number;
+    windowMs?: number;
+    now?: number;
+    markers?: readonly PlayerChange[];
+  },
 ) {
   const series = buildGraphSeries(
     snapshots,
@@ -316,6 +365,25 @@ export function renderSparkline(
         }),
       );
     }
+  }
+  const span = Math.max(1, series.endTs - series.startTs);
+  for (const change of opts.markers ?? []) {
+    if (change.startTs < series.startTs || change.startTs > series.endTs) continue;
+    const x = ((change.startTs - series.startTs) / span) * opts.width;
+    svg.appendChild(
+      s("line", {
+        attrs: {
+          class: "change-marker",
+          x1: x,
+          x2: x,
+          y1: 0,
+          y2: opts.height,
+          stroke: change.direction === "drop" ? "#ef4444" : "#22c55e",
+          "stroke-width": 1,
+          "stroke-dasharray": "3 3",
+        },
+      }),
+    );
   }
   return { svg, points, startTs: series.startTs, endTs: series.endTs, coverage: series.coverage };
 }

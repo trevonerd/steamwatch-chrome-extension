@@ -209,7 +209,7 @@ export const SettingsSchema = z
 
 // ── Trend ────────────────────────────────────────────────────────────────────
 
-type TrendKey = "EXPLOSION" | "STRONG_UP" | "UP" | "STABLE" | "DOWN" | "STRONG_DOWN";
+type TrendKey = "EXPLOSION" | "STRONG_UP" | "UP" | "STABLE" | "DOWN" | "STRONG_DOWN" | "COLLAPSE";
 
 export interface TrendLevel {
   readonly key: TrendKey;
@@ -224,7 +224,22 @@ export interface TrendResult {
   readonly level: TrendLevel;
   readonly pct: number; // rounded to 1 decimal
   readonly delta: number; // absolute player count delta
-  readonly sustained?: boolean;
+}
+
+/** Sustained hourly departure from the same hours a week earlier. */
+export interface PlayerChange {
+  readonly startTs: number;
+  readonly lastTs: number;
+  readonly direction: "rise" | "drop";
+  readonly pct: number;
+  readonly hours: number;
+  readonly ongoing: boolean;
+}
+
+export interface SteamNewsItem {
+  readonly title: string;
+  readonly url: string;
+  readonly date: number;
 }
 
 // ── Background ↔ UI messages ──────────────────────────────────────────────────
@@ -335,6 +350,8 @@ export interface CardViewModel {
   readonly earlyActivity?: EarlyActivity;
   readonly observedPeak?: number;
   readonly evaluatedAt?: number;
+  /** Detected sustained changes, oldest first. */
+  readonly changes: readonly PlayerChange[];
   /** Minimum across all snapshots: { value, timestamp } or null. */
   readonly allTimeLow: { value: number; timestamp: number } | null;
 }
@@ -373,15 +390,18 @@ export const TwitchGqlSchema = z.array(
   }),
 );
 
-interface WeeklyComparison {
+interface MomentumComparison {
+  /** "week": same hours a week earlier; "7d-avg": 7-day average of each hour of day. */
+  readonly basis: "week" | "7d-avg";
   readonly startTs: number;
   readonly endTs: number;
-  readonly baselineStartTs: number;
   readonly recentMean: number;
   readonly baselineMean: number;
+  readonly recentPeak: number;
+  readonly baselinePeak: number;
   readonly matchedHours: number;
-  readonly risingDays: number;
-  readonly fallingDays: number;
+  /** Context: last 7 days vs previous 7 days average, when both weeks are covered. */
+  readonly weeklyPct?: number;
 }
 
 export interface EarlyActivity {
@@ -408,6 +428,6 @@ export type SeasonalTrendAnalysis =
       readonly trend: TrendResult;
       readonly coverage: number;
       readonly reason: string;
-      readonly comparison?: WeeklyComparison;
+      readonly comparison?: MomentumComparison;
     }
   | { readonly status: "insufficient" | "stale" | "low-baseline"; readonly coverage: number; readonly reason: string };

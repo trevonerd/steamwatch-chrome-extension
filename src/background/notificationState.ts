@@ -15,8 +15,12 @@ const StateSchema = z.object({
   below: RuleStateSchema.optional(),
   trendUp: RuleStateSchema.optional(),
   trendDown: RuleStateSchema.optional(),
+  changeAt: z.number().finite().nonnegative().optional(),
 });
-export type NotificationState = Partial<Record<"above" | "below" | "trendUp" | "trendDown", RuleState>>;
+export type NotificationState = Partial<Record<"above" | "below" | "trendUp" | "trendDown", RuleState>> & {
+  /** Start of the latest announced sudden change. */
+  changeAt?: number;
+};
 const PREFIX = "sw_notification_state_";
 const operations = new Map<string, Promise<void>>();
 
@@ -24,7 +28,7 @@ export async function getNotificationState(appid: string): Promise<NotificationS
   const raw = await chrome.storage.local.get(`${PREFIX}${appid}`);
   const parsed = StateSchema.safeParse(raw[`${PREFIX}${appid}`]);
   if (!parsed.success) return {};
-  const state: NotificationState = {};
+  const state: NotificationState = parsed.data.changeAt !== undefined ? { changeAt: parsed.data.changeAt } : {};
   for (const key of ["above", "below", "trendUp", "trendDown"] as const) {
     const value = parsed.data[key];
     if (value)

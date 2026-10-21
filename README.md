@@ -18,7 +18,7 @@ Chrome extension for tracking Steam games with live player counts, local graph h
 - 60-day local graph retention
 - Popup sparklines and expanded player graphs
 - Period averages, changes and extrema with explicit historical coverage
-- Weekly activity: last seven days versus the preceding seven, matching hours and weekdays
+- Momentum: last 24 hours versus the same hours a week earlier, with sudden changes marked on the graph next to official Steam announcements
 - Preliminary daily activity for limited history, with absolute changes for tiny baselines
 - Player-count notifications with per-game overrides and quiet hours
 - Toolbar badge for rising or alerting games
@@ -119,7 +119,7 @@ The popup shows cache immediately, refreshes counts older than 60 seconds and po
 
 Graph periods become available when observations meet their coverage requirements. `All` means available retained history, up to 60 days, not the entire lifetime of a game. Missing values remain unavailable rather than becoming zero.
 
-The weekly percentage compares mean concurrent players over two matched weeks. It does not measure unique users lost or establish why activity changed. Trend alerts require sufficient coverage and agreement on at least five days. Before sufficient weekly history exists, daily comparisons are labeled preliminary and never trigger trend alerts; absolute player thresholds remain available.
+The badge percentage compares mean concurrent players over the last 24 completed hours with the same UTC hours a week earlier (at least 20 of 24 matched hours), so weekday and time of day align. Without week-ago data it compares against the 7-day average of each hour ("vs 7d avg"). The 7-day average versus the previous week is kept in the tooltip as context. It does not measure unique users lost or establish why activity changed: announcements shown beside a sudden change are published near it, not a confirmed cause. Trend alerts fire when the momentum stays past the threshold for 3 consecutive completed hours. Before enough history exists, daily comparisons are labeled preliminary and never trigger trend alerts; absolute player thresholds remain available.
 
 See [privacy](PRIVACY.md), [final validation](docs/final-beta-validation.md), and [lifecycle checks](docs/lifecycle-validation.md) for operational details and release limits.
 
