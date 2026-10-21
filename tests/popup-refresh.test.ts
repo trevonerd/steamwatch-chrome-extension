@@ -107,10 +107,11 @@ describe("popup refresh", () => {
     expect(element("appVersion").textContent).toBe("v9.8.7");
   });
 
-  it("keeps the update bar visible when cached games finish loading", async () => {
+  it("shows the update time once, in the header, when cached games finish loading", async () => {
     await loadPopup();
     expect(element("gamesList").hidden).toBe(false);
-    expect(element("fetchBar").hidden).toBe(false);
+    expect(element("fetchBar").hidden).toBe(true);
+    expect(element("lastUpdated").textContent).not.toBe("—");
   });
 
   it("shows an error when the worker rejects a manual refresh", async () => {
@@ -143,7 +144,7 @@ describe("popup refresh", () => {
     element("retryBtn").click();
     await vi.waitFor(() => expect(element("gamesList").hidden).toBe(false));
     expect(chrome.runtime.sendMessage).toHaveBeenCalledTimes(2);
-    expect(element("fetchBar").hidden).toBe(false);
+    expect(element("fetchBar").hidden).toBe(true);
   });
 
   it("keeps cached counts visible and reports a failed automatic update", async () => {
@@ -164,7 +165,7 @@ describe("popup refresh", () => {
       return { ok: true };
     });
     await loadPopup();
-    await vi.waitFor(() => expect(element("fetchBar").hidden).toBe(false));
+    await vi.waitFor(() => expect(element("lastUpdated").textContent).not.toBe("—"));
   });
 
   it("shows cached counts while an automatic update remains pending", async () => {

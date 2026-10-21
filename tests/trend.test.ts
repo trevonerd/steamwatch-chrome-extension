@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { Snapshot } from "../src/types/index.js";
 import { normalizeHourly } from "../src/utils/series.js";
 import {
-  analyzeSeasonalTrend,
   compute24hAvg,
   compute24hAvgFromHourly,
   computeLatestChangePct,
@@ -10,7 +9,6 @@ import {
   computeLocalPeak,
   computeRetentionAvg,
   computeRetentionAvgFromHourly,
-  computeTrend,
   computeWindowMin,
   fmtBadge,
   fmtNumber,
@@ -34,58 +32,6 @@ function history(recent: (hour: number) => number): Snapshot[] {
     };
   });
 }
-
-describe("seasonal trend", () => {
-  it("keeps a weekday/weekend seasonal pattern stable", () => {
-    expect(
-      computeTrend(
-        history((base) => base),
-        NOW,
-      )?.level.key,
-    ).toBe("STABLE");
-  });
-
-  it("detects a sustained 20 percent loss", () => {
-    expect(
-      computeTrend(
-        history((base) => base * 0.8),
-        NOW,
-      )?.pct,
-    ).toBe(-20);
-  });
-
-  it("does not treat a one-day event as a permanent trend", () => {
-    const snapshots = history((base) => base);
-    const eventStart = NOW - 2 * 24 * HOUR;
-    const event = snapshots.map((snapshot) =>
-      snapshot.ts >= eventStart && snapshot.ts < eventStart + 24 * HOUR
-        ? { ...snapshot, current: snapshot.current * 4 }
-        : snapshot,
-    );
-    expect(computeTrend(event, NOW)?.level.key).toBe("STABLE");
-  });
-
-  it("returns low-baseline for small populations and accepts a zero recent value", () => {
-    expect(
-      analyzeSeasonalTrend(
-        history(() => 0).map((snapshot) => ({ ...snapshot, current: snapshot.current / 20 })),
-        NOW,
-      ).status,
-    ).toBe("low-baseline");
-    expect(
-      computeTrend(
-        history(() => 0),
-        NOW,
-      )?.pct,
-    ).toBe(-100);
-  });
-
-  it("reports stale and incomplete source data without a fallback trend", () => {
-    const stale = history((base) => base).filter((snapshot) => snapshot.ts < NOW - 3 * HOUR);
-    expect(analyzeSeasonalTrend(stale, NOW).status).toBe("stale");
-    expect(computeTrend(stale, NOW)).toBeNull();
-  });
-});
 
 describe("coverage-bound metrics", () => {
   it("matches snapshot APIs when supplied a normalized series", () => {
@@ -136,7 +82,7 @@ describe("formatting regressions", () => {
 
   it("formats signs and elapsed time with an explicit clock", () => {
     expect(fmtPct(30)).toBe("+30%");
-    expect(fmtPct(-15)).toBe("-15%");
+    expect(fmtPct(-15)).toBe("−15%");
     expect(fmtTimeAgo(NOW - 3 * HOUR, NOW)).toBe("3h ago");
     expect(fmtTimeAgo(NOW - 60_000, NOW)).toBe("1m ago");
   });

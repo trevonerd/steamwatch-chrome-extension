@@ -47,6 +47,26 @@ describe("popup graphs", () => {
     ]);
   });
 
+  it("excludes near-zero outage hours from the minimum but keeps real zeros of empty games", () => {
+    const snaps = (values: (index: number) => number) =>
+      Array.from({ length: 48 }, (_, index) => ({
+        ts: now - (48 - index) * 3_600_000,
+        current: values(index),
+        source: "steamcharts" as const,
+        granularity: "hourly" as const,
+      }));
+    const minimum = (history: ReturnType<typeof snaps>) => {
+      const panel = document.createElement("div");
+      populatePanel(panel, buildCardViewModel({ appid: "1", name: "Game", image: "" }, {}, history, 60, now));
+      panel.querySelector<HTMLButtonElement>('[data-window="24h"]')?.click();
+      return panel.querySelectorAll(".period-stats dd")[2];
+    };
+    const outage = minimum(snaps((index) => (index === 40 ? 0 : 50_000 + index)));
+    expect(outage?.textContent).toBe("50.0k");
+    expect(outage?.getAttribute("title")).toContain("outages");
+    expect(minimum(snaps(() => 0))?.textContent).toBe("0");
+  });
+
   it("computes All statistics when observation timestamps are offset within the hour", () => {
     const evaluatedAt = now + 57 * 60_000;
     const snaps = Array.from({ length: 73 }, (_, index) => ({

@@ -23,6 +23,10 @@ First stable release of the v2 tracker (betas 1–14 below). Chrome numeric vers
 - Trend badge never wraps onto the card graph: it stays on the stats row and truncates; the age of a dated comparison moved to the tooltip
 - Card controls are visible on keyboard focus
 - Muted labels, the Stable badge and footer text meet 4.5:1 contrast
+- Collapse is told apart from a drop by a heavier border and a tinted card, not hue alone
+- Period minimum skips near-zero outage hours (under 1% of the median) instead of showing 0
+- The update time shows once, in the header; the bar under it only reports failed updates
+- Negative percentages use a true minus sign
 
 ### Added
 - Clicking a notification opens the game's Steam store page

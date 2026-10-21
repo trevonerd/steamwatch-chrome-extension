@@ -67,17 +67,12 @@ export function populatePanel(panel: HTMLDivElement, vm: CardViewModel): void {
 function buildChangeRow(appid: string, change: PlayerChange): HTMLParagraphElement {
   const row = h("p", {
     className: `panel-change panel-change--${change.direction}`,
-    text: `${change.direction === "drop" ? "▼" : "▲"} ${changeLabel(change)}`,
     attrs: {
       title:
         "Sudden change: each hour at least 20% away from the same hour a week earlier, for 6 hours or more. Marked ▼/▲ on the graph.",
     },
   });
-  const summary = h("span", {
-    className: "panel-change-summary",
-    text: `${change.direction === "drop" ? "▼" : "▲"} ${changeLabel(change)}`,
-  });
-  row.replaceChildren(summary);
+  row.append(h("span", { text: `${change.direction === "drop" ? "▼" : "▲"} ${changeLabel(change)}` }));
   // Only official announcements near the change are shown; the cause is never guessed.
   void getSteamNews(appid)
     .then((items) => {
@@ -182,7 +177,7 @@ function panelLink(href: string, text: string): HTMLAnchorElement {
 function fmtSignedPlayers(value: number): string {
   const abs = fmtNumber(Math.abs(value));
   if (value > 0) return `+${abs}`;
-  if (value < 0) return `-${abs}`;
+  if (value < 0) return `−${abs}`;
   return "0";
 }
 
@@ -235,13 +230,21 @@ function renderPanelGraph(panel: HTMLDivElement, vm: CardViewModel, key: GraphWi
   const label = key === "all" || key === null ? "All" : key;
   // Hourly medians, same series as average: a single outlier sample cannot set the extremes.
   const values = completed.map((point) => Math.round(point.value));
-  const low = values.length ? Math.min(...values) : null;
+  const floor = outageFloor(values);
+  const plausible = values.filter((value) => value >= floor);
+  const low = plausible.length ? Math.min(...plausible) : null;
   const peak = values.length ? Math.max(...values) : null;
   append(
     stats,
     panelStat(`${label} average`, avg == null ? "—" : fmtNumber(avg), summaryTitle),
     panelStat(`${label} change`, gain == null ? "—" : fmtSignedPlayers(gain), summaryTitle),
-    panelStat(`${label} minimum`, fmtNumber(low), lowTitle(vm)),
+    panelStat(
+      `${label} minimum`,
+      fmtNumber(low),
+      plausible.length < values.length
+        ? "Hours under 1% of the median (provider or Steam outages) are excluded."
+        : lowTitle(vm, floor),
+    ),
     panelStat(`${label} maximum`, fmtNumber(peak)),
   );
   const fallbackCredit = completed.some((point) => point.source === "games-popularity") ? " · Games Popularity" : "";
@@ -251,14 +254,22 @@ function renderPanelGraph(panel: HTMLDivElement, vm: CardViewModel, key: GraphWi
     : "Waiting for qualified player observations.";
 }
 
+// ponytail: 1% of the median flags provider/Steam outages recorded as near-zero; real zeros of empty games survive (median 0).
+function outageFloor(values: readonly number[]): number {
+  const sorted = [...values].sort((left, right) => left - right);
+  return (sorted[Math.floor(sorted.length / 2)] ?? 0) * 0.01;
+}
+
 function athTitle(vm: CardViewModel): string {
   const source = freshnessTitle(vm.freshness?.allTimePeak);
   return vm.allTimePeakLabel ? `Reached ${vm.allTimePeakLabel} · ${source}` : source;
 }
 
-function lowTitle(vm: CardViewModel): string | undefined {
+function lowTitle(vm: CardViewModel, floor: number): string | undefined {
   const low = vm.allTimeLow;
-  return low ? `Lowest tracked: ${fmtNumber(low.value)} on ${new Date(low.timestamp).toLocaleDateString()}` : undefined;
+  return low && low.value >= floor
+    ? `Lowest tracked: ${fmtNumber(low.value)} on ${new Date(low.timestamp).toLocaleDateString()}`
+    : undefined;
 }
 
 function attachSparklineHover(

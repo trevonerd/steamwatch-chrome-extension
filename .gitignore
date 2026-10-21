@@ -36,3 +36,6 @@ yarn-error.log*
 # ── Release artifacts (never commit) ───────────────────────────────────────────
 *.zip
 
+
+# ── Design critique snapshots ─────────────────────────────────────────────────
+.impeccable/

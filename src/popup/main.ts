@@ -18,7 +18,6 @@ import { buildShareText, renderShareCanvas } from "../utils/share.js";
 import {
   getCache,
   getGames,
-  getLastFetchTime,
   getSettings,
   MAX_GAMES,
   removeGame,
@@ -71,17 +70,14 @@ async function init(refreshOnOpen = false): Promise<void> {
       renderGames(initial, settings.badgeFavoriteAppid);
       showState("list");
       updateHeaderTimestamp(initial);
-      updateFetchBar(await getLastFetchTime());
     }
 
     const vms = await buildAllViewModels(games, cache, idbGetSnapshots, TRACKING_RETENTION_DAYS);
-    const lastFetch = await getLastFetchTime();
     if (revision !== renderRevision) return;
     vms.sort((a, b) => (b.current ?? -1) - (a.current ?? -1));
     renderGames(vms, settings.badgeFavoriteAppid);
     updateHeaderTimestamp(vms);
     showState("list");
-    updateFetchBar(lastFetch);
     if (automaticError) showAutomaticError();
     if (refreshOnOpen && shouldRefreshGames(games, cache)) void refresh(true);
   } catch (err) {
@@ -207,7 +203,7 @@ function buildGameItem(vm: CardViewModel, isTop: boolean, favoriteAppid?: string
         : undefined;
     stats.appendChild(
       h("span", {
-        className: `trend-badge ${displayTrendCls}${isProvisionalMomentum(vm) ? " trend-badge--provisional" : ""}${asOf ? " trend-badge--dated" : ""}`,
+        className: `trend-badge ${displayTrendCls}${isProvisionalMomentum(vm) ? " trend-badge--provisional" : ""}`,
         text: `${fmtPct(badgePct(displayTrendPct))} ${momentumBasisLabel(vm)}`,
         attrs: {
           "aria-label": `${fmtPct(displayTrendPct)} average players: last 24 hours ${isProvisionalMomentum(vm) ? "vs the 7-day average" : "vs the same hours last week"}${asOf ? `, through ${asOf}` : ""}`,
@@ -490,29 +486,6 @@ async function handleToggleFavorite(appid: string, clickedBtn: HTMLButtonElement
   }
 }
 
-function updateFetchBar(lastFetch: number): void {
-  if (lastFetch <= 0) {
-    hide(fetchBarEl);
-    return;
-  }
-
-  const mins = Math.round((Date.now() - lastFetch) / 60_000);
-  let label: string;
-  if (mins <= 0) label = "Updated just now";
-  else if (mins === 1) label = "Updated 1 min ago";
-  else if (mins < 60) label = `Updated ${mins} min ago`;
-  else {
-    const date = new Date(lastFetch);
-    const hh = date.getHours().toString().padStart(2, "0");
-    const mm = date.getMinutes().toString().padStart(2, "0");
-    label = `Updated at ${hh}:${mm}`;
-  }
-
-  fetchBarEl.textContent = label;
-  fetchBarEl.title = "Latest successful live player update. Each metric has its own source update time.";
-  show(fetchBarEl);
-}
-
 function updateHeaderTimestamp(vms: CardViewModel[]): void {
   if (vms.some((vm) => vm.current === null || vm.freshness?.current?.status === "error")) {
     lastUpdatedEl.textContent = "Partial update";
@@ -521,6 +494,7 @@ function updateHeaderTimestamp(vms: CardViewModel[]): void {
   const timestamps = vms.map((vm) => vm.fetchedAt).filter((timestamp) => timestamp > 0);
   if (!timestamps.length) return;
   lastUpdatedEl.textContent = fmtTimeAgo(Math.max(...timestamps));
+  lastUpdatedEl.title = "Latest live player update. Each metric has its own source update time.";
 }
 
 function showState(state: "loading" | "empty" | "list" | "error"): void {

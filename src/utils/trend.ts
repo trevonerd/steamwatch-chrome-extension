@@ -1,14 +1,6 @@
-import type { Snapshot, TrendResult } from "../types/index.js";
-import { analyzeSeasonalTrend } from "./seasonal.js";
+import type { Snapshot } from "../types/index.js";
 import type { HourlyPoint } from "./series.js";
 import { HOUR_MS, hourlyCoverage, normalizeHourly } from "./series.js";
-
-export { analyzeSeasonalTrend } from "./seasonal.js";
-
-export function computeTrend(snapshots: readonly Snapshot[], now = Date.now()): TrendResult | null {
-  const analysis = analyzeSeasonalTrend(snapshots, now);
-  return analysis.status === "ready" ? analysis.trend : null;
-}
 
 export function compute24hAvg(snapshots: readonly Snapshot[], now = Date.now()): number | null {
   return compute24hAvgFromHourly(normalizeHourly(snapshots, now), now);
@@ -71,7 +63,8 @@ export function fmtBadge(value: number): string {
 }
 
 export function fmtPct(value: number): string {
-  return value >= 0 ? `+${value}%` : `${value}%`;
+  // U+2212 minus: same width as "+" in monospace, read as minus by screen readers.
+  return value >= 0 ? `+${value}%` : `−${Math.abs(value)}%`;
 }
 export function fmtTimeAgo(timestamp: number, now = Date.now()): string {
   const minutes = Math.round((now - timestamp) / 60_000);

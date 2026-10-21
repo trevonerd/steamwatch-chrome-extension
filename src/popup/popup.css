@@ -182,13 +182,8 @@ body {
   border-bottom: 1px solid var(--border);
   font-size: 12px;
   font-family: var(--ff-mono);
-  color: var(--text-3);
+  color: var(--warn);
   gap: 5px;
-}
-.fetch-bar::before {
-  content: "🕐";
-  font-size: 10px;
-  opacity: 0.7;
 }
 
 /* ── Game list ───────────────────────────────────────────────── */
@@ -234,8 +229,12 @@ body {
 .game-card.strong-down {
   border-left-color: var(--down);
 }
+/* Collapse differs from a drop by weight and wash, not hue alone. */
 .game-card.crash {
+  border-left-width: 5px;
   border-left-color: var(--crash);
+  padding-left: 9px;
+  background: linear-gradient(90deg, var(--crash-bg), transparent 45%);
 }
 .game-card.stable {
   border-left-color: var(--border);
@@ -391,9 +390,6 @@ body {
   outline: 1px dashed currentColor;
   outline-offset: -1px;
 }
-.trend-badge--dated {
-  opacity: 0.75;
-}
 .trend-badge.explosion,
 .trend-badge.strong-up,
 .trend-badge.up {
@@ -412,6 +408,8 @@ body {
 .trend-badge.crash {
   background: var(--crash-bg);
   color: var(--crash);
+  outline: 1px solid currentColor;
+  outline-offset: -1px;
 }
 
 /* ── Sparkline ───────────────────────────────────────────────── */
