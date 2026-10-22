@@ -1,6 +1,6 @@
 {
   "name": "steamwatch",
-  "version": "2.0.2",
+  "version": "1.0.1",
   "description": "Chrome extension for tracking Steam games with live player counts, local trend history, Twitch viewers, and alerts.",
   "author": "trevonerd / TREVISOFT",
   "license": "MIT",
@@ -17,10 +17,13 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "knip": "knip",
-    "check": "pnpm run typecheck && pnpm run lint && pnpm run knip && pnpm run test"
+    "check": "pnpm run typecheck && pnpm run lint && pnpm run knip && pnpm run test",
+    "screenshots": "pnpm build && tsx scripts/store-screenshots.ts",
+    "zip": "tsx scripts/package-zip.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",
+    "@playwright/test": "^1.64.1",
     "@types/chrome": "^0.3.5",
     "@types/node": "^26.6.5",
     "@vitest/coverage-v8": "^5.0.5",

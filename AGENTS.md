@@ -34,8 +34,8 @@ The version number lives in `manifest.json` only. Never update `package.json` ve
 
 ### Version name vs Chrome version
 
-- `manifest.json` carries a numeric Chrome `version` and a visible `version_name`. Stable 2.0.0 shipped as `version` `2.0.2` / `version_name` `2.0.0`, after betas that used `2.0.1.x`.
-- Chrome's numeric `version` must always increase; never reuse or go below `2.0.2`. Bump it together with `version_name` (e.g. `2.0.3` / `2.0.1`).
+- `manifest.json` `version` is the single source of truth (no `version_name`); `pnpm version-sync` copies it to `package.json`. First stable release is `1.0.0`, above the 0.1 Web Store listing; earlier `2.0.0-beta.*` builds were internal only.
+- Chrome requires `version` to always increase; never reuse or go below the published one.
 - Popup and About display `chrome.runtime.getManifest().version_name` with `version` as fallback, so they identify the extension actually loaded.
 
 ### Release Checklist

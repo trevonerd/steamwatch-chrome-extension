@@ -39,3 +39,6 @@ yarn-error.log*
 
 # ── Design critique snapshots ─────────────────────────────────────────────────
 .impeccable/
+
+# Store screenshots
+store-screenshots/

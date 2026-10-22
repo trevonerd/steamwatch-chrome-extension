@@ -2,9 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
-## [2.0.0] - 2026-10-21
+## [1.0.1] - 2026-10-22
 
-First stable release of the v2 tracker (betas 1–14 below). Chrome numeric version `2.0.2`.
+### Fixed
+- Games Steam has no stats for yet (unreleased or just announced) show "No data yet" instead of "Collecting"
+
+## [1.0.0] - 2026-10-21
+
+First stable release after the 0.1 Web Store listing (betas 1–14 below were internal 2.0.0 builds). Version is `1.0.0`.
 
 ### Fixed
 - History older than two hours (browser closed, sleep) is downloaded again on the next refresh instead of up to six hours later, so cards no longer show "History stale" after a break

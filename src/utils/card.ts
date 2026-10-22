@@ -127,6 +127,8 @@ export function fallbackBadgeLabel(vm: CardViewModel): string {
   // Kept to 12 characters or fewer so the badge never wraps under the stats.
   if (vm.seasonalAnalysis?.status === "low-baseline") return "Low activity";
   if (vm.earlyActivity?.status === "stale") return "Stale data";
+  // Steam reports no stats (result 42) for unreleased games: no live count and no history at all.
+  if (vm.current === null && !vm.earlyActivity?.observations) return "No data yet";
   return (vm.earlyActivity?.spanHours ?? 0) >= 8 * 24 ? "Partial data" : "Collecting";
 }
 

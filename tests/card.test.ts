@@ -333,4 +333,20 @@ describe("fallbackBadgeLabel", () => {
     } as unknown as CardViewModel;
     expect(fallbackBadgeLabel(vm)).toBe("Low activity");
   });
+
+  it("says no data yet when Steam has neither a live count nor history", () => {
+    const vm = {
+      current: null,
+      earlyActivity: { status: "collecting", observations: 0, spanHours: 0 },
+    } as unknown as CardViewModel;
+    expect(fallbackBadgeLabel(vm)).toBe("No data yet");
+  });
+
+  it("keeps Collecting while history builds", () => {
+    const vm = {
+      current: 120,
+      earlyActivity: { status: "collecting", observations: 5, spanHours: 5 },
+    } as unknown as CardViewModel;
+    expect(fallbackBadgeLabel(vm)).toBe("Collecting");
+  });
 });
